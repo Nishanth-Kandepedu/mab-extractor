@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
 import { extractSequences } from './services/gemini';
@@ -87,6 +87,9 @@ function AppContent() {
         }
       } else {
         setUser(null);
+        setState({ isExtracting: false, result: null, error: null });
+        setInputText('');
+        setPageContext('');
       }
     });
     return () => unsubscribe();
@@ -123,6 +126,9 @@ function AppContent() {
   };
 
   const handleLogout = () => {
+    setState({ isExtracting: false, result: null, error: null });
+    setInputText('');
+    setPageContext('');
     if ((user as any)?.isGuest) {
       setUser(null);
     } else {
@@ -194,6 +200,13 @@ function AppContent() {
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
   }, [inputText, pageContext]);
+
+  const handleReset = () => {
+    setState({ isExtracting: false, result: null, error: null });
+    setInputText('');
+    setPageContext('');
+    setShowHistory(false);
+  };
 
   const saveToFirestore = useCallback(async () => {
     if (!state.result || !user) return;
@@ -445,14 +458,14 @@ function AppContent() {
               {/* Page Context Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  Target Page / Section (Optional)
-                  <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Table 1")</span>
+                  Target Page / Range / Section (Optional)
+                  <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
                 </label>
                 <input
                   type="text"
                   value={pageContext}
                   onChange={(e) => setPageContext(e.target.value)}
-                  placeholder="Focus on specific page or table..."
+                  placeholder="Focus on specific page, range, or table..."
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   disabled={state.isExtracting}
                 />
@@ -668,6 +681,13 @@ function AppContent() {
                             Save Result
                           </button>
                         )}
+                        <button 
+                          onClick={handleReset}
+                          className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          Reset
+                        </button>
                         {state.result.id && (
                           <div className="flex gap-2">
                             <button 
