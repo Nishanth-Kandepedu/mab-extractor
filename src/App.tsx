@@ -166,7 +166,8 @@ function AppContent() {
 
   // History Listener
   useEffect(() => {
-    if (!user) {
+    // Only start listener if we have a real Firebase user (not a mock guest)
+    if (!user || (user as any).isGuest) {
       setHistory([]);
       return;
     }
