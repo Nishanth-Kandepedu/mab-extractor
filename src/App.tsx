@@ -62,6 +62,7 @@ function AppContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Auth Listener
   useEffect(() => {
@@ -162,9 +163,17 @@ function AppContent() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+    let file: File | undefined;
+    
+    if ('files' in e.target && (e.target as HTMLInputElement).files) {
+      file = (e.target as HTMLInputElement).files?.[0];
+    } else if ('dataTransfer' in e && e.dataTransfer.files) {
+      file = e.dataTransfer.files[0];
+    }
+
     if (!file) return;
+    console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     
@@ -175,16 +184,21 @@ function AppContent() {
         const data = base64.split(',')[1];
         
         try {
-          const result = await extractSequences({ data, mimeType: file.type }, pageContext);
+          const result = await extractSequences({ data, mimeType: file!.type }, pageContext);
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
         } catch (err) {
+          console.error('Extraction error:', err);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
         }
       };
+      reader.onerror = () => {
+        setState({ isExtracting: false, result: null, error: 'Failed to read file' });
+      };
       reader.readAsDataURL(file);
     } catch (err) {
-      setState({ isExtracting: false, result: null, error: 'Failed to read file' });
+      console.error('File reading error:', err);
+      setState({ isExtracting: false, result: null, error: 'Failed to initiate file reading' });
     }
   }, [pageContext]);
 
@@ -206,6 +220,9 @@ function AppContent() {
     setInputText('');
     setPageContext('');
     setShowHistory(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const saveToFirestore = useCallback(async () => {
@@ -471,9 +488,20 @@ function AppContent() {
                 />
               </div>
 
-              {/* File Upload */}
-              <div className="relative group">
+              <div 
+                className="relative group"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleFileUpload(e as any);
+                }}
+              >
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".pdf,.txt"
                   onChange={handleFileUpload}
@@ -484,9 +512,19 @@ function AppContent() {
                   "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
                   state.isExtracting && "opacity-50 pointer-events-none"
                 )}>
-                  <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
-                  <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
-                  <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
+                  {state.isExtracting ? (
+                    <div className="flex flex-col items-center">
+                      <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
+                      <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
+                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
+                      <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
+                      <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
+                    </>
+                  )}
                 </div>
               </div>
 
