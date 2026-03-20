@@ -379,7 +379,7 @@ function AppContent() {
             <Database className="text-white w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">mAb Sequence Extractor</h1>
+            <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
             <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
           </div>
         </div>
