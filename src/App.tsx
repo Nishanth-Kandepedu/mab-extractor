@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
@@ -63,12 +64,28 @@ function AppContent() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Initialize GA
+  useEffect(() => {
+    const measurementId = process.env.VITE_GA_MEASUREMENT_ID;
+    if (measurementId) {
+      ReactGA.initialize(measurementId);
+      ReactGA.send({ hitType: "pageview", page: window.location.pathname });
+    }
+  }, []);
 
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
+        
+        ReactGA.event({
+          category: 'User',
+          action: 'Login',
+          label: u.email || 'Anonymous'
+        });
+
         // Create user document if it doesn't exist
         try {
           const userRef = doc(db, 'users', u.uid);
@@ -130,6 +147,12 @@ function AppContent() {
     setState({ isExtracting: false, result: null, error: null });
     setInputText('');
     setPageContext('');
+    
+    ReactGA.event({
+      category: 'User',
+      action: 'Logout'
+    });
+
     if ((user as any)?.isGuest) {
       setUser(null);
     } else {
@@ -175,6 +198,12 @@ function AppContent() {
     if (!file) return;
     console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Upload File',
+      label: file.type
+    });
+
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     
     try {
@@ -205,6 +234,11 @@ function AppContent() {
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
     
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Text Paste'
+    });
+
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     try {
       const result = await extractSequences(inputText, pageContext);
@@ -234,6 +268,13 @@ function AppContent() {
     }
 
     setIsSaving(true);
+    
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Save Result',
+      label: state.result.patentId
+    });
+
     try {
       const docData = {
         ...state.result,
