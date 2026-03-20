@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about the user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "Extraction": {
+      "title": "mAb Extraction Result",
+      "description": "A single extraction result from a patent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "patentId": { "type": "string" },
+        "patentTitle": { "type": "string" },
+        "antibodies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mAbName": { "type": "string" },
+              "chains": { "type": "array" },
+              "confidence": { "type": "number" },
+              "summary": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "validated", "rejected"] }
+      },
+      "required": ["userId", "patentId", "antibodies", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/extractions/{extractionId}": {
+      "schema": "Extraction",
+      "description": "Stored extraction results"
+    }
+  }
+}

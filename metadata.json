@@ -1,0 +1,5 @@
+{
+  "name": "mAb Sequence Extractor",
+  "description": "Extract monoclonal antibody (mAb) sequences, CDRs, and metadata from patent documents using AI.",
+  "requestFramePermissions": []
+}
