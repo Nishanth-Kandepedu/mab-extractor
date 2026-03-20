@@ -705,10 +705,23 @@ function AppContent() {
                         <span className="text-[10px] text-zinc-500 uppercase font-bold">Total mAbs</span>
                         <span className="text-lg font-bold">{state.result.antibodies.length}</span>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-zinc-500 uppercase font-bold">Extraction Engine</span>
-                        <span className="text-lg font-bold">Gemini 3.1 Pro</span>
-                      </div>
+                      {state.result.usageMetadata && (
+                        <>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold">Tokens Used</span>
+                            <span className="text-lg font-bold">
+                              {state.result.usageMetadata.totalTokenCount.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold">Est. Cost (USD)</span>
+                            <span className="text-lg font-bold text-emerald-400">
+                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 1.25 + 
+                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 

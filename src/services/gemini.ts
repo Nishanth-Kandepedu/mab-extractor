@@ -117,7 +117,16 @@ export async function extractSequences(
   if (!text) throw new Error("No response from AI");
   
   try {
-    return JSON.parse(text) as ExtractionResult;
+    const result = JSON.parse(text) as ExtractionResult;
+    // Extract usage metadata if available
+    if (response.usageMetadata) {
+      result.usageMetadata = {
+        promptTokenCount: response.usageMetadata.promptTokenCount || 0,
+        candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
+        totalTokenCount: response.usageMetadata.totalTokenCount || 0,
+      };
+    }
+    return result;
   } catch (e) {
     console.error("Failed to parse AI response:", text);
     throw new Error("Failed to parse extraction result");

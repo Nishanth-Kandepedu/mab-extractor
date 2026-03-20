@@ -18,6 +18,12 @@ export interface Antibody {
   summary: string;
 }
 
+export interface UsageMetadata {
+  promptTokenCount: number;
+  candidatesTokenCount: number;
+  totalTokenCount: number;
+}
+
 export interface ExtractionResult {
   id?: string;
   userId?: string;
@@ -26,6 +32,7 @@ export interface ExtractionResult {
   antibodies: Antibody[];
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
+  usageMetadata?: UsageMetadata;
 }
 
 export interface AppState {
