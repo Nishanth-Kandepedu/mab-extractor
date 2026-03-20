@@ -69,8 +69,11 @@ function AppContent() {
   useEffect(() => {
     const measurementId = process.env.VITE_GA_MEASUREMENT_ID;
     if (measurementId) {
+      console.log('Initializing Google Analytics with ID:', measurementId);
       ReactGA.initialize(measurementId);
       ReactGA.send({ hitType: "pageview", page: window.location.pathname });
+    } else {
+      console.warn('Google Analytics Measurement ID not found. Please set VITE_GA_MEASUREMENT_ID in secrets.');
     }
   }, []);
 
