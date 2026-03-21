@@ -6,15 +6,50 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export type ExtractionMode = 'sequences' | 'full';
 
 function cleanJson(text: string): string {
-  // Remove markdown code blocks if present
   let cleaned = text.trim();
+  
+  // Remove markdown code blocks if present
   if (cleaned.includes("```")) {
     const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match) {
       cleaned = match[1];
     }
   }
+
+  // Find the first '{' and the last '}' to handle any trailing/leading text
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+  
   return cleaned.trim();
+}
+
+/**
+ * Attempts to fix a truncated JSON string by adding missing closing braces/brackets.
+ */
+function tryRepairJson(json: string): string {
+  let repaired = json.trim();
+  const stack: string[] = [];
+  
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (char === '{') stack.push('}');
+    else if (char === '[') stack.push(']');
+    else if (char === '}' || char === ']') {
+      if (stack.length > 0 && stack[stack.length - 1] === char) {
+        stack.pop();
+      }
+    }
+  }
+  
+  while (stack.length > 0) {
+    repaired += stack.pop();
+  }
+  
+  return repaired;
 }
 
 export async function extractSequences(
@@ -47,7 +82,8 @@ Guidelines:
 - Iterate through ALL tables, figures, and text sections.
 - Ensure the mAbName is the primary identifier used in the patent.
 - If a mAb is only mentioned in a table, extract it from there.
-- Return valid JSON matching the schema. If no antibodies are found, return an empty array for antibodies but still provide patentId and patentTitle if possible.`;
+- Return valid JSON matching the schema. If no antibodies are found, return an empty array for antibodies but still provide patentId and patentTitle if possible.
+- IMPORTANT: DO NOT include any text outside the JSON object.`;
 
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
@@ -64,79 +100,104 @@ Guidelines:
     parts.push({ text: `Extract ALL mAb sequences from this document. Search every page and table. Be exhaustive.${contextPrompt}` });
   }
 
-  const seqResponse: GenerateContentResponse = await ai.models.generateContent({
-    model,
-    contents: { parts },
-    config: {
-      systemInstruction: sequenceInstruction,
-      responseMimeType: "application/json",
-      maxOutputTokens: 8192,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          patentId: { type: Type.STRING },
-          patentTitle: { type: Type.STRING },
-          antibodies: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                mAbName: { type: Type.STRING },
-                targetName: { type: Type.STRING },
-                chains: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                      fullSequence: { type: Type.STRING },
-                      cdrs: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: Type.STRING },
-                            start: { type: Type.INTEGER },
-                            end: { type: Type.INTEGER },
+  const performExtraction = async (retryCount = 0): Promise<ExtractionResult> => {
+    try {
+      const seqResponse: GenerateContentResponse = await ai.models.generateContent({
+        model,
+        contents: { parts },
+        config: {
+          systemInstruction: sequenceInstruction,
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              patentId: { type: Type.STRING },
+              patentTitle: { type: Type.STRING },
+              antibodies: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    mAbName: { type: Type.STRING },
+                    targetName: { type: Type.STRING },
+                    chains: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                          fullSequence: { type: Type.STRING },
+                          cdrs: {
+                            type: Type.ARRAY,
+                            items: {
+                              type: Type.OBJECT,
+                              properties: {
+                                type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                                sequence: { type: Type.STRING },
+                                start: { type: Type.INTEGER },
+                                end: { type: Type.INTEGER },
+                              },
+                              required: ["type", "sequence", "start", "end"],
+                            },
                           },
-                          required: ["type", "sequence", "start", "end"],
                         },
+                        required: ["type", "fullSequence", "cdrs"],
                       },
                     },
-                    required: ["type", "fullSequence", "cdrs"],
+                    confidence: { type: Type.NUMBER },
+                    summary: { type: Type.STRING },
                   },
+                  required: ["mAbName", "chains", "confidence", "summary"],
                 },
-                confidence: { type: Type.NUMBER },
-                summary: { type: Type.STRING },
               },
-              required: ["mAbName", "chains", "confidence", "summary"],
             },
+            required: ["patentId", "patentTitle", "antibodies"],
           },
         },
-        required: ["patentId", "patentTitle", "antibodies"],
-      },
-    },
-  });
+      });
 
-  const seqText = seqResponse.text;
-  if (!seqText) throw new Error("No response from AI during sequence extraction");
-  
-  let result: ExtractionResult;
-  try {
-    const cleaned = cleanJson(seqText);
-    result = JSON.parse(cleaned) as ExtractionResult;
-    if (seqResponse.usageMetadata) {
-      result.usageMetadata = {
-        promptTokenCount: seqResponse.usageMetadata.promptTokenCount || 0,
-        candidatesTokenCount: seqResponse.usageMetadata.candidatesTokenCount || 0,
-        totalTokenCount: seqResponse.usageMetadata.totalTokenCount || 0,
-      };
+      const seqText = seqResponse.text;
+      if (!seqText) throw new Error("No response from AI during sequence extraction");
+      
+      let result: ExtractionResult;
+      const cleaned = cleanJson(seqText);
+      
+      try {
+        result = JSON.parse(cleaned) as ExtractionResult;
+      } catch (e) {
+        // Try to repair truncated JSON
+        try {
+          const repaired = tryRepairJson(cleaned);
+          result = JSON.parse(repaired) as ExtractionResult;
+          console.log("Successfully repaired truncated JSON response");
+        } catch (repairError) {
+          console.error("Failed to parse sequence response. Raw text:", seqText);
+          if (retryCount < 1) {
+            if (onProgress) onProgress('Parsing failed. Retrying with a more focused request...');
+            return performExtraction(retryCount + 1);
+          }
+          throw new Error(`Failed to parse sequence extraction result. The model might have returned an invalid format or exceeded its output limit.`);
+        }
+      }
+
+      if (seqResponse.usageMetadata) {
+        result.usageMetadata = {
+          promptTokenCount: seqResponse.usageMetadata.promptTokenCount || 0,
+          candidatesTokenCount: seqResponse.usageMetadata.candidatesTokenCount || 0,
+          totalTokenCount: seqResponse.usageMetadata.totalTokenCount || 0,
+        };
+      }
+      return result;
+    } catch (error) {
+      if (retryCount < 1) {
+        return performExtraction(retryCount + 1);
+      }
+      throw error;
     }
-  } catch (e) {
-    console.error("Failed to parse sequence response. Raw text:", seqText);
-    throw new Error(`Failed to parse sequence extraction result. The model might have returned an invalid format or exceeded its output limit.`);
-  }
+  };
+
+  let result = await performExtraction();
 
   // Step 2: Enrich Properties if mode is 'full' (Deep Pass)
   if (mode === 'full' && result.antibodies.length > 0) {
