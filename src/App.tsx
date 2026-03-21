@@ -209,7 +209,7 @@ function AppContent() {
       label: file.type
     });
 
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Reading file...', error: null }));
     
     try {
       const reader = new FileReader();
@@ -218,7 +218,12 @@ function AppContent() {
         const data = base64.split(',')[1];
         
         try {
-          const result = await extractSequences({ data, mimeType: file!.type }, pageContext, extractionMode);
+          const result = await extractSequences(
+            { data, mimeType: file!.type }, 
+            pageContext, 
+            extractionMode,
+            (step) => setState(prev => ({ ...prev, extractionStep: step }))
+          );
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
         } catch (err) {
@@ -244,9 +249,14 @@ function AppContent() {
       action: 'Text Paste'
     });
 
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Preparing text...', error: null }));
     try {
-      const result = await extractSequences(inputText, pageContext, extractionMode);
+      const result = await extractSequences(
+        inputText, 
+        pageContext, 
+        extractionMode,
+        (step) => setState(prev => ({ ...prev, extractionStep: step }))
+      );
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
     } catch (err) {
@@ -604,8 +614,8 @@ function AppContent() {
                   {state.isExtracting ? (
                     <div className="flex flex-col items-center">
                       <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                      <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
-                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                      <p className="text-sm font-medium text-indigo-600">{state.extractionStep || 'Extracting...'}</p>
+                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Multi-step Analysis in Progress</p>
                     </div>
                   ) : (
                     <>
@@ -760,11 +770,11 @@ function AppContent() {
                       <Database className="w-8 h-8 text-indigo-600" />
                     </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
+                  <h3 className="text-lg font-semibold text-zinc-900">{state.extractionStep || 'Analyzing Patent Data'}</h3>
                   <div className="mt-4 space-y-2">
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Validating multiple antibody entries...</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse">Step 1: Sequence Identification</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Step 2: Property Enrichment (Full Mode Only)</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Synthesizing Evidence...</p>
                   </div>
                 </div>
               )}

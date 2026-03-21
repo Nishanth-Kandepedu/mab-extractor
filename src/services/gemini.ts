@@ -8,33 +8,27 @@ export type ExtractionMode = 'sequences' | 'full';
 export async function extractSequences(
   input: string | { data: string; mimeType: string },
   pageContext?: string,
-  mode: ExtractionMode = 'sequences'
+  mode: ExtractionMode = 'sequences',
+  onProgress?: (step: string) => void
 ): Promise<ExtractionResult> {
   const model = "gemini-3.1-pro-preview";
   
-  const SYSTEM_INSTRUCTION = `You are a bioinformatics expert specializing in antibody sequence and property extraction from patent documents. 
-Your task is to identify and extract monoclonal antibody (mAb) information mentioned in the document or specific section.
-
-Extraction Modes:
-1. "sequences": Extract mAb name, Heavy/Light chain variable regions, and CDRs (CDR1, CDR2, CDR3).
-2. "full": In addition to sequences, extract properties like target activity, cell line, ADMET, PK, physchem, and other properties. Also identify the page number(s) where this evidence was found.
-
+  // Step 1: Extract Sequences
+  if (onProgress) onProgress('Identifying antibodies and extracting sequences...');
+  
+  const sequenceInstruction = `You are a bioinformatics expert. Identify and extract monoclonal antibody (mAb) names, Heavy/Light chain variable regions, and CDRs (CDR1, CDR2, CDR3) from the document.
 Guidelines:
-1. Extract the full variable region sequence for each antibody identified.
-2. If the data is in a table, iterate through all rows to capture every unique antibody.
-3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
-4. For "full" mode, search for activity data (IC50, KD, etc.), cell lines used, ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity), PK (Pharmacokinetics), and physicochemical properties.
-5. Provide metadata: Patent ID and Patent Title.
-6. Return the data in a structured JSON format.`;
+1. Extract the full variable region sequence for each antibody.
+2. If the data is in a table, iterate through all rows.
+3. Identify CDRs accurately (IMGT, Kabat, or Chothia).
+4. Provide Patent ID and Patent Title.
+5. Return JSON format.`;
 
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
-  const modePrompt = mode === 'full' 
-    ? "Perform a FULL extraction including sequences AND properties (activity, PK, ADMET, etc.)." 
-    : "Perform a SEQUENCE extraction (mAb name, chains, and CDRs only).";
   
   if (typeof input === "string") {
-    parts.push({ text: `${modePrompt} Extract from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -42,14 +36,14 @@ Guidelines:
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `${modePrompt} Extract from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}` });
   }
 
-  const response: GenerateContentResponse = await ai.models.generateContent({
+  const seqResponse: GenerateContentResponse = await ai.models.generateContent({
     model,
     contents: { parts },
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction: sequenceInstruction,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -86,18 +80,6 @@ Guidelines:
                     required: ["type", "fullSequence", "cdrs"],
                   },
                 },
-                properties: {
-                  type: Type.OBJECT,
-                  properties: {
-                    targetActivity: { type: Type.STRING, description: "Activity against target (e.g. IC50, KD)" },
-                    cellLine: { type: Type.STRING },
-                    admet: { type: Type.STRING },
-                    pk: { type: Type.STRING },
-                    physchem: { type: Type.STRING },
-                    otherProperties: { type: Type.STRING },
-                    evidencePage: { type: Type.STRING, description: "Page number or section where evidence was found" },
-                  }
-                },
                 confidence: { type: Type.NUMBER },
                 summary: { type: Type.STRING },
               },
@@ -110,22 +92,104 @@ Guidelines:
     },
   });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from AI");
+  const seqText = seqResponse.text;
+  if (!seqText) throw new Error("No response from AI during sequence extraction");
   
+  let result: ExtractionResult;
   try {
-    const result = JSON.parse(text) as ExtractionResult;
-    // Extract usage metadata if available
-    if (response.usageMetadata) {
+    result = JSON.parse(seqText) as ExtractionResult;
+    if (seqResponse.usageMetadata) {
       result.usageMetadata = {
-        promptTokenCount: response.usageMetadata.promptTokenCount || 0,
-        candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
-        totalTokenCount: response.usageMetadata.totalTokenCount || 0,
+        promptTokenCount: seqResponse.usageMetadata.promptTokenCount || 0,
+        candidatesTokenCount: seqResponse.usageMetadata.candidatesTokenCount || 0,
+        totalTokenCount: seqResponse.usageMetadata.totalTokenCount || 0,
       };
     }
-    return result;
   } catch (e) {
-    console.error("Failed to parse AI response:", text);
-    throw new Error("Failed to parse extraction result");
+    console.error("Failed to parse sequence response:", seqText);
+    throw new Error("Failed to parse sequence extraction result");
   }
+
+  // Step 2: Enrich Properties if mode is 'full'
+  if (mode === 'full' && result.antibodies.length > 0) {
+    if (onProgress) onProgress(`Enriching properties for ${result.antibodies.length} antibodies...`);
+    
+    const mAbNames = result.antibodies.map(a => a.mAbName).join(', ');
+    const propertyInstruction = `You are a bioinformatics expert. For the following antibodies identified in the document: [${mAbNames}], find their properties: Target Activity, Cell Line, ADMET, PK, Physchem, and Other Properties. Also identify the page number for each.
+Guidelines:
+1. Search for activity data (IC50, KD, etc.), cell lines used, ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity), PK (Pharmacokinetics), and physicochemical properties.
+2. Return JSON format mapping mAb names to their properties.`;
+
+    let propParts: any[] = [];
+    if (typeof input === "string") {
+      propParts.push({ text: `Find properties for [${mAbNames}] in the following text.${contextPrompt}\n\n${input}` });
+    } else {
+      propParts.push({
+        inlineData: {
+          data: input.data,
+          mimeType: input.mimeType,
+        },
+      });
+      propParts.push({ text: `Find properties for [${mAbNames}] in this document.${contextPrompt}` });
+    }
+
+    const propResponse: GenerateContentResponse = await ai.models.generateContent({
+      model,
+      contents: { parts: propParts },
+      config: {
+        systemInstruction: propertyInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            properties: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  mAbName: { type: Type.STRING },
+                  targetActivity: { type: Type.STRING },
+                  cellLine: { type: Type.STRING },
+                  admet: { type: Type.STRING },
+                  pk: { type: Type.STRING },
+                  physchem: { type: Type.STRING },
+                  otherProperties: { type: Type.STRING },
+                  evidencePage: { type: Type.STRING },
+                },
+                required: ["mAbName"],
+              }
+            }
+          },
+          required: ["properties"],
+        },
+      },
+    });
+
+    const propText = propResponse.text;
+    if (propText) {
+      try {
+        const propData = JSON.parse(propText) as { properties: any[] };
+        // Merge properties back into result
+        result.antibodies = result.antibodies.map(mAb => {
+          const props = propData.properties.find(p => p.mAbName === mAb.mAbName);
+          if (props) {
+            const { mAbName, ...rest } = props;
+            return { ...mAb, properties: rest };
+          }
+          return mAb;
+        });
+        
+        // Update usage metadata
+        if (propResponse.usageMetadata && result.usageMetadata) {
+          result.usageMetadata.promptTokenCount += (propResponse.usageMetadata.promptTokenCount || 0);
+          result.usageMetadata.candidatesTokenCount += (propResponse.usageMetadata.candidatesTokenCount || 0);
+          result.usageMetadata.totalTokenCount += (propResponse.usageMetadata.totalTokenCount || 0);
+        }
+      } catch (e) {
+        console.warn("Failed to parse property response, returning sequences only:", propText);
+      }
+    }
+  }
+
+  return result;
 }

@@ -48,6 +48,7 @@ export interface ExtractionResult {
 
 export interface AppState {
   isExtracting: boolean;
+  extractionStep?: string;
   result: ExtractionResult | null;
   error: string | null;
 }
