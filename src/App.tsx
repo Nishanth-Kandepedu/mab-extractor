@@ -81,6 +81,12 @@ function AppContent() {
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      // Clear state on any auth change to prevent stale data
+      setState({ isExtracting: false, result: null, error: null, extractionStep: undefined });
+      setInputText('');
+      setPageContext('');
+      setHistory([]);
+      
       if (u) {
         setUser(u);
         
@@ -109,9 +115,6 @@ function AppContent() {
         }
       } else {
         setUser(null);
-        setState({ isExtracting: false, result: null, error: null });
-        setInputText('');
-        setPageContext('');
       }
     });
     return () => unsubscribe();
@@ -148,9 +151,10 @@ function AppContent() {
   };
 
   const handleLogout = () => {
-    setState({ isExtracting: false, result: null, error: null });
+    setState({ isExtracting: false, result: null, error: null, extractionStep: undefined });
     setInputText('');
     setPageContext('');
+    setHistory([]);
     
     ReactGA.event({
       category: 'User',
@@ -175,6 +179,7 @@ function AppContent() {
 
     const q = query(
       collection(db, 'extractions'),
+      where('userId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -215,6 +220,10 @@ function AppContent() {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
+        if (!base64) {
+          setState(prev => ({ ...prev, isExtracting: false, error: 'Failed to read file content' }));
+          return;
+        }
         const data = base64.split(',')[1];
         
         try {
@@ -224,20 +233,20 @@ function AppContent() {
             extractionMode,
             (step) => setState(prev => ({ ...prev, extractionStep: step }))
           );
-          setState({ isExtracting: false, result, error: null });
+          setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
           setShowHistory(false);
         } catch (err) {
           console.error('Extraction error:', err);
-          setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
+          setState(prev => ({ ...prev, isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed', extractionStep: undefined }));
         }
       };
       reader.onerror = () => {
-        setState({ isExtracting: false, result: null, error: 'Failed to read file' });
+        setState(prev => ({ ...prev, isExtracting: false, result: null, error: 'Failed to read file', extractionStep: undefined }));
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error('File reading error:', err);
-      setState({ isExtracting: false, result: null, error: 'Failed to initiate file reading' });
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: 'Failed to initiate file reading', extractionStep: undefined }));
     }
   }, [pageContext, extractionMode]);
 
@@ -257,10 +266,11 @@ function AppContent() {
         extractionMode,
         (step) => setState(prev => ({ ...prev, extractionStep: step }))
       );
-      setState({ isExtracting: false, result, error: null });
+      setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
       setShowHistory(false);
     } catch (err) {
-      setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
+      console.error('Text extraction error:', err);
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed', extractionStep: undefined }));
     }
   }, [inputText, pageContext, extractionMode]);
 
@@ -616,6 +626,16 @@ function AppContent() {
                       <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
                       <p className="text-sm font-medium text-indigo-600">{state.extractionStep || 'Extracting...'}</p>
                       <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Multi-step Analysis in Progress</p>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleReset();
+                        }}
+                        className="mt-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                      >
+                        Cancel Extraction
+                      </button>
                     </div>
                   ) : (
                     <>
@@ -645,7 +665,7 @@ function AppContent() {
                   className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
                   disabled={state.isExtracting}
                 />
-                <button
+                <button 
                   onClick={handleTextExtraction}
                   disabled={state.isExtracting || !inputText.trim()}
                   className="w-full bg-zinc-900 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -653,7 +673,7 @@ function AppContent() {
                   {state.isExtracting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
+                      {state.extractionStep || 'Processing...'}
                     </>
                   ) : (
                     <>
@@ -662,6 +682,14 @@ function AppContent() {
                     </>
                   )}
                 </button>
+                {state.isExtracting && (
+                  <button 
+                    onClick={handleReset}
+                    className="w-full py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest hover:text-red-500 transition-colors text-center"
+                  >
+                    Cancel & Reset
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -785,8 +813,27 @@ function AppContent() {
                   animate={{ opacity: 1, x: 0 }}
                   className="space-y-8"
                 >
-                  {/* Patent Summary Header */}
-                  <div className="bg-zinc-900 text-white rounded-2xl p-6 shadow-xl">
+                  {state.result.antibodies.length === 0 ? (
+                    <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center">
+                      <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-zinc-300" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-zinc-900">No Antibodies Found</h3>
+                      <p className="text-sm text-zinc-500 mt-2 max-w-md mx-auto">
+                        We couldn't identify any monoclonal antibody sequences in this document. 
+                        Try adjusting the page context or ensuring the text contains variable region sequences.
+                      </p>
+                      <button 
+                        onClick={handleReset}
+                        className="mt-6 px-6 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
+                      >
+                        Try Another Document
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Patent Summary Header */}
+                      <div className="bg-zinc-900 text-white rounded-2xl p-6 shadow-xl">
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-2">
@@ -963,12 +1010,14 @@ function AppContent() {
                       </div>
                     ))}
                   </div>
-                </motion.div>
-              )}
-            </>
-          )}
-        </div>
-      </main>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </>
+        )}
+      </div>
+    </main>
 
       {/* Footer */}
       <footer className="max-w-[1600px] mx-auto px-8 py-12 border-t border-zinc-200 mt-12 flex flex-col md:flex-row items-center justify-between gap-6">
