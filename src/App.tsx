@@ -235,8 +235,7 @@ function AppContent() {
     });
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Reading file...', error: null }));
-    const now = Date.now();
-    setStartTime(now);
+    setStartTime(Date.now());
     setElapsedTime(0);
     setFinalTime(null);
     
@@ -257,7 +256,7 @@ function AppContent() {
             extractionMode,
             (step) => setState(prev => ({ ...prev, extractionStep: step }))
           );
-          const duration = Math.floor((Date.now() - now) / 1000);
+          const duration = Math.floor((Date.now() - (startTime || Date.now())) / 1000);
           setFinalTime(duration);
           setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
           setShowHistory(false);
@@ -285,8 +284,7 @@ function AppContent() {
     });
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Preparing text...', error: null }));
-    const now = Date.now();
-    setStartTime(now);
+    setStartTime(Date.now());
     setElapsedTime(0);
     setFinalTime(null);
     try {
@@ -296,7 +294,7 @@ function AppContent() {
         extractionMode,
         (step) => setState(prev => ({ ...prev, extractionStep: step }))
       );
-      const duration = Math.floor((Date.now() - now) / 1000);
+      const duration = Math.floor((Date.now() - (startTime || Date.now())) / 1000);
       setFinalTime(duration);
       setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
       setShowHistory(false);
