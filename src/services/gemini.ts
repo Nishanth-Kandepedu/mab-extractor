@@ -21,10 +21,11 @@ Your goal is to identify EVERY SINGLE monoclonal antibody (mAb) mentioned in the
 
 Extraction Requirements:
 1. mAb Identification: Find all unique mAbs. Do not skip any. If there are 30+, find all 30+.
-2. Sequence Extraction: For each mAb, extract the full variable region sequence for both Heavy and Light chains.
-3. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately (IMGT, Kabat, or Chothia).
-4. Metadata: Provide Patent ID and Patent Title.
-5. Clean sequences: Remove any non-amino acid characters (spaces, numbers, etc.).
+2. Target Name: Identify the target antigen name for each mAb (e.g., HER2, PD-1, IL-6).
+3. Sequence Extraction: For each mAb, extract the full variable region sequence for both Heavy and Light chains.
+4. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately (IMGT, Kabat, or Chothia).
+5. Metadata: Provide Patent ID and Patent Title.
+6. Clean sequences: Remove any non-amino acid characters (spaces, numbers, etc.).
 
 Guidelines:
 - Iterate through ALL tables, figures, and text sections.
@@ -63,6 +64,7 @@ Guidelines:
               type: Type.OBJECT,
               properties: {
                 mAbName: { type: Type.STRING },
+                targetName: { type: Type.STRING },
                 chains: {
                   type: Type.ARRAY,
                   items: {

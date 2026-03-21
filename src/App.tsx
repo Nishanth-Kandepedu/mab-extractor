@@ -62,10 +62,25 @@ function AppContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTabs, setActiveTabs] = useState<Record<number, 'sequences' | 'properties'>>({});
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [finalTime, setFinalTime] = useState<number | null>(null);
 
   const toggleTab = (idx: number, tab: 'sequences' | 'properties') => {
     setActiveTabs(prev => ({ ...prev, [idx]: tab }));
   };
+
+  useEffect(() => {
+    let interval: any;
+    if (state.isExtracting && startTime) {
+      interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [state.isExtracting, startTime]);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('sequences');
@@ -220,6 +235,9 @@ function AppContent() {
     });
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Reading file...', error: null }));
+    setStartTime(Date.now());
+    setElapsedTime(0);
+    setFinalTime(null);
     
     try {
       const reader = new FileReader();
@@ -238,6 +256,8 @@ function AppContent() {
             extractionMode,
             (step) => setState(prev => ({ ...prev, extractionStep: step }))
           );
+          const duration = Math.floor((Date.now() - (startTime || Date.now())) / 1000);
+          setFinalTime(duration);
           setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
           setShowHistory(false);
         } catch (err) {
@@ -264,6 +284,9 @@ function AppContent() {
     });
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Preparing text...', error: null }));
+    setStartTime(Date.now());
+    setElapsedTime(0);
+    setFinalTime(null);
     try {
       const result = await extractSequences(
         inputText, 
@@ -271,6 +294,8 @@ function AppContent() {
         extractionMode,
         (step) => setState(prev => ({ ...prev, extractionStep: step }))
       );
+      const duration = Math.floor((Date.now() - (startTime || Date.now())) / 1000);
+      setFinalTime(duration);
       setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
       setShowHistory(false);
     } catch (err) {
@@ -284,6 +309,9 @@ function AppContent() {
     setInputText('');
     setPageContext('');
     setShowHistory(false);
+    setStartTime(null);
+    setElapsedTime(0);
+    setFinalTime(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -344,6 +372,7 @@ function AppContent() {
       mAb.chains.forEach(chain => {
         const row = {
           mAbName: mAb.mAbName,
+          targetName: mAb.targetName || '',
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           chainType: chain.type,
@@ -804,6 +833,9 @@ function AppContent() {
                     </div>
                   </div>
                   <h3 className="text-lg font-semibold text-zinc-900">{state.extractionStep || 'Analyzing Patent Data'}</h3>
+                  <div className="mt-2 text-2xl font-mono text-indigo-600 font-bold">
+                    {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+                  </div>
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-mono text-zinc-400 animate-pulse">Step 1: Sequence Identification</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Step 2: Property Enrichment (Full Mode Only)</p>
@@ -929,6 +961,14 @@ function AppContent() {
                                 (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
                             </span>
                           </div>
+                          {finalTime !== null && (
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-zinc-500 uppercase font-bold">Extraction Time</span>
+                              <span className="text-lg font-bold text-indigo-400">
+                                {Math.floor(finalTime / 60)}:{(finalTime % 60).toString().padStart(2, '0')}
+                              </span>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -939,9 +979,16 @@ function AppContent() {
                     {state.result.antibodies.map((mAb, mAbIdx) => (
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
-                          <h3 className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100">
-                            {mAb.mAbName}
-                          </h3>
+                          <div className="flex flex-col">
+                            <h3 className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100">
+                              {mAb.mAbName}
+                            </h3>
+                            {mAb.targetName && (
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase mt-1 ml-1">
+                                Target: {mAb.targetName}
+                              </span>
+                            )}
+                          </div>
                           <div className="h-px bg-zinc-200 flex-1" />
                           <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200">
                             <button 

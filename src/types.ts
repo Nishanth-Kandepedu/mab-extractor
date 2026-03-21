@@ -24,6 +24,7 @@ export interface AntibodyProperties {
 
 export interface Antibody {
   mAbName: string;
+  targetName?: string;
   chains: Chain[];
   properties?: AntibodyProperties;
   confidence: number;

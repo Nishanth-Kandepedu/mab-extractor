@@ -28,6 +28,7 @@
             "type": "object",
             "properties": {
               "mAbName": { "type": "string" },
+              "targetName": { "type": "string" },
               "chains": { "type": "array" },
               "properties": {
                 "type": "object",
@@ -37,6 +38,7 @@
                   "admet": { "type": "string" },
                   "pk": { "type": "string" },
                   "physchem": { "type": "string" },
+                  "functionalSAR": { "type": "string" },
                   "otherProperties": { "type": "string" },
                   "evidencePage": { "type": "string" }
                 }
