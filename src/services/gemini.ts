@@ -5,6 +5,18 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export type ExtractionMode = 'sequences' | 'full';
 
+function cleanJson(text: string): string {
+  // Remove markdown code blocks if present
+  let cleaned = text.trim();
+  if (cleaned.includes("```")) {
+    const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match) {
+      cleaned = match[1];
+    }
+  }
+  return cleaned.trim();
+}
+
 export async function extractSequences(
   input: string | { data: string; mimeType: string },
   pageContext?: string,
@@ -35,7 +47,7 @@ Guidelines:
 - Iterate through ALL tables, figures, and text sections.
 - Ensure the mAbName is the primary identifier used in the patent.
 - If a mAb is only mentioned in a table, extract it from there.
-- Return valid JSON matching the schema.`;
+- Return valid JSON matching the schema. If no antibodies are found, return an empty array for antibodies but still provide patentId and patentTitle if possible.`;
 
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
@@ -112,7 +124,8 @@ Guidelines:
   
   let result: ExtractionResult;
   try {
-    result = JSON.parse(seqText) as ExtractionResult;
+    const cleaned = cleanJson(seqText);
+    result = JSON.parse(cleaned) as ExtractionResult;
     if (seqResponse.usageMetadata) {
       result.usageMetadata = {
         promptTokenCount: seqResponse.usageMetadata.promptTokenCount || 0,
@@ -121,8 +134,8 @@ Guidelines:
       };
     }
   } catch (e) {
-    console.error("Failed to parse sequence response:", seqText);
-    throw new Error("Failed to parse sequence extraction result");
+    console.error("Failed to parse sequence response. Raw text:", seqText);
+    throw new Error(`Failed to parse sequence extraction result. The model might have returned an invalid format or exceeded its output limit.`);
   }
 
   // Step 2: Enrich Properties if mode is 'full' (Deep Pass)
