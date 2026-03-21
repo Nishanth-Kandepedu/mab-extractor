@@ -19,8 +19,12 @@ export async function extractSequences(
   const sequenceInstruction = `You are a world-class bioinformatics expert specializing in patent analysis. 
 Your goal is to identify EVERY SINGLE monoclonal antibody (mAb) mentioned in the document.
 
+CRITICAL: Do not be lazy. If the patent describes 50 antibodies, you must return 50 antibodies. 
+Check every table, every figure caption, and every example. 
+If the document contains a "Sequence Listing" section (e.g., WIPO ST.25 or ST.26), prioritize extracting sequences from there.
+
 Extraction Requirements:
-1. mAb Identification: Find all unique mAbs. Do not skip any. If there are 30+, find all 30+.
+1. mAb Identification: Find all unique mAbs. Do not skip any.
 2. Target Name: Identify the target antigen name for each mAb (e.g., HER2, PD-1, IL-6).
 3. Sequence Extraction: For each mAb, extract the full variable region sequence for both Heavy and Light chains.
 4. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately (IMGT, Kabat, or Chothia).
@@ -30,6 +34,7 @@ Extraction Requirements:
 Guidelines:
 - Iterate through ALL tables, figures, and text sections.
 - Ensure the mAbName is the primary identifier used in the patent.
+- If a mAb is only mentioned in a table, extract it from there.
 - Return valid JSON matching the schema.`;
 
   let parts: any[] = [];
@@ -53,6 +58,7 @@ Guidelines:
     config: {
       systemInstruction: sequenceInstruction,
       responseMimeType: "application/json",
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -134,6 +140,9 @@ Guidelines:
       const propertyInstruction = `You are a world-class bioinformatics expert. 
 For the monoclonal antibodies [${mAbNames}], perform a DEEP SEARCH for functional data and Structure-Activity Relationship (SAR) details in the provided document.
 
+CRITICAL: Be exhaustive. Search every table and example for binding data, IC50s, and SAR. 
+If data is present in the document, you MUST extract it. Do not return empty fields if the information exists.
+
 Look specifically in:
 - Tables (Activity tables, IC50/KD tables, binding affinity tables)
 - "Examples" sections (e.g., Example 1, Example 2, Example 3)
@@ -169,6 +178,7 @@ Return JSON format mapping mAb names to their properties.`;
         config: {
           systemInstruction: propertyInstruction,
           responseMimeType: "application/json",
+          maxOutputTokens: 8192,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -201,8 +211,10 @@ Return JSON format mapping mAb names to their properties.`;
         try {
           const propData = JSON.parse(propText) as { properties: any[] };
           // Merge properties back into result
+          const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+          
           result.antibodies = result.antibodies.map(mAb => {
-            const props = propData.properties.find(p => p.mAbName === mAb.mAbName);
+            const props = propData.properties.find(p => normalize(p.mAbName) === normalize(mAb.mAbName));
             if (props) {
               const { mAbName, ...rest } = props;
               return { ...mAb, properties: { ...mAb.properties, ...rest } };
