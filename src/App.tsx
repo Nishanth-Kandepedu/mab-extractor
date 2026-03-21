@@ -993,6 +993,12 @@ function AppContent() {
                                   <p className="text-sm text-zinc-700">{mAb.properties.physchem}</p>
                                 </div>
                               )}
+                              {mAb.properties.functionalSAR && (
+                                <div className="md:col-span-2">
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Functional SAR</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.functionalSAR}</p>
+                                </div>
+                              )}
                               {mAb.properties.otherProperties && (
                                 <div className="md:col-span-2">
                                   <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>

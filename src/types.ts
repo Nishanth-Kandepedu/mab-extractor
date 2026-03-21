@@ -17,6 +17,7 @@ export interface AntibodyProperties {
   admet?: string;
   pk?: string;
   physchem?: string;
+  functionalSAR?: string;
   otherProperties?: string;
   evidencePage?: string;
 }
