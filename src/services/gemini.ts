@@ -11,27 +11,31 @@ export async function extractSequences(
   mode: ExtractionMode = 'sequences',
   onProgress?: (step: string) => void
 ): Promise<ExtractionResult> {
-  const model = "gemini-3-flash-preview";
+  const model = "gemini-3.1-pro-preview";
   
-  // Step 1: Extract Sequences (Fast Pass)
-  if (onProgress) onProgress('Identifying antibodies and extracting sequences...');
+  // Step 1: Extract Sequences (Exhaustive Pass)
+  if (onProgress) onProgress('Identifying all antibodies and extracting sequences (Exhaustive Pass)...');
   
   const sequenceInstruction = `You are a world-class bioinformatics expert specializing in patent analysis. 
-Identify and extract monoclonal antibody (mAb) names, Heavy/Light chain variable regions, and CDRs (CDR1, CDR2, CDR3) from the provided document.
+Your goal is to identify EVERY SINGLE monoclonal antibody (mAb) mentioned in the document.
+
+Extraction Requirements:
+1. mAb Identification: Find all unique mAbs. Do not skip any. If there are 30+, find all 30+.
+2. Sequence Extraction: For each mAb, extract the full variable region sequence for both Heavy and Light chains.
+3. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately (IMGT, Kabat, or Chothia).
+4. Metadata: Provide Patent ID and Patent Title.
+5. Clean sequences: Remove any non-amino acid characters (spaces, numbers, etc.).
 
 Guidelines:
-1. Extract the full variable region sequence for each antibody.
-2. If the data is in a table, iterate through all rows.
-3. Identify CDRs accurately (IMGT, Kabat, or Chothia).
-4. Provide Patent ID and Patent Title.
-5. Clean sequences: Remove any non-amino acid characters (spaces, numbers, etc.).
-6. Return JSON format.`;
+- Iterate through ALL tables, figures, and text sections.
+- Ensure the mAbName is the primary identifier used in the patent.
+- Return valid JSON matching the schema.`;
 
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text. Be exhaustive.${contextPrompt}\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -39,7 +43,7 @@ Guidelines:
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}` });
+    parts.push({ text: `Extract ALL mAb sequences from this document. Search every page and table. Be exhaustive.${contextPrompt}` });
   }
 
   const seqResponse: GenerateContentResponse = await ai.models.generateContent({
@@ -117,8 +121,15 @@ Guidelines:
   if (mode === 'full' && result.antibodies.length > 0) {
     if (onProgress) onProgress(`Performing deep search for SAR and functional data for ${result.antibodies.length} antibodies...`);
     
-    const mAbNames = result.antibodies.map(a => a.mAbName).join(', ');
-    const propertyInstruction = `You are a world-class bioinformatics expert. 
+    // Process in batches if there are many antibodies to avoid context limits or timeouts
+    const batchSize = 10;
+    for (let i = 0; i < result.antibodies.length; i += batchSize) {
+      const batch = result.antibodies.slice(i, i + batchSize);
+      const mAbNames = batch.map(a => a.mAbName).join(', ');
+      
+      if (onProgress) onProgress(`Enriching properties for batch ${Math.floor(i/batchSize) + 1} (${mAbNames})...`);
+
+      const propertyInstruction = `You are a world-class bioinformatics expert. 
 For the monoclonal antibodies [${mAbNames}], perform a DEEP SEARCH for functional data and Structure-Activity Relationship (SAR) details in the provided document.
 
 Look specifically in:
@@ -137,74 +148,75 @@ Extract:
 
 Return JSON format mapping mAb names to their properties.`;
 
-    let propParts: any[] = [];
-    if (typeof input === "string") {
-      propParts.push({ text: `Deep search properties for [${mAbNames}] in the following text.${contextPrompt}\n\n${input}` });
-    } else {
-      propParts.push({
-        inlineData: {
-          data: input.data,
-          mimeType: input.mimeType,
+      let propParts: any[] = [];
+      if (typeof input === "string") {
+        propParts.push({ text: `Deep search properties for [${mAbNames}] in the following text. Be exhaustive for these specific antibodies.\n\n${input}` });
+      } else {
+        propParts.push({
+          inlineData: {
+            data: input.data,
+            mimeType: input.mimeType,
+          },
+        });
+        propParts.push({ text: `Deep search properties for [${mAbNames}] in this document. Search every page and table. Be exhaustive for these specific antibodies.` });
+      }
+
+      const propResponse: GenerateContentResponse = await ai.models.generateContent({
+        model,
+        contents: { parts: propParts },
+        config: {
+          systemInstruction: propertyInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              properties: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    mAbName: { type: Type.STRING },
+                    targetActivity: { type: Type.STRING },
+                    cellLine: { type: Type.STRING },
+                    admet: { type: Type.STRING },
+                    pk: { type: Type.STRING },
+                    physchem: { type: Type.STRING },
+                    functionalSAR: { type: Type.STRING },
+                    otherProperties: { type: Type.STRING },
+                    evidencePage: { type: Type.STRING },
+                  },
+                  required: ["mAbName"],
+                }
+              }
+            },
+            required: ["properties"],
+          },
         },
       });
-      propParts.push({ text: `Deep search properties for [${mAbNames}] in this document.${contextPrompt}` });
-    }
 
-    const propResponse: GenerateContentResponse = await ai.models.generateContent({
-      model,
-      contents: { parts: propParts },
-      config: {
-        systemInstruction: propertyInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            properties: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  mAbName: { type: Type.STRING },
-                  targetActivity: { type: Type.STRING },
-                  cellLine: { type: Type.STRING },
-                  admet: { type: Type.STRING },
-                  pk: { type: Type.STRING },
-                  physchem: { type: Type.STRING },
-                  functionalSAR: { type: Type.STRING },
-                  otherProperties: { type: Type.STRING },
-                  evidencePage: { type: Type.STRING },
-                },
-                required: ["mAbName"],
-              }
+      const propText = propResponse.text;
+      if (propText) {
+        try {
+          const propData = JSON.parse(propText) as { properties: any[] };
+          // Merge properties back into result
+          result.antibodies = result.antibodies.map(mAb => {
+            const props = propData.properties.find(p => p.mAbName === mAb.mAbName);
+            if (props) {
+              const { mAbName, ...rest } = props;
+              return { ...mAb, properties: { ...mAb.properties, ...rest } };
             }
-          },
-          required: ["properties"],
-        },
-      },
-    });
-
-    const propText = propResponse.text;
-    if (propText) {
-      try {
-        const propData = JSON.parse(propText) as { properties: any[] };
-        // Merge properties back into result
-        result.antibodies = result.antibodies.map(mAb => {
-          const props = propData.properties.find(p => p.mAbName === mAb.mAbName);
-          if (props) {
-            const { mAbName, ...rest } = props;
-            return { ...mAb, properties: rest };
+            return mAb;
+          });
+          
+          // Update usage metadata
+          if (propResponse.usageMetadata && result.usageMetadata) {
+            result.usageMetadata.promptTokenCount += (propResponse.usageMetadata.promptTokenCount || 0);
+            result.usageMetadata.candidatesTokenCount += (propResponse.usageMetadata.candidatesTokenCount || 0);
+            result.usageMetadata.totalTokenCount += (propResponse.usageMetadata.totalTokenCount || 0);
           }
-          return mAb;
-        });
-        
-        // Update usage metadata
-        if (propResponse.usageMetadata && result.usageMetadata) {
-          result.usageMetadata.promptTokenCount += (propResponse.usageMetadata.promptTokenCount || 0);
-          result.usageMetadata.candidatesTokenCount += (propResponse.usageMetadata.candidatesTokenCount || 0);
-          result.usageMetadata.totalTokenCount += (propResponse.usageMetadata.totalTokenCount || 0);
+        } catch (e) {
+          console.warn("Failed to parse property response for batch:", propText);
         }
-      } catch (e) {
-        console.warn("Failed to parse property response, returning sequences only:", propText);
       }
     }
   }

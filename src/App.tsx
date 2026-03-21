@@ -61,6 +61,11 @@ function AppContent() {
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTabs, setActiveTabs] = useState<Record<number, 'sequences' | 'properties'>>({});
+
+  const toggleTab = (idx: number, tab: 'sequences' | 'properties') => {
+    setActiveTabs(prev => ({ ...prev, [idx]: tab }));
+  };
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('sequences');
@@ -934,78 +939,108 @@ function AppContent() {
                     {state.result.antibodies.map((mAb, mAbIdx) => (
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
-                          <div className="h-px bg-zinc-200 flex-1" />
-                          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
+                          <h3 className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100">
                             {mAb.mAbName}
                           </h3>
                           <div className="h-px bg-zinc-200 flex-1" />
+                          <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+                            <button 
+                              onClick={() => toggleTab(mAbIdx, 'sequences')}
+                              className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                (activeTabs[mAbIdx] || 'sequences') === 'sequences' 
+                                  ? 'bg-white text-indigo-600 shadow-sm' 
+                                  : 'text-zinc-500 hover:text-zinc-700'
+                              }`}
+                            >
+                              Sequences
+                            </button>
+                            <button 
+                              onClick={() => toggleTab(mAbIdx, 'properties')}
+                              className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                activeTabs[mAbIdx] === 'properties' 
+                                  ? 'bg-white text-indigo-600 shadow-sm' 
+                                  : 'text-zinc-500 hover:text-zinc-700'
+                              }`}
+                            >
+                              Properties & SAR
+                            </button>
+                          </div>
+                          <div className="h-px bg-zinc-200 flex-1" />
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-6">
-                          {mAb.chains.map((chain, chainIdx) => (
-                            <SequenceDisplay 
-                              key={chainIdx} 
-                              chain={chain} 
-                              isEditable={true}
-                              onUpdate={(newSeq) => handleUpdateSequence(mAbIdx, chainIdx, newSeq)}
-                            />
-                          ))}
-                        </div>
-
-                        {mAb.properties && (
-                          <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm space-y-4">
-                            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Antibody Properties & Evidence</h4>
-                              {mAb.properties.evidencePage && (
-                                <span className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100">
-                                  Source: {mAb.properties.evidencePage}
-                                </span>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {mAb.properties.targetActivity && (
-                                <div>
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Activity</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.targetActivity}</p>
+                        {(activeTabs[mAbIdx] || 'sequences') === 'sequences' ? (
+                          <div className="grid grid-cols-1 gap-6">
+                            {mAb.chains.map((chain, chainIdx) => (
+                              <SequenceDisplay 
+                                key={chainIdx} 
+                                chain={chain} 
+                                isEditable={true}
+                                onUpdate={(newSeq) => handleUpdateSequence(mAbIdx, chainIdx, newSeq)}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {mAb.properties ? (
+                              <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm space-y-4">
+                                <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+                                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Antibody Properties & Evidence</h4>
+                                  {mAb.properties.evidencePage && (
+                                    <span className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100">
+                                      Source: {mAb.properties.evidencePage}
+                                    </span>
+                                  )}
                                 </div>
-                              )}
-                              {mAb.properties.cellLine && (
-                                <div>
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Cell Line</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.cellLine}</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {mAb.properties.targetActivity && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Activity</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.targetActivity}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.cellLine && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Cell Line</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.cellLine}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.admet && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">ADMET</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.admet}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.pk && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">PK (Pharmacokinetics)</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.pk}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.physchem && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Physicochemical</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.physchem}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.functionalSAR && (
+                                    <div className="md:col-span-2">
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Functional SAR</span>
+                                      <p className="text-sm text-zinc-700 font-medium bg-emerald-50 p-3 rounded-lg border border-emerald-100">{mAb.properties.functionalSAR}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.otherProperties && (
+                                    <div className="md:col-span-2">
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.otherProperties}</p>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                              {mAb.properties.admet && (
-                                <div>
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">ADMET</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.admet}</p>
-                                </div>
-                              )}
-                              {mAb.properties.pk && (
-                                <div>
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">PK (Pharmacokinetics)</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.pk}</p>
-                                </div>
-                              )}
-                              {mAb.properties.physchem && (
-                                <div>
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Physicochemical</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.physchem}</p>
-                                </div>
-                              )}
-                              {mAb.properties.functionalSAR && (
-                                <div className="md:col-span-2">
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Functional SAR</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.functionalSAR}</p>
-                                </div>
-                              )}
-                              {mAb.properties.otherProperties && (
-                                <div className="md:col-span-2">
-                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>
-                                  <p className="text-sm text-zinc-700">{mAb.properties.otherProperties}</p>
-                                </div>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <div className="bg-zinc-50 border border-dashed border-zinc-200 rounded-xl p-12 text-center">
+                                <p className="text-sm text-zinc-400">No properties extracted for this antibody. Try "Full Extraction" mode.</p>
+                              </div>
+                            )}
                           </div>
                         )}
                         
