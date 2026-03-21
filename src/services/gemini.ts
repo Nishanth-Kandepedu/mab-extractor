@@ -11,24 +11,40 @@ export async function extractSequences(
   mode: ExtractionMode = 'sequences',
   onProgress?: (step: string) => void
 ): Promise<ExtractionResult> {
-  const model = "gemini-3.1-pro-preview";
+  const model = "gemini-3-flash-preview";
   
-  // Step 1: Extract Sequences
-  if (onProgress) onProgress('Identifying antibodies and extracting sequences...');
+  if (onProgress) onProgress(mode === 'full' ? 'Extracting sequences and properties...' : 'Extracting sequences...');
   
-  const sequenceInstruction = `You are a bioinformatics expert. Identify and extract monoclonal antibody (mAb) names, Heavy/Light chain variable regions, and CDRs (CDR1, CDR2, CDR3) from the document.
+  const systemInstruction = `You are a world-class bioinformatics expert specializing in patent analysis and monoclonal antibody (mAb) characterization. 
+Your task is to identify and extract detailed information about monoclonal antibodies mentioned in the provided document.
+
+${mode === 'full' ? `CRITICAL: You MUST perform a FULL EXTRACTION. This means you must find NOT ONLY the sequences but also all available functional and biophysical properties (Activity, Cell Line, ADMET, PK, Physchem).` : 'You are performing a SEQUENCE-ONLY extraction.'}
+
+Extraction Requirements:
+1. mAb Identification: Identify every unique mAb mentioned by name or identifier.
+2. Sequence Extraction: For each mAb, extract the full variable region amino acid sequence for both Heavy and Light chains.
+3. CDR Identification: Precisely identify CDR1, CDR2, and CDR3 for each chain.
+${mode === 'full' ? `4. Property Enrichment (MANDATORY for Full Mode):
+   - Target Activity: Binding data (KD, Ka, Kd), functional assays (IC50, EC50), or neutralization data.
+   - Cell Line: Host cells used for production or assays (e.g., CHO, HEK293).
+   - ADMET: Any data on Absorption, Distribution, Metabolism, Excretion, or Toxicity.
+   - PK: Pharmacokinetics parameters (half-life, clearance, Vd).
+   - Physicochemical: Molecular weight, pI, thermal stability (Tm), aggregation, solubility.
+   - Other Properties: Any other relevant data.
+   - Evidence Page: The specific page number or section title where this information was found.` : ''}
+
 Guidelines:
-1. Extract the full variable region sequence for each antibody.
-2. If the data is in a table, iterate through all rows.
-3. Identify CDRs accurately (IMGT, Kabat, or Chothia).
-4. Provide Patent ID and Patent Title.
-5. Return JSON format.`;
+- Search thoroughly through text, tables, and figure descriptions.
+- Clean sequences: Remove any non-amino acid characters (spaces, numbers, etc.).
+- Confidence Score: Provide a score from 0.0 to 1.0 reflecting your certainty.
+- Summary: Provide a 1-2 sentence technical summary of the antibody's role or significance.
+- Format: Return valid JSON matching the provided schema exactly.`;
 
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\n${input}` });
+    parts.push({ text: `Extract mAb data from the following text.${contextPrompt}\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -36,14 +52,59 @@ Guidelines:
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}` });
+    parts.push({ text: `Extract mAb data from this document.${contextPrompt}` });
   }
 
-  const seqResponse: GenerateContentResponse = await ai.models.generateContent({
+  const antibodyProperties: any = {
+    mAbName: { type: Type.STRING },
+    chains: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+          fullSequence: { type: Type.STRING },
+          cdrs: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                sequence: { type: Type.STRING },
+                start: { type: Type.INTEGER },
+                end: { type: Type.INTEGER },
+              },
+              required: ["type", "sequence", "start", "end"],
+            },
+          },
+        },
+        required: ["type", "fullSequence", "cdrs"],
+      },
+    },
+    confidence: { type: Type.NUMBER },
+    summary: { type: Type.STRING },
+  };
+
+  if (mode === 'full') {
+    antibodyProperties.properties = {
+      type: Type.OBJECT,
+      properties: {
+        targetActivity: { type: Type.STRING },
+        cellLine: { type: Type.STRING },
+        admet: { type: Type.STRING },
+        pk: { type: Type.STRING },
+        physchem: { type: Type.STRING },
+        otherProperties: { type: Type.STRING },
+        evidencePage: { type: Type.STRING },
+      }
+    };
+  }
+
+  const response: GenerateContentResponse = await ai.models.generateContent({
     model,
     contents: { parts },
     config: {
-      systemInstruction: sequenceInstruction,
+      systemInstruction,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -54,35 +115,7 @@ Guidelines:
             type: Type.ARRAY,
             items: {
               type: Type.OBJECT,
-              properties: {
-                mAbName: { type: Type.STRING },
-                chains: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                      fullSequence: { type: Type.STRING },
-                      cdrs: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: Type.STRING },
-                            start: { type: Type.INTEGER },
-                            end: { type: Type.INTEGER },
-                          },
-                          required: ["type", "sequence", "start", "end"],
-                        },
-                      },
-                    },
-                    required: ["type", "fullSequence", "cdrs"],
-                  },
-                },
-                confidence: { type: Type.NUMBER },
-                summary: { type: Type.STRING },
-              },
+              properties: antibodyProperties,
               required: ["mAbName", "chains", "confidence", "summary"],
             },
           },
@@ -92,104 +125,21 @@ Guidelines:
     },
   });
 
-  const seqText = seqResponse.text;
-  if (!seqText) throw new Error("No response from AI during sequence extraction");
+  const text = response.text;
+  if (!text) throw new Error("No response from AI");
   
-  let result: ExtractionResult;
   try {
-    result = JSON.parse(seqText) as ExtractionResult;
-    if (seqResponse.usageMetadata) {
+    const result = JSON.parse(text) as ExtractionResult;
+    if (response.usageMetadata) {
       result.usageMetadata = {
-        promptTokenCount: seqResponse.usageMetadata.promptTokenCount || 0,
-        candidatesTokenCount: seqResponse.usageMetadata.candidatesTokenCount || 0,
-        totalTokenCount: seqResponse.usageMetadata.totalTokenCount || 0,
+        promptTokenCount: response.usageMetadata.promptTokenCount || 0,
+        candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
+        totalTokenCount: response.usageMetadata.totalTokenCount || 0,
       };
     }
+    return result;
   } catch (e) {
-    console.error("Failed to parse sequence response:", seqText);
-    throw new Error("Failed to parse sequence extraction result");
+    console.error("Failed to parse AI response:", text);
+    throw new Error("Failed to parse extraction result. The document might be too complex or the output format was invalid.");
   }
-
-  // Step 2: Enrich Properties if mode is 'full'
-  if (mode === 'full' && result.antibodies.length > 0) {
-    if (onProgress) onProgress(`Enriching properties for ${result.antibodies.length} antibodies...`);
-    
-    const mAbNames = result.antibodies.map(a => a.mAbName).join(', ');
-    const propertyInstruction = `You are a bioinformatics expert. For the following antibodies identified in the document: [${mAbNames}], find their properties: Target Activity, Cell Line, ADMET, PK, Physchem, and Other Properties. Also identify the page number for each.
-Guidelines:
-1. Search for activity data (IC50, KD, etc.), cell lines used, ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity), PK (Pharmacokinetics), and physicochemical properties.
-2. Return JSON format mapping mAb names to their properties.`;
-
-    let propParts: any[] = [];
-    if (typeof input === "string") {
-      propParts.push({ text: `Find properties for [${mAbNames}] in the following text.${contextPrompt}\n\n${input}` });
-    } else {
-      propParts.push({
-        inlineData: {
-          data: input.data,
-          mimeType: input.mimeType,
-        },
-      });
-      propParts.push({ text: `Find properties for [${mAbNames}] in this document.${contextPrompt}` });
-    }
-
-    const propResponse: GenerateContentResponse = await ai.models.generateContent({
-      model,
-      contents: { parts: propParts },
-      config: {
-        systemInstruction: propertyInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            properties: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  mAbName: { type: Type.STRING },
-                  targetActivity: { type: Type.STRING },
-                  cellLine: { type: Type.STRING },
-                  admet: { type: Type.STRING },
-                  pk: { type: Type.STRING },
-                  physchem: { type: Type.STRING },
-                  otherProperties: { type: Type.STRING },
-                  evidencePage: { type: Type.STRING },
-                },
-                required: ["mAbName"],
-              }
-            }
-          },
-          required: ["properties"],
-        },
-      },
-    });
-
-    const propText = propResponse.text;
-    if (propText) {
-      try {
-        const propData = JSON.parse(propText) as { properties: any[] };
-        // Merge properties back into result
-        result.antibodies = result.antibodies.map(mAb => {
-          const props = propData.properties.find(p => p.mAbName === mAb.mAbName);
-          if (props) {
-            const { mAbName, ...rest } = props;
-            return { ...mAb, properties: rest };
-          }
-          return mAb;
-        });
-        
-        // Update usage metadata
-        if (propResponse.usageMetadata && result.usageMetadata) {
-          result.usageMetadata.promptTokenCount += (propResponse.usageMetadata.promptTokenCount || 0);
-          result.usageMetadata.candidatesTokenCount += (propResponse.usageMetadata.candidatesTokenCount || 0);
-          result.usageMetadata.totalTokenCount += (propResponse.usageMetadata.totalTokenCount || 0);
-        }
-      } catch (e) {
-        console.warn("Failed to parse property response, returning sequences only:", propText);
-      }
-    }
-  }
-
-  return result;
 }
