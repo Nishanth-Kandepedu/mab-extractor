@@ -29,6 +29,18 @@
             "properties": {
               "mAbName": { "type": "string" },
               "chains": { "type": "array" },
+              "properties": {
+                "type": "object",
+                "properties": {
+                  "targetActivity": { "type": "string" },
+                  "cellLine": { "type": "string" },
+                  "admet": { "type": "string" },
+                  "pk": { "type": "string" },
+                  "physchem": { "type": "string" },
+                  "otherProperties": { "type": "string" },
+                  "evidencePage": { "type": "string" }
+                }
+              },
               "confidence": { "type": "number" },
               "summary": { "type": "string" }
             }

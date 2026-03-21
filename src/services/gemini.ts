@@ -3,53 +3,38 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a bioinformatics expert specializing in antibody sequence extraction from patent documents. 
-Your task is to identify and extract ALL monoclonal antibody (mAb) sequences mentioned in the document or specific section.
-For each mAb, extract the Heavy and Light chain variable regions.
-For each chain, you must also identify the Complementarity-Determining Regions (CDRs): CDR1, CDR2, and CDR3.
+export type ExtractionMode = 'sequences' | 'full';
+
+export async function extractSequences(
+  input: string | { data: string; mimeType: string },
+  pageContext?: string,
+  mode: ExtractionMode = 'sequences'
+): Promise<ExtractionResult> {
+  const model = "gemini-3.1-pro-preview";
+  
+  const SYSTEM_INSTRUCTION = `You are a bioinformatics expert specializing in antibody sequence and property extraction from patent documents. 
+Your task is to identify and extract monoclonal antibody (mAb) information mentioned in the document or specific section.
+
+Extraction Modes:
+1. "sequences": Extract mAb name, Heavy/Light chain variable regions, and CDRs (CDR1, CDR2, CDR3).
+2. "full": In addition to sequences, extract properties like target activity, cell line, ADMET, PK, physchem, and other properties. Also identify the page number(s) where this evidence was found.
 
 Guidelines:
 1. Extract the full variable region sequence for each antibody identified.
 2. If the data is in a table, iterate through all rows to capture every unique antibody.
 3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
-4. Provide metadata: Patent ID and Patent Title.
-5. Return the data in a structured JSON format.
+4. For "full" mode, search for activity data (IC50, KD, etc.), cell lines used, ADMET (Absorption, Distribution, Metabolism, Excretion, Toxicity), PK (Pharmacokinetics), and physicochemical properties.
+5. Provide metadata: Patent ID and Patent Title.
+6. Return the data in a structured JSON format.`;
 
-Output Schema:
-{
-  "patentId": "string",
-  "patentTitle": "string",
-  "antibodies": [
-    {
-      "mAbName": "string",
-      "chains": [
-        {
-          "type": "Heavy" | "Light",
-          "fullSequence": "string",
-          "cdrs": [
-            { "type": "CDR1", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR2", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR3", "sequence": "string", "start": number, "end": number }
-          ]
-        }
-      ],
-      "confidence": number,
-      "summary": "string"
-    }
-  ]
-}`;
-
-export async function extractSequences(
-  input: string | { data: string; mimeType: string },
-  pageContext?: string
-): Promise<ExtractionResult> {
-  const model = "gemini-3.1-pro-preview";
-  
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+  const modePrompt = mode === 'full' 
+    ? "Perform a FULL extraction including sequences AND properties (activity, PK, ADMET, etc.)." 
+    : "Perform a SEQUENCE extraction (mAb name, chains, and CDRs only).";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
+    parts.push({ text: `${modePrompt} Extract from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -57,7 +42,7 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
+    parts.push({ text: `${modePrompt} Extract from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
   }
 
   const response: GenerateContentResponse = await ai.models.generateContent({
@@ -100,6 +85,18 @@ export async function extractSequences(
                     },
                     required: ["type", "fullSequence", "cdrs"],
                   },
+                },
+                properties: {
+                  type: Type.OBJECT,
+                  properties: {
+                    targetActivity: { type: Type.STRING, description: "Activity against target (e.g. IC50, KD)" },
+                    cellLine: { type: Type.STRING },
+                    admet: { type: Type.STRING },
+                    pk: { type: Type.STRING },
+                    physchem: { type: Type.STRING },
+                    otherProperties: { type: Type.STRING },
+                    evidencePage: { type: Type.STRING, description: "Page number or section where evidence was found" },
+                  }
                 },
                 confidence: { type: Type.NUMBER },
                 summary: { type: Type.STRING },

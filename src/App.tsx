@@ -3,7 +3,7 @@ import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
-import { extractSequences } from './services/gemini';
+import { extractSequences, ExtractionMode } from './services/gemini';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile } from 'firebase/auth';
@@ -63,6 +63,7 @@ function AppContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>('sequences');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Initialize GA
@@ -217,7 +218,7 @@ function AppContent() {
         const data = base64.split(',')[1];
         
         try {
-          const result = await extractSequences({ data, mimeType: file!.type }, pageContext);
+          const result = await extractSequences({ data, mimeType: file!.type }, pageContext, extractionMode);
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
         } catch (err) {
@@ -233,7 +234,7 @@ function AppContent() {
       console.error('File reading error:', err);
       setState({ isExtracting: false, result: null, error: 'Failed to initiate file reading' });
     }
-  }, [pageContext]);
+  }, [pageContext, extractionMode]);
 
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -245,13 +246,13 @@ function AppContent() {
 
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     try {
-      const result = await extractSequences(inputText, pageContext);
+      const result = await extractSequences(inputText, pageContext, extractionMode);
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
     } catch (err) {
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
-  }, [inputText, pageContext]);
+  }, [inputText, pageContext, extractionMode]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
@@ -325,6 +326,13 @@ function AppContent() {
           CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
           CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
           CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+          targetActivity: mAb.properties?.targetActivity || '',
+          cellLine: mAb.properties?.cellLine || '',
+          admet: mAb.properties?.admet || '',
+          pk: mAb.properties?.pk || '',
+          physchem: mAb.properties?.physchem || '',
+          otherProperties: mAb.properties?.otherProperties || '',
+          evidencePage: mAb.properties?.evidencePage || '',
           confidence: mAb.confidence,
           summary: mAb.summary
         };
@@ -517,6 +525,42 @@ function AppContent() {
             </div>
 
             <div className="space-y-6">
+              {/* Extraction Mode Selection */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Extraction Mode
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
+                  <button
+                    onClick={() => setExtractionMode('sequences')}
+                    className={cn(
+                      "py-2 text-xs font-medium rounded-lg transition-all",
+                      extractionMode === 'sequences' 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-700"
+                    )}
+                  >
+                    Sequences Only
+                  </button>
+                  <button
+                    onClick={() => setExtractionMode('full')}
+                    className={cn(
+                      "py-2 text-xs font-medium rounded-lg transition-all",
+                      extractionMode === 'full' 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-700"
+                    )}
+                  >
+                    Full Extraction
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400 italic">
+                  {extractionMode === 'sequences' 
+                    ? "Extracts mAb names, chains, and CDR sequences." 
+                    : "Extracts sequences + Activity, PK, ADMET, and Physchem properties."}
+                </p>
+              </div>
+
               {/* Page Context Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -850,6 +894,57 @@ function AppContent() {
                             />
                           ))}
                         </div>
+
+                        {mAb.properties && (
+                          <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+                              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Antibody Properties & Evidence</h4>
+                              {mAb.properties.evidencePage && (
+                                <span className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100">
+                                  Source: {mAb.properties.evidencePage}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {mAb.properties.targetActivity && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Activity</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.targetActivity}</p>
+                                </div>
+                              )}
+                              {mAb.properties.cellLine && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Cell Line</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.cellLine}</p>
+                                </div>
+                              )}
+                              {mAb.properties.admet && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">ADMET</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.admet}</p>
+                                </div>
+                              )}
+                              {mAb.properties.pk && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">PK (Pharmacokinetics)</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.pk}</p>
+                                </div>
+                              )}
+                              {mAb.properties.physchem && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Physicochemical</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.physchem}</p>
+                                </div>
+                              )}
+                              {mAb.properties.otherProperties && (
+                                <div className="md:col-span-2">
+                                  <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>
+                                  <p className="text-sm text-zinc-700">{mAb.properties.otherProperties}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         
                         <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>

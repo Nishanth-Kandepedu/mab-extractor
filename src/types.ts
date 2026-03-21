@@ -11,9 +11,20 @@ export interface Chain {
   cdrs: CDR[];
 }
 
+export interface AntibodyProperties {
+  targetActivity?: string;
+  cellLine?: string;
+  admet?: string;
+  pk?: string;
+  physchem?: string;
+  otherProperties?: string;
+  evidencePage?: string;
+}
+
 export interface Antibody {
   mAbName: string;
   chains: Chain[];
+  properties?: AntibodyProperties;
   confidence: number;
   summary: string;
 }

@@ -22,6 +22,16 @@ service cloud.firestore {
     //   - patentId: string (required)
     //   - patentTitle: string (required)
     //   - antibodies: array (required)
+    //     - mAbName: string
+    //     - chains: array
+    //     - properties: object (optional)
+    //       - targetActivity: string
+    //       - cellLine: string
+    //       - admet: string
+    //       - pk: string
+    //       - physchem: string
+    //       - otherProperties: string
+    //       - evidencePage: string
     //   - createdAt: timestamp (required, immutable)
     //   - status: string (required, enum: ['pending', 'validated', 'rejected'])
     //
