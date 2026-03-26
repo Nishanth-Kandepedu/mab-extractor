@@ -3,41 +3,30 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a world-class bioinformatics expert specializing in antibody sequence extraction from complex patent documents and scientific literature. 
-Your task is to identify and extract ALL monoclonal antibody (mAb) sequences mentioned in the document or specific section with 100% precision.
+const SYSTEM_INSTRUCTION = `You are a world-class bioinformatics expert specializing in antibody sequence extraction from complex patent documents.
+Your task is to identify and extract ALL monoclonal antibody (mAb) sequences with 100% precision.
 
-CRITICAL ACCURACY RULES:
-1. NO PLACEHOLDERS: NEVER use "...", "[...]", "etc.", or any truncated sequences. You MUST extract the full amino acid sequence exactly as it appears in the text.
-2. EXACT MATCHING: Every sequence must be a character-for-character match to the source text.
-3. HANDLE SPLIT SEQUENCES: Sequences in PDFs are often split across lines with spaces, numbers, or page breaks. You MUST reconstruct the full sequence by removing any non-amino acid characters (like line numbers or spaces) and joining the parts.
-4. CDR PRECISION: CDRs (Complementarity-Determining Regions) MUST be exact substrings of the 'fullSequence' provided for that chain.
-5. TABLE EXTRACTION: Patents often list multiple antibodies in large tables (e.g., "Table 1", "Table 5"). You MUST iterate through EVERY row. Do not skip any entries.
-6. SEQ ID NO MAPPING: If the text refers to a sequence by its "SEQ ID NO", you MUST find that sequence in the document and extract it.
-7. CHAIN PAIRING: Ensure that Heavy and Light chains are correctly paired into a single mAb object. Use mAb names, clone IDs, or contextual proximity to pair them.
-8. EXHAUSTIVE SEARCH: Patents can be very long. You MUST scan the entire document. Do not stop after finding the first few antibodies. If there are 30+ antibodies, you must extract all of them.
-9. NO TRUNCATION OF LIST: Ensure the 'antibodies' array contains every single antibody found in the document.
-
-Self-Correction & Reasoning:
-- Before outputting, perform a "Self-Verification" step:
-    - Verify that every CDR sequence is a 100% match to a substring of the 'fullSequence'.
-    - Verify that the 'fullSequence' is complete and not truncated.
-    - Verify that no antibodies from the source text were missed.
-- Provide a 'reasoning' field explaining exactly how you identified the mAb, where you found the sequences (e.g., "Table 3, row 5"), and how you paired the chains. Keep this concise to save output space.
-- Perform a 'validation' check to ensure CDRs match the full sequence and chains are paired correctly.
+CRITICAL RULES:
+1. NO PLACEHOLDERS: NEVER use "...", "[...]", or truncated sequences. Extract full amino acid sequences.
+2. HANDLE SPLIT SEQUENCES: Reconstruct sequences by removing spaces/numbers/line breaks.
+3. CDR PRECISION: CDRs MUST be exact substrings of the 'fullSequence'.
+4. TABLE EXTRACTION: Iterate through EVERY row in tables. Do not skip entries.
+5. EXHAUSTIVE SEARCH: Scan the entire document. If there are 30+ antibodies, extract all of them.
+6. TOKEN EFFICIENCY: Keep 'reasoning' extremely short (max 30 chars). ONLY include the source location (e.g., "Table 1, Row 4").
 
 Output Schema:
 {
   "patentId": "string",
   "patentTitle": "string",
   "isExhaustive": boolean,
-  "coverageNote": "string explaining if any sections were skipped due to length or complexity",
+  "coverageNote": "string explaining if any sections were skipped",
   "antibodies": [
     {
       "mAbName": "string",
       "chains": [
         {
           "type": "Heavy" | "Light",
-          "fullSequence": "string (EXACT, NO TRUNCATION)",
+          "fullSequence": "string",
           "cdrs": [
             { "type": "CDR1", "sequence": "string", "start": number, "end": number },
             { "type": "CDR2", "sequence": "string", "start": number, "end": number },
@@ -45,16 +34,76 @@ Output Schema:
           ]
         }
       ],
-      "confidence": number (0-1),
-      "summary": "string explaining the source and any assumptions made",
-      "reasoning": "detailed explanation of the extraction and pairing logic",
-      "validation": {
-        "cdrsMatchFullSequence": boolean,
-        "chainsPairedCorrectly": boolean
-      }
+      "confidence": number,
+      "reasoning": "string (max 60 chars)",
+      "validation": { "cdrsMatchFullSequence": boolean, "chainsPairedCorrectly": boolean }
     }
   ]
 }`;
+
+function tryRepairJson(json: string): string {
+  try {
+    JSON.parse(json);
+    return json;
+  } catch (e) {
+    console.warn("Attempting to repair truncated JSON...");
+    let repaired = json.trim();
+    
+    // Handle unclosed strings
+    const lastQuote = repaired.lastIndexOf('"');
+    const secondLastQuote = repaired.lastIndexOf('"', lastQuote - 1);
+    const isInsideString = (repaired.match(/"/g) || []).length % 2 !== 0;
+    
+    if (isInsideString) {
+      repaired += '"';
+    }
+
+    // Remove trailing commas which are common in truncated JSON
+    repaired = repaired.replace(/,\s*$/, "");
+    
+    // Count open/close markers
+    const openBraces = (repaired.match(/\{/g) || []).length;
+    const closeBraces = (repaired.match(/\}/g) || []).length;
+    const openBrackets = (repaired.match(/\[/g) || []).length;
+    const closeBrackets = (repaired.match(/\]/g) || []).length;
+
+    // Close arrays first, then objects
+    for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
+    for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+    
+    try {
+      JSON.parse(repaired);
+      return repaired;
+    } catch (e2) {
+      // If still failing, try to find the last complete antibody object in the array
+      // This is a last resort: find the last complete object in the 'antibodies' array
+      const lastCompleteObjectMatch = repaired.match(/\{[^{}]*mAbName[^{}]*\}/g);
+      if (lastCompleteObjectMatch) {
+        const lastValidIndex = repaired.lastIndexOf(lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1]);
+        const truncatedArray = repaired.substring(0, lastValidIndex + lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1].length);
+        
+        // Try to reconstruct the root object
+        let fallback = truncatedArray;
+        if (!fallback.endsWith(']')) fallback += ']';
+        if (!fallback.endsWith('}')) fallback += '}';
+        
+        // Ensure we have the start of the root object if it was somehow lost (unlikely but safe)
+        if (!fallback.startsWith('{')) {
+           // This is getting too complex for a simple repair, but let's try one more thing
+           return json; 
+        }
+
+        try {
+          JSON.parse(fallback);
+          return fallback;
+        } catch (e3) {
+          return json;
+        }
+      }
+      return json;
+    }
+  }
+}
 
 export async function extractSequences(
   input: string | { data: string; mimeType: string },
@@ -63,10 +112,10 @@ export async function extractSequences(
   const model = "gemini-3.1-pro-preview";
   
   let parts: any[] = [];
-  const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+  const contextPrompt = pageContext ? ` Focus specifically on: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table or sequence listing. Ensure EVERY antibody row is captured and paired correctly.\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences.${contextPrompt}\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -74,7 +123,7 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' or 'Sequence Listing' where multiple antibodies are listed. Capture and pair every single one correctly.` });
+    parts.push({ text: `Extract ALL mAb sequences.${contextPrompt} Ensure every antibody row is captured.` });
   }
 
   let attempts = 0;
@@ -128,7 +177,6 @@ export async function extractSequences(
                       },
                     },
                     confidence: { type: Type.NUMBER },
-                    summary: { type: Type.STRING },
                     reasoning: { type: Type.STRING },
                     validation: {
                       type: Type.OBJECT,
@@ -139,7 +187,7 @@ export async function extractSequences(
                       required: ["cdrsMatchFullSequence", "chainsPairedCorrectly"],
                     },
                   },
-                  required: ["mAbName", "chains", "confidence", "summary", "reasoning", "validation"],
+                  required: ["mAbName", "chains", "confidence", "reasoning", "validation"],
                 },
               },
             },
@@ -151,15 +199,34 @@ export async function extractSequences(
       const text = response.text;
       if (!text) throw new Error("No response from AI");
       
-      const result = JSON.parse(text) as ExtractionResult;
-      if (response.usageMetadata) {
-        result.usageMetadata = {
-          promptTokenCount: response.usageMetadata.promptTokenCount || 0,
-          candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
-          totalTokenCount: response.usageMetadata.totalTokenCount || 0,
-        };
+      let parsedText = text;
+      try {
+        JSON.parse(text);
+      } catch (e) {
+        parsedText = tryRepairJson(text);
       }
-      return result;
+
+      try {
+        const result = JSON.parse(parsedText) as ExtractionResult;
+        
+        // If we repaired it, mark as non-exhaustive and add a note
+        if (parsedText !== text) {
+          result.isExhaustive = false;
+          result.coverageNote = (result.coverageNote || "") + " [Warning: Result was truncated due to length and partially recovered. Use Target Page to extract missing data.]";
+        }
+
+        if (response.usageMetadata) {
+          result.usageMetadata = {
+            promptTokenCount: response.usageMetadata.promptTokenCount || 0,
+            candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
+            totalTokenCount: response.usageMetadata.totalTokenCount || 0,
+          };
+        }
+        return result;
+      } catch (e) {
+        console.error("JSON Parse Error on text:", text);
+        throw new Error("The AI response was too large and could not be parsed. Please use the 'Target Page / Range' feature to focus on a smaller section of the document.");
+      }
     } catch (e: any) {
       lastError = e;
       // Check if it's a 503 error
