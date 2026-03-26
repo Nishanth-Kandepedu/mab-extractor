@@ -3,145 +3,41 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a specialized Antibody Sequence Extractor. Your goal is to find and extract monoclonal antibody (mAb) sequences from patent documents.
+const SYSTEM_INSTRUCTION = `You are a bioinformatics expert specializing in antibody sequence extraction from patent documents. 
+Your task is to identify and extract ALL monoclonal antibody (mAb) sequences mentioned in the document or specific section.
+For each mAb, extract the Heavy and Light chain variable regions.
+For each chain, you must also identify the Complementarity-Determining Regions (CDRs): CDR1, CDR2, and CDR3.
 
-CORE RULES:
-1. SCOPE: If a specific page, range, or section is provided, ONLY extract from that scope.
-2. FORMAT: Return ONLY a valid JSON object matching the schema. No markdown, no preamble.
-3. CONCISENESS: Keep "reasoning" extremely short.
+Guidelines:
+1. Extract the full variable region sequence for each antibody identified.
+2. If the data is in a table, iterate through all rows to capture every unique antibody.
+3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
+4. Provide metadata: Patent ID and Patent Title.
+5. Return the data in a structured JSON format.
 
-EXTRACTION GUIDELINES:
-- Capture mAb Name.
-- Extract Heavy and Light chains.
-- Identify CDRs.
-- Provide full variable region sequence.`;
-
-const EXTRACTION_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    patentId: { type: Type.STRING },
-    patentTitle: { type: Type.STRING },
-    isExhaustive: { type: Type.BOOLEAN },
-    coverageNote: { type: Type.STRING },
-    antibodies: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          mAbName: { type: Type.STRING },
-          chains: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                fullSequence: { type: Type.STRING },
-                cdrs: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                      sequence: { type: Type.STRING },
-                      start: { type: Type.NUMBER },
-                      end: { type: Type.NUMBER }
-                    },
-                    required: ["type", "sequence"]
-                  }
-                }
-              },
-              required: ["type", "fullSequence", "cdrs"]
-            }
-          },
-          confidence: { type: Type.NUMBER },
-          reasoning: { type: Type.STRING }
-        },
-        required: ["mAbName", "chains", "confidence", "reasoning"]
-      }
-    }
-  },
-  required: ["patentId", "patentTitle", "antibodies"]
-};
-
-function tryRepairJson(json: string): string {
-  try {
-    JSON.parse(json);
-    return json;
-  } catch (e) {
-    console.warn("Attempting to repair/salvage JSON...");
-    let text = json.trim();
-    
-    // 1. Try to find the JSON block if it's wrapped in markdown
-    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      text = jsonMatch[1] || jsonMatch[0];
-    }
-
-    // 2. Salvage approach: Find any objects that look like antibodies
-    const antibodies: any[] = [];
-    const mAbNameIndices: number[] = [];
-    let pos = text.indexOf('"mAbName"');
-    while (pos !== -1) {
-      mAbNameIndices.push(pos);
-      pos = text.indexOf('"mAbName"', pos + 1);
-    }
-
-    for (const startPos of mAbNameIndices) {
-      let objectStart = text.lastIndexOf('{', startPos);
-      if (objectStart === -1) continue;
-
-      let braceCount = 0;
-      let insideString = false;
-      let objectEnd = -1;
-      
-      for (let i = objectStart; i < text.length; i++) {
-        const char = text[i];
-        if (char === '"' && (i === 0 || text[i-1] !== '\\')) {
-          insideString = !insideString;
+Output Schema:
+{
+  "patentId": "string",
+  "patentTitle": "string",
+  "antibodies": [
+    {
+      "mAbName": "string",
+      "chains": [
+        {
+          "type": "Heavy" | "Light",
+          "fullSequence": "string",
+          "cdrs": [
+            { "type": "CDR1", "sequence": "string", "start": number, "end": number },
+            { "type": "CDR2", "sequence": "string", "start": number, "end": number },
+            { "type": "CDR3", "sequence": "string", "start": number, "end": number }
+          ]
         }
-        if (!insideString) {
-          if (char === '{') braceCount++;
-          if (char === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              objectEnd = i;
-              break;
-            }
-          }
-        }
-      }
-
-      if (objectEnd !== -1) {
-        const objectStr = text.substring(objectStart, objectEnd + 1);
-        try {
-          const obj = JSON.parse(objectStr);
-          if (obj.mAbName && obj.chains) {
-            if (!antibodies.some(a => a.mAbName === obj.mAbName && JSON.stringify(a.chains) === JSON.stringify(obj.chains))) {
-              antibodies.push(obj);
-            }
-          }
-        } catch (e) {
-          // Skip invalid object
-        }
-      }
+      ],
+      "confidence": number,
+      "summary": "string"
     }
-
-    if (antibodies.length > 0) {
-      const patentIdMatch = text.match(/"patentId"\s*:\s*"([^"]+)"/);
-      const patentTitleMatch = text.match(/"patentTitle"\s*:\s*"([^"]+)"/);
-
-      return JSON.stringify({
-        patentId: patentIdMatch ? patentIdMatch[1] : "Unknown (Recovered)",
-        patentTitle: patentTitleMatch ? patentTitleMatch[1] : "Unknown (Recovered)",
-        isExhaustive: false,
-        coverageNote: "The AI response was truncated due to its size, but we successfully salvaged " + antibodies.length + " antibodies. Try focusing on a smaller page range if you need more data.",
-        antibodies: antibodies
-      });
-    }
-    
-    return json;
-  }
-}
+  ]
+}`;
 
 export async function extractSequences(
   input: string | { data: string; mimeType: string },
@@ -150,10 +46,10 @@ export async function extractSequences(
   const model = "gemini-3.1-pro-preview";
   
   let parts: any[] = [];
-  const contextPrompt = pageContext ? ` Focus specifically on: ${pageContext}.` : "";
+  const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences.${contextPrompt}\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -161,79 +57,78 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences.${contextPrompt} Ensure every antibody row is captured.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
   }
 
-  let attempts = 0;
-  const maxAttempts = 3;
-  let lastError: any = null;
-
-  while (attempts < maxAttempts) {
-    try {
-      const response: GenerateContentResponse = await ai.models.generateContent({
-        model,
-        contents: { parts },
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-          responseSchema: EXTRACTION_SCHEMA,
+  const response: GenerateContentResponse = await ai.models.generateContent({
+    model,
+    contents: { parts },
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          patentId: { type: Type.STRING },
+          patentTitle: { type: Type.STRING },
+          antibodies: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                mAbName: { type: Type.STRING },
+                chains: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                      fullSequence: { type: Type.STRING },
+                      cdrs: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                            sequence: { type: Type.STRING },
+                            start: { type: Type.INTEGER },
+                            end: { type: Type.INTEGER },
+                          },
+                          required: ["type", "sequence", "start", "end"],
+                        },
+                      },
+                    },
+                    required: ["type", "fullSequence", "cdrs"],
+                  },
+                },
+                confidence: { type: Type.NUMBER },
+                summary: { type: Type.STRING },
+              },
+              required: ["mAbName", "chains", "confidence", "summary"],
+            },
+          },
         },
-      });
+        required: ["patentId", "patentTitle", "antibodies"],
+      },
+    },
+  });
 
-      const text = response.text;
-      if (!text) throw new Error("The AI returned an empty response. This can happen with extremely complex pages. Try focusing on a smaller section.");
-      
-      let parsedText = text;
-      try {
-        JSON.parse(text);
-      } catch (e) {
-        parsedText = tryRepairJson(text);
-      }
-
-      try {
-        const result = JSON.parse(parsedText) as ExtractionResult;
-        
-        if (parsedText !== text) {
-          result.isExhaustive = false;
-          result.coverageNote = (result.coverageNote || "") + " [Note: The AI response was truncated due to length. We recovered " + (result.antibodies?.length || 0) + " sequences.]";
-        }
-
-        if (response.usageMetadata) {
-          result.usageMetadata = {
-            promptTokenCount: response.usageMetadata.promptTokenCount || 0,
-            candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
-            totalTokenCount: response.usageMetadata.totalTokenCount || 0,
-          };
-        }
-        
-        result.rawResponse = text;
-        
-        return result;
-      } catch (e) {
-        console.error("JSON Parse Error on text:", text);
-        const error = new Error("The AI response was too complex to parse automatically. Try focusing on a smaller page range or a specific table.");
-        (error as any).rawResponse = text;
-        throw error;
-      }
-    } catch (e: any) {
-      lastError = e;
-      // Handle specific API errors
-      if (e.message?.includes("400") || e.message?.includes("INVALID_ARGUMENT")) {
-        throw new Error("The request was rejected by the AI because the document section is too large or complex. Please use the 'Target Page / Range' feature to focus on a smaller part of the patent.");
-      }
-      if (e.message?.includes("503") || e.message?.includes("UNAVAILABLE")) {
-        attempts++;
-        if (attempts < maxAttempts) {
-          console.warn(`Gemini API 503 error, retrying attempt ${attempts}...`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempts));
-          continue;
-        }
-      }
-      break;
+  const text = response.text;
+  if (!text) throw new Error("No response from AI");
+  
+  try {
+    const result = JSON.parse(text) as ExtractionResult;
+    // Extract usage metadata if available
+    if (response.usageMetadata) {
+      result.usageMetadata = {
+        promptTokenCount: response.usageMetadata.promptTokenCount || 0,
+        candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
+        totalTokenCount: response.usageMetadata.totalTokenCount || 0,
+      };
     }
+    return result;
+  } catch (e) {
+    console.error("Failed to parse AI response:", text);
+    throw new Error("Failed to parse extraction result");
   }
-
-  console.error("Failed to extract sequences after retries:", lastError);
-  throw new Error(lastError instanceof Error ? lastError.message : "Extraction failed");
 }
