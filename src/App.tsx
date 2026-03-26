@@ -89,6 +89,17 @@ function AppContent() {
     return inputCost + outputCost;
   };
 
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -766,7 +777,7 @@ function AppContent() {
                   <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
                   <div className="mt-4 text-center">
                     <p className="text-2xl font-mono font-bold text-indigo-600">
-                      {(elapsedTime / 1000).toFixed(1)}s
+                      {formatTime(elapsedTime)}
                     </p>
                     <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-mono mt-1">Elapsed Time</p>
                   </div>
@@ -881,7 +892,7 @@ function AppContent() {
                         <div className="flex flex-col">
                           <span className="text-[10px] text-zinc-500 uppercase font-bold">Time Taken</span>
                           <span className="text-lg font-bold text-indigo-400">
-                            {(state.result.extractionTime / 1000).toFixed(1)}s
+                            {formatTime(state.result.extractionTime)}
                           </span>
                         </div>
                       )}
