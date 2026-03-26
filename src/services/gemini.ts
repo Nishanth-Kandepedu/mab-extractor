@@ -9,15 +9,17 @@ For each mAb, extract the Heavy and Light chain variable regions.
 For each chain, you must also identify the Complementarity-Determining Regions (CDRs): CDR1, CDR2, and CDR3.
 
 Guidelines:
-1. Systematic Extraction: Before generating the JSON, internally identify the total number of antibodies listed in the source. Ensure the final "antibodies" array length matches this count exactly.
-2. If the data is in a table, iterate through every single row. Do not skip rows even if they appear repetitive.
-3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
-4. Provide metadata: Patent ID and Patent Title.
-5. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
+1. ID-Mapping Strategy: Before extracting sequences, scan the document to create a master list of all unique mAb Names or IDs (e.g., "mAb 1", "Antibody 2419"). 
+2. Verification: For every mAb ID identified in the master list, you MUST find and extract both the Heavy and Light chain variable regions. If an ID is found but a chain is missing, re-scan the document specifically for that missing component.
+3. Filtering: Distinguish between mAb sequences and auxiliary sequences (linkers, tags, or unrelated proteins). Only include sequences that are explicitly part of a monoclonal antibody structure.
+4. Systematic Extraction: Ensure the final "antibodies" array length matches the total count of unique mAb IDs identified in your master list.
+5. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
+6. Provide metadata: Patent ID and Patent Title.
+7. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
    - Actively check for L vs V confusions (especially at position 12 in VL chains).
    - Actively check for T vs I, S vs A, and S vs R confusions.
    - If a sequence is found in both a table and a sequence listing, use the sequence listing as the primary source of truth for character accuracy.
-6. Return the data in a structured JSON format.
+8. Return the data in a structured JSON format.
 
 Output Schema:
 {
