@@ -13,7 +13,11 @@ Guidelines:
 2. If the data is in a table, iterate through all rows to capture every unique antibody.
 3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
 4. Provide metadata: Patent ID and Patent Title.
-5. Return the data in a structured JSON format.
+5. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
+   - Actively check for L vs V confusions (especially at position 12 in VL chains).
+   - Actively check for T vs I, S vs A, and S vs R confusions.
+   - If a sequence is found in both a table and a sequence listing, use the sequence listing as the primary source of truth for character accuracy.
+6. Return the data in a structured JSON format.
 
 Output Schema:
 {
