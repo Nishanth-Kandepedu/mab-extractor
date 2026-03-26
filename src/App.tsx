@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
 import { extractSequences } from './services/gemini';
@@ -183,6 +183,7 @@ function AppContent() {
 
     const q = query(
       collection(db, 'extractions'),
+      where('userId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -681,6 +682,19 @@ function AppContent() {
                 <div className="flex gap-3">
                   {history.length > 0 && (
                     <>
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to clear your entire history?')) {
+                            for (const item of history) {
+                              if (item.id) await deleteExtraction(item.id);
+                            }
+                          }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-600 rounded-xl text-sm font-medium hover:bg-red-600/20 transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                        Clear All
+                      </button>
                       <button 
                         onClick={() => handleExportCsv(history)}
                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all"
