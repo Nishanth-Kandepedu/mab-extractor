@@ -501,7 +501,7 @@ function AppContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
-            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
+            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v2.1</p>
           </div>
         </div>
         

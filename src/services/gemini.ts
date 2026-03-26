@@ -3,21 +3,20 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a specialized Antibody Sequence Extractor. Your goal is to find and extract ALL monoclonal antibody (mAb) sequences from patent documents.
+const SYSTEM_INSTRUCTION = `You are a specialized Antibody Sequence Extractor. Your goal is to find and extract monoclonal antibody (mAb) sequences from patent documents.
 
 CORE RULES:
-1. SCOPE: If a specific page, range, or section is provided in the prompt, ONLY extract from that scope. If no scope is given, scan the entire document.
-2. EXHAUSTIVE SEARCH: Within the scope, find every single antibody. Look in tables, text descriptions, and sequence listings.
-3. TOKEN LIMIT: If there are more than 30 antibodies in the scope, extract ONLY the first 30 and set "isExhaustive": false with a "coverageNote" explaining that more sequences remain.
-4. REASONING: Keep the "reasoning" field extremely short (max 30 chars). Just state the source location (e.g., "Table 1, Row 4").
-5. OUTPUT: Return ONLY a valid JSON object matching the provided schema. No markdown, no preamble.
+1. SCOPE: If a specific page, range, or section is provided, ONLY extract from that scope.
+2. LIMIT: Extract a maximum of 30 antibodies per response. If more exist, set "isExhaustive": false and note this in "coverageNote".
+3. CONCISENESS: Keep "reasoning" extremely short (e.g., "Table 1"). Do not include unnecessary text.
+4. FORMAT: Return ONLY a valid JSON object. No markdown, no preamble.
 
 EXTRACTION GUIDELINES:
-- Capture the mAb Name (e.g., "mAb1", "Antibody A").
-- Extract both Heavy and Light chains if available.
-- Identify CDRs (CDR1, CDR2, CDR3) and their exact sequences.
-- Provide the full variable region sequence for each chain.
-- If a sequence is split across lines, join it without spaces.`;
+- Capture mAb Name.
+- Extract Heavy and Light chains.
+- Identify CDRs (type, sequence, start/end).
+- Provide full variable region sequence.
+- Join split sequences without spaces.`;
 
 const EXTRACTION_SCHEMA = {
   type: Type.OBJECT,
@@ -179,13 +178,13 @@ export async function extractSequences(
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
-          maxOutputTokens: 65536, // Increased significantly to handle large tables
+          maxOutputTokens: 8192,
           responseSchema: EXTRACTION_SCHEMA,
         },
       });
 
       const text = response.text;
-      if (!text) throw new Error("No response from AI");
+      if (!text) throw new Error("The AI returned an empty response. This can happen with extremely complex pages. Try focusing on a smaller section.");
       
       let parsedText = text;
       try {
@@ -215,12 +214,16 @@ export async function extractSequences(
         return result;
       } catch (e) {
         console.error("JSON Parse Error on text:", text);
-        const error = new Error("The AI response was too complex to parse automatically. This happens when a document section contains an extreme amount of data. Try focusing on a single table or a smaller page range.");
+        const error = new Error("[v2.1] The AI response was too complex to parse automatically. This happens when a document section contains an extreme amount of data. Try focusing on a single table or a smaller page range.");
         (error as any).rawResponse = text;
         throw error;
       }
     } catch (e: any) {
       lastError = e;
+      // Handle specific API errors
+      if (e.message?.includes("400") || e.message?.includes("INVALID_ARGUMENT")) {
+        throw new Error("The request was rejected by the AI because the document section is too large or complex. Please use the 'Target Page / Range' feature to focus on a smaller part of the patent.");
+      }
       if (e.message?.includes("503") || e.message?.includes("UNAVAILABLE")) {
         attempts++;
         if (attempts < maxAttempts) {
