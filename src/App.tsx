@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
-import { extractSequences } from './services/gemini';
+import { extractSequences, ExtractionMode } from './services/gemini';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile } from 'firebase/auth';
@@ -60,15 +61,61 @@ function AppContent() {
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTabs, setActiveTabs] = useState<Record<number, 'sequences' | 'properties'>>({});
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [finalTime, setFinalTime] = useState<number | null>(null);
+
+  const toggleTab = (idx: number, tab: 'sequences' | 'properties') => {
+    setActiveTabs(prev => ({ ...prev, [idx]: tab }));
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (state.isExtracting && startTime) {
+      interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [state.isExtracting, startTime]);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>('sequences');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Initialize GA
+  useEffect(() => {
+    const measurementId = process.env.VITE_GA_MEASUREMENT_ID;
+    if (measurementId) {
+      console.log('Initializing Google Analytics with ID:', measurementId);
+      ReactGA.initialize(measurementId);
+      ReactGA.send({ hitType: "pageview", page: window.location.pathname });
+    } else {
+      console.warn('Google Analytics Measurement ID not found. Please set VITE_GA_MEASUREMENT_ID in secrets.');
+    }
+  }, []);
 
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      // Clear state on any auth change to prevent stale data
+      setState({ isExtracting: false, result: null, error: null, extractionStep: undefined });
+      setInputText('');
+      setPageContext('');
+      setHistory([]);
+      
       if (u) {
         setUser(u);
+        
+        ReactGA.event({
+          category: 'User',
+          action: 'Login',
+          label: u.email || 'Anonymous'
+        });
+
         // Create user document if it doesn't exist
         try {
           const userRef = doc(db, 'users', u.uid);
@@ -88,9 +135,6 @@ function AppContent() {
         }
       } else {
         setUser(null);
-        setState({ isExtracting: false, result: null, error: null });
-        setInputText('');
-        setPageContext('');
       }
     });
     return () => unsubscribe();
@@ -127,9 +171,16 @@ function AppContent() {
   };
 
   const handleLogout = () => {
-    setState({ isExtracting: false, result: null, error: null });
+    setState({ isExtracting: false, result: null, error: null, extractionStep: undefined });
     setInputText('');
     setPageContext('');
+    setHistory([]);
+    
+    ReactGA.event({
+      category: 'User',
+      action: 'Logout'
+    });
+
     if ((user as any)?.isGuest) {
       setUser(null);
     } else {
@@ -140,13 +191,15 @@ function AppContent() {
 
   // History Listener
   useEffect(() => {
-    if (!user) {
+    // Only start listener if we have a real Firebase user (not a mock guest)
+    if (!user || (user as any).isGuest) {
       setHistory([]);
       return;
     }
 
     const q = query(
       collection(db, 'extractions'),
+      where('userId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -175,51 +228,92 @@ function AppContent() {
     if (!file) return;
     console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Upload File',
+      label: file.type
+    });
+
+    setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Reading file...', error: null }));
+    const now = Date.now();
+    setStartTime(now);
+    setElapsedTime(0);
+    setFinalTime(null);
     
     try {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
+        if (!base64) {
+          setState(prev => ({ ...prev, isExtracting: false, error: 'Failed to read file content' }));
+          return;
+        }
         const data = base64.split(',')[1];
         
         try {
-          const result = await extractSequences({ data, mimeType: file!.type }, pageContext);
-          setState({ isExtracting: false, result, error: null });
+          const result = await extractSequences(
+            { data, mimeType: file!.type }, 
+            pageContext, 
+            extractionMode,
+            (step) => setState(prev => ({ ...prev, extractionStep: step }))
+          );
+          const duration = Math.floor((Date.now() - now) / 1000);
+          setFinalTime(duration);
+          setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
           setShowHistory(false);
         } catch (err) {
           console.error('Extraction error:', err);
-          setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
+          setState(prev => ({ ...prev, isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed', extractionStep: undefined }));
         }
       };
       reader.onerror = () => {
-        setState({ isExtracting: false, result: null, error: 'Failed to read file' });
+        setState(prev => ({ ...prev, isExtracting: false, result: null, error: 'Failed to read file', extractionStep: undefined }));
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error('File reading error:', err);
-      setState({ isExtracting: false, result: null, error: 'Failed to initiate file reading' });
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: 'Failed to initiate file reading', extractionStep: undefined }));
     }
-  }, [pageContext]);
+  }, [pageContext, extractionMode]);
 
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
     
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Text Paste'
+    });
+
+    setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Preparing text...', error: null }));
+    const now = Date.now();
+    setStartTime(now);
+    setElapsedTime(0);
+    setFinalTime(null);
     try {
-      const result = await extractSequences(inputText, pageContext);
-      setState({ isExtracting: false, result, error: null });
+      const result = await extractSequences(
+        inputText, 
+        pageContext, 
+        extractionMode,
+        (step) => setState(prev => ({ ...prev, extractionStep: step }))
+      );
+      const duration = Math.floor((Date.now() - now) / 1000);
+      setFinalTime(duration);
+      setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
       setShowHistory(false);
     } catch (err) {
-      setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
+      console.error('Text extraction error:', err);
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed', extractionStep: undefined }));
     }
-  }, [inputText, pageContext]);
+  }, [inputText, pageContext, extractionMode]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
     setInputText('');
     setPageContext('');
     setShowHistory(false);
+    setStartTime(null);
+    setElapsedTime(0);
+    setFinalTime(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -234,6 +328,13 @@ function AppContent() {
     }
 
     setIsSaving(true);
+    
+    ReactGA.event({
+      category: 'Extraction',
+      action: 'Save Result',
+      label: state.result.patentId
+    });
+
     try {
       const docData = {
         ...state.result,
@@ -273,6 +374,7 @@ function AppContent() {
       mAb.chains.forEach(chain => {
         const row = {
           mAbName: mAb.mAbName,
+          targetName: mAb.targetName || '',
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           chainType: chain.type,
@@ -280,6 +382,13 @@ function AppContent() {
           CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
           CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
           CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+          targetActivity: mAb.properties?.targetActivity || '',
+          cellLine: mAb.properties?.cellLine || '',
+          admet: mAb.properties?.admet || '',
+          pk: mAb.properties?.pk || '',
+          physchem: mAb.properties?.physchem || '',
+          otherProperties: mAb.properties?.otherProperties || '',
+          evidencePage: mAb.properties?.evidencePage || '',
           confidence: mAb.confidence,
           summary: mAb.summary
         };
@@ -472,6 +581,42 @@ function AppContent() {
             </div>
 
             <div className="space-y-6">
+              {/* Extraction Mode Selection */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Extraction Mode
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
+                  <button
+                    onClick={() => setExtractionMode('sequences')}
+                    className={cn(
+                      "py-2 text-xs font-medium rounded-lg transition-all",
+                      extractionMode === 'sequences' 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-700"
+                    )}
+                  >
+                    Sequences Only
+                  </button>
+                  <button
+                    onClick={() => setExtractionMode('full')}
+                    className={cn(
+                      "py-2 text-xs font-medium rounded-lg transition-all",
+                      extractionMode === 'full' 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-700"
+                    )}
+                  >
+                    Full Extraction
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400 italic">
+                  {extractionMode === 'sequences' 
+                    ? "Extracts mAb names, chains, and CDR sequences." 
+                    : "Extracts sequences + Activity, PK, ADMET, and Physchem properties."}
+                </p>
+              </div>
+
               {/* Page Context Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -515,8 +660,18 @@ function AppContent() {
                   {state.isExtracting ? (
                     <div className="flex flex-col items-center">
                       <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                      <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
-                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                      <p className="text-sm font-medium text-indigo-600">{state.extractionStep || 'Extracting...'}</p>
+                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Multi-step Analysis in Progress</p>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleReset();
+                        }}
+                        className="mt-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                      >
+                        Cancel Extraction
+                      </button>
                     </div>
                   ) : (
                     <>
@@ -546,7 +701,7 @@ function AppContent() {
                   className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
                   disabled={state.isExtracting}
                 />
-                <button
+                <button 
                   onClick={handleTextExtraction}
                   disabled={state.isExtracting || !inputText.trim()}
                   className="w-full bg-zinc-900 text-white py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -554,7 +709,7 @@ function AppContent() {
                   {state.isExtracting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
+                      {state.extractionStep || 'Processing...'}
                     </>
                   ) : (
                     <>
@@ -563,6 +718,14 @@ function AppContent() {
                     </>
                   )}
                 </button>
+                {state.isExtracting && (
+                  <button 
+                    onClick={handleReset}
+                    className="w-full py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest hover:text-red-500 transition-colors text-center"
+                  >
+                    Cancel & Reset
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -671,11 +834,14 @@ function AppContent() {
                       <Database className="w-8 h-8 text-indigo-600" />
                     </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
+                  <h3 className="text-lg font-semibold text-zinc-900">{state.extractionStep || 'Analyzing Patent Data'}</h3>
+                  <div className="mt-2 text-2xl font-mono text-indigo-600 font-bold">
+                    {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+                  </div>
                   <div className="mt-4 space-y-2">
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Validating multiple antibody entries...</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse">Step 1: Sequence Identification</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Step 2: Property Enrichment (Full Mode Only)</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Synthesizing Evidence...</p>
                   </div>
                 </div>
               )}
@@ -686,8 +852,27 @@ function AppContent() {
                   animate={{ opacity: 1, x: 0 }}
                   className="space-y-8"
                 >
-                  {/* Patent Summary Header */}
-                  <div className="bg-zinc-900 text-white rounded-2xl p-6 shadow-xl">
+                  {state.result.antibodies.length === 0 ? (
+                    <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center">
+                      <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-zinc-300" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-zinc-900">No Antibodies Found</h3>
+                      <p className="text-sm text-zinc-500 mt-2 max-w-md mx-auto">
+                        We couldn't identify any monoclonal antibody sequences in this document. 
+                        Try adjusting the page context or ensuring the text contains variable region sequences.
+                      </p>
+                      <button 
+                        onClick={handleReset}
+                        className="mt-6 px-6 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
+                      >
+                        Try Another Document
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Patent Summary Header */}
+                      <div className="bg-zinc-900 text-white rounded-2xl p-6 shadow-xl">
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-2">
@@ -778,6 +963,14 @@ function AppContent() {
                                 (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
                             </span>
                           </div>
+                          {finalTime !== null && (
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-zinc-500 uppercase font-bold">Extraction Time</span>
+                              <span className="text-lg font-bold text-indigo-400">
+                                {Math.floor(finalTime / 60)}:{(finalTime % 60).toString().padStart(2, '0')}
+                              </span>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -788,23 +981,117 @@ function AppContent() {
                     {state.result.antibodies.map((mAb, mAbIdx) => (
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
+                          <div className="flex flex-col">
+                            <h3 className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100">
+                              {mAb.mAbName}
+                            </h3>
+                            {mAb.targetName && (
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase mt-1 ml-1">
+                                Target: {mAb.targetName}
+                              </span>
+                            )}
+                          </div>
                           <div className="h-px bg-zinc-200 flex-1" />
-                          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
-                            {mAb.mAbName}
-                          </h3>
+                          <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+                            <button 
+                              onClick={() => toggleTab(mAbIdx, 'sequences')}
+                              className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                (activeTabs[mAbIdx] || 'sequences') === 'sequences' 
+                                  ? 'bg-white text-indigo-600 shadow-sm' 
+                                  : 'text-zinc-500 hover:text-zinc-700'
+                              }`}
+                            >
+                              Sequences
+                            </button>
+                            <button 
+                              onClick={() => toggleTab(mAbIdx, 'properties')}
+                              className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                activeTabs[mAbIdx] === 'properties' 
+                                  ? 'bg-white text-indigo-600 shadow-sm' 
+                                  : 'text-zinc-500 hover:text-zinc-700'
+                              }`}
+                            >
+                              Properties & SAR
+                            </button>
+                          </div>
                           <div className="h-px bg-zinc-200 flex-1" />
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-6">
-                          {mAb.chains.map((chain, chainIdx) => (
-                            <SequenceDisplay 
-                              key={chainIdx} 
-                              chain={chain} 
-                              isEditable={true}
-                              onUpdate={(newSeq) => handleUpdateSequence(mAbIdx, chainIdx, newSeq)}
-                            />
-                          ))}
-                        </div>
+                        {(activeTabs[mAbIdx] || 'sequences') === 'sequences' ? (
+                          <div className="grid grid-cols-1 gap-6">
+                            {mAb.chains.map((chain, chainIdx) => (
+                              <SequenceDisplay 
+                                key={chainIdx} 
+                                chain={chain} 
+                                isEditable={true}
+                                onUpdate={(newSeq) => handleUpdateSequence(mAbIdx, chainIdx, newSeq)}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {mAb.properties ? (
+                              <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm space-y-4">
+                                <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+                                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Antibody Properties & Evidence</h4>
+                                  {mAb.properties.evidencePage && (
+                                    <span className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100">
+                                      Source: {mAb.properties.evidencePage}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {mAb.properties.targetActivity && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Activity</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.targetActivity}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.cellLine && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Cell Line</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.cellLine}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.admet && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">ADMET</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.admet}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.pk && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">PK (Pharmacokinetics)</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.pk}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.physchem && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Physicochemical</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.physchem}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.functionalSAR && (
+                                    <div className="md:col-span-2">
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Functional SAR</span>
+                                      <p className="text-sm text-zinc-700 font-medium bg-emerald-50 p-3 rounded-lg border border-emerald-100">{mAb.properties.functionalSAR}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.otherProperties && (
+                                    <div className="md:col-span-2">
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.otherProperties}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-zinc-50 border border-dashed border-zinc-200 rounded-xl p-12 text-center">
+                                <p className="text-sm text-zinc-400">No properties extracted for this antibody. Try "Full Extraction" mode.</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         
                         <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
@@ -813,12 +1100,14 @@ function AppContent() {
                       </div>
                     ))}
                   </div>
-                </motion.div>
-              )}
-            </>
-          )}
-        </div>
-      </main>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </>
+        )}
+      </div>
+    </main>
 
       {/* Footer */}
       <footer className="max-w-[1600px] mx-auto px-8 py-12 border-t border-zinc-200 mt-12 flex flex-col md:flex-row items-center justify-between gap-6">

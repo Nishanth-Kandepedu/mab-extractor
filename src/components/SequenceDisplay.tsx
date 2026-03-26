@@ -42,6 +42,17 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
 
+    // Check if CDRs are still valid for the current sequence
+    const areCdrsValid = sortedCdrs.every(cdr => 
+      cdr.start < fullSequence.length && 
+      cdr.end <= fullSequence.length && 
+      fullSequence.slice(cdr.start, cdr.end) === cdr.sequence
+    );
+
+    if (!areCdrsValid) {
+      return <span className="text-zinc-500">{fullSequence}</span>;
+    }
+
     sortedCdrs.forEach((cdr, idx) => {
       // Add non-CDR part
       if (cdr.start > lastIndex) {

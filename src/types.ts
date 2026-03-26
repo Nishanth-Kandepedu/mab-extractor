@@ -11,9 +11,22 @@ export interface Chain {
   cdrs: CDR[];
 }
 
+export interface AntibodyProperties {
+  targetActivity?: string;
+  cellLine?: string;
+  admet?: string;
+  pk?: string;
+  physchem?: string;
+  functionalSAR?: string;
+  otherProperties?: string;
+  evidencePage?: string;
+}
+
 export interface Antibody {
   mAbName: string;
+  targetName?: string;
   chains: Chain[];
+  properties?: AntibodyProperties;
   confidence: number;
   summary: string;
 }
@@ -37,6 +50,7 @@ export interface ExtractionResult {
 
 export interface AppState {
   isExtracting: boolean;
+  extractionStep?: string;
   result: ExtractionResult | null;
   error: string | null;
 }

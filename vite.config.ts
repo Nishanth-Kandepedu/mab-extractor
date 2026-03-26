@@ -17,6 +17,7 @@ export default defineConfig(({mode}) => {
       'process.env.FIREBASE_APP_ID': JSON.stringify(env.FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ''),
       'process.env.FIREBASE_DATABASE_ID': JSON.stringify(env.FIREBASE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID || ''),
       'process.env.APP_URL': JSON.stringify(env.APP_URL || process.env.APP_URL || ''),
+      'process.env.VITE_GA_MEASUREMENT_ID': JSON.stringify(env.VITE_GA_MEASUREMENT_ID || process.env.VITE_GA_MEASUREMENT_ID || ''),
     },
     resolve: {
       alias: {
