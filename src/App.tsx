@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AppState, ExtractionResult, Antibody } from './types';
+import { AppState, ExtractionResult, Antibody, UsageMetadata, ExtractionTier } from './types';
 import { extractSequences, ExtractionMode } from './services/gemini';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
@@ -53,6 +53,7 @@ function AppContent() {
     isExtracting: false,
     result: null,
     error: null,
+    extractionTier: 'balanced',
   });
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
@@ -66,6 +67,23 @@ function AppContent() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [finalTime, setFinalTime] = useState<number | null>(null);
   const extractionStartTimeRef = useRef<number | null>(null);
+
+  const calculateCost = (usage: UsageMetadata | undefined, tier: ExtractionTier) => {
+    if (!usage) return 0;
+    
+    // Pricing per 1M tokens
+    const pricing = {
+      fast: { input: 0.075, output: 0.30 },
+      balanced: { input: 0.10, output: 0.40 },
+      extended: { input: 1.25, output: 5.00 }
+    };
+    
+    const { input, output } = pricing[tier];
+    const inputCost = (usage.promptTokenCount / 1_000_000) * input;
+    const outputCost = (usage.candidatesTokenCount / 1_000_000) * output;
+    
+    return inputCost + outputCost;
+  };
 
   const toggleTab = (idx: number, tab: 'sequences' | 'properties') => {
     setActiveTabs(prev => ({ ...prev, [idx]: tab }));
@@ -257,6 +275,7 @@ function AppContent() {
             { data, mimeType: file!.type }, 
             pageContext, 
             extractionMode,
+            state.extractionTier,
             (step) => setState(prev => ({ ...prev, extractionStep: step }))
           );
           const duration = Math.floor((Date.now() - (extractionStartTimeRef.current || now)) / 1000);
@@ -276,7 +295,7 @@ function AppContent() {
       console.error('File reading error:', err);
       setState(prev => ({ ...prev, isExtracting: false, result: null, error: 'Failed to initiate file reading', extractionStep: undefined }));
     }
-  }, [pageContext, extractionMode]);
+  }, [pageContext, extractionMode, state.extractionTier]);
 
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -297,6 +316,7 @@ function AppContent() {
         inputText, 
         pageContext, 
         extractionMode,
+        state.extractionTier,
         (step) => setState(prev => ({ ...prev, extractionStep: step }))
       );
       const duration = Math.floor((Date.now() - (extractionStartTimeRef.current || now)) / 1000);
@@ -307,10 +327,10 @@ function AppContent() {
       console.error('Text extraction error:', err);
       setState(prev => ({ ...prev, isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed', extractionStep: undefined }));
     }
-  }, [inputText, pageContext, extractionMode]);
+  }, [inputText, pageContext, extractionMode, state.extractionTier]);
 
   const handleReset = () => {
-    setState({ isExtracting: false, result: null, error: null });
+    setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
     setInputText('');
     setPageContext('');
     setShowHistory(false);
@@ -373,30 +393,47 @@ function AppContent() {
     if (!state.result) return;
     
     const rows: any[] = [];
-    state.result.antibodies.forEach(mAb => {
-      mAb.chains.forEach(chain => {
-        const row = {
-          mAbName: mAb.mAbName,
-          targetName: mAb.targetName || '',
-          patentId: state.result?.patentId,
-          patentTitle: state.result?.patentTitle,
-          chainType: chain.type,
-          fullSequence: chain.fullSequence,
-          CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
-          CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
-          CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
-          targetActivity: mAb.properties?.targetActivity || '',
-          cellLine: mAb.properties?.cellLine || '',
-          admet: mAb.properties?.admet || '',
-          pk: mAb.properties?.pk || '',
-          physchem: mAb.properties?.physchem || '',
-          otherProperties: mAb.properties?.otherProperties || '',
-          evidencePage: mAb.properties?.evidencePage || '',
-          confidence: mAb.confidence,
-          summary: mAb.summary
-        };
-        rows.push(row);
-      });
+    state.result.antibodies.forEach((mAb, index) => {
+      const hChain = mAb.chains.find(c => c.type === 'Heavy');
+      const lChain = mAb.chains.find(c => c.type === 'Light');
+
+      const getCDR = (chain: any, type: string) => {
+        return chain?.cdrs.find((c: any) => c.type === type)?.sequence || '';
+      };
+
+      const row = {
+        'S No': index + 1,
+        'Source Type': 'Patent',
+        'Source URL': window.location.href,
+        'Source ID': state.result?.patentId || '',
+        'Source ID (Original)': state.result?.patentId || '',
+        'Company ': mAb.properties?.company || '',
+        'Country': mAb.properties?.country || '',
+        'Evidence statement': mAb.summary || '',
+        'Indication': mAb.properties?.indication || '',
+        'Molecule Name': mAb.mAbName,
+        'Molecule Number (Ab#)': mAb.properties?.moleculeNumber || '',
+        'mAB_Type': mAb.properties?.mabType || '',
+        'mAB Species': mAb.properties?.mabSpecies || '',
+        'mAB Format': mAb.properties?.mabFormat || '',
+        'Molecule Target': mAb.targetName || '',
+        'Molecule Target_Species': mAb.properties?.targetSpecies || '',
+        'Evidence statement ': mAb.properties?.evidencePage || '',
+        'Sequence Reference Link/Sequence ID': mAb.properties?.sequenceReference || '',
+        'AA(VH)': hChain?.fullSequence || '',
+        'VH-CDR1': getCDR(hChain, 'CDR1'),
+        'VH-CDR2': getCDR(hChain, 'CDR2'),
+        'VH-CDR3': getCDR(hChain, 'CDR3'),
+        'AA(VL)': lChain?.fullSequence || '',
+        'VL-CDR1': getCDR(lChain, 'CDR1'),
+        'VL-CDR2': getCDR(lChain, 'CDR2'),
+        'VL-CDR3': getCDR(lChain, 'CDR3'),
+        'Binding_Activity (Yes/No)': mAb.properties?.bindingActivity || 'No',
+        'Pharmacokinetics (Yes/No)': mAb.properties?.pkActivity || 'No',
+        'Functional Activity (Yes/No)': mAb.properties?.functionalActivity || 'No',
+        'Expression system details (Yes/No)': mAb.properties?.expressionSystem || 'No'
+      };
+      rows.push(row);
     });
 
     const csv = Papa.unparse(rows);
@@ -584,6 +621,34 @@ function AppContent() {
             </div>
 
             <div className="space-y-6">
+              {/* Extraction Tier Selection */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Extraction Tier
+                </label>
+                <div className="grid grid-cols-3 gap-2 p-1 bg-zinc-100 rounded-xl border border-zinc-200">
+                  {(['fast', 'balanced', 'extended'] as ExtractionTier[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setState(prev => ({ ...prev, extractionTier: t }))}
+                      className={cn(
+                        "py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                        state.extractionTier === t 
+                          ? "bg-white text-indigo-600 shadow-sm" 
+                          : "text-zinc-500 hover:text-zinc-700"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-400 italic">
+                  {state.extractionTier === 'fast' && "Fastest & cheapest. Good for quick checks."}
+                  {state.extractionTier === 'balanced' && "Balanced speed and quality. Recommended."}
+                  {state.extractionTier === 'extended' && "Highest quality using Pro models. Best for complex patents."}
+                </p>
+              </div>
+
               {/* Extraction Mode Selection */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
@@ -962,8 +1027,7 @@ function AppContent() {
                           <div className="flex flex-col">
                             <span className="text-[10px] text-zinc-500 uppercase font-bold">Est. Cost (USD)</span>
                             <span className="text-lg font-bold text-emerald-400">
-                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 1.25 + 
-                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
+                              ${calculateCost(state.result.usageMetadata, state.result.tier || state.extractionTier).toFixed(4)}
                             </span>
                           </div>
                           {finalTime !== null && (
@@ -1043,7 +1107,55 @@ function AppContent() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  {mAb.properties.company && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Company</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.company}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.country && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Country</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.country}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.indication && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Indication</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.indication}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.moleculeNumber && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Molecule #</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.moleculeNumber}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.mabType && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">mAb Type</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.mabType}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.mabSpecies && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">mAb Species</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.mabSpecies}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.mabFormat && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">mAb Format</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.mabFormat}</p>
+                                    </div>
+                                  )}
+                                  {mAb.properties.targetSpecies && (
+                                    <div>
+                                      <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Species</span>
+                                      <p className="text-sm text-zinc-700">{mAb.properties.targetSpecies}</p>
+                                    </div>
+                                  )}
                                   {mAb.properties.targetActivity && (
                                     <div>
                                       <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Target Activity</span>
@@ -1075,13 +1187,36 @@ function AppContent() {
                                     </div>
                                   )}
                                   {mAb.properties.functionalSAR && (
-                                    <div className="md:col-span-2">
+                                    <div className="md:col-span-3">
                                       <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Functional SAR</span>
-                                      <p className="text-sm text-zinc-700 font-medium bg-emerald-50 p-3 rounded-lg border border-emerald-100">{mAb.properties.functionalSAR}</p>
+                                      <div className="text-sm text-zinc-700 font-medium bg-emerald-50 p-3 rounded-lg border border-emerald-100 overflow-x-auto">
+                                        {mAb.properties.functionalSAR.includes('|') ? (
+                                          <table className="min-w-full divide-y divide-emerald-200">
+                                            <thead>
+                                              <tr>
+                                                {mAb.properties.functionalSAR.split('\n')[0].split('|').map((h, i) => (
+                                                  <th key={i} className="px-2 py-1 text-left text-[10px] font-bold uppercase text-emerald-600">{h.trim()}</th>
+                                                ))}
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-emerald-100">
+                                              {mAb.properties.functionalSAR.split('\n').slice(1).map((row, ri) => (
+                                                <tr key={ri}>
+                                                  {row.split('|').map((cell, ci) => (
+                                                    <td key={ci} className="px-2 py-1 whitespace-nowrap">{cell.trim()}</td>
+                                                  ))}
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        ) : (
+                                          <p>{mAb.properties.functionalSAR}</p>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                   {mAb.properties.otherProperties && (
-                                    <div className="md:col-span-2">
+                                    <div className="md:col-span-3">
                                       <span className="text-[10px] text-zinc-400 uppercase font-semibold block mb-1">Other Properties</span>
                                       <p className="text-sm text-zinc-700">{mAb.properties.otherProperties}</p>
                                     </div>

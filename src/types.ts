@@ -20,6 +20,20 @@ export interface AntibodyProperties {
   functionalSAR?: string;
   otherProperties?: string;
   evidencePage?: string;
+  // New fields for the detailed export
+  company?: string;
+  country?: string;
+  indication?: string;
+  moleculeNumber?: string;
+  mabType?: string;
+  mabSpecies?: string;
+  mabFormat?: string;
+  targetSpecies?: string;
+  sequenceReference?: string;
+  bindingActivity?: 'Yes' | 'No';
+  pkActivity?: 'Yes' | 'No';
+  functionalActivity?: 'Yes' | 'No';
+  expressionSystem?: 'Yes' | 'No';
 }
 
 export interface Antibody {
@@ -31,10 +45,13 @@ export interface Antibody {
   summary: string;
 }
 
+export type ExtractionTier = 'fast' | 'balanced' | 'extended';
+
 export interface UsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount: number;
   totalTokenCount: number;
+  modelUsed?: string;
 }
 
 export interface ExtractionResult {
@@ -46,6 +63,7 @@ export interface ExtractionResult {
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
   usageMetadata?: UsageMetadata;
+  tier?: ExtractionTier;
 }
 
 export interface AppState {
@@ -53,4 +71,5 @@ export interface AppState {
   extractionStep?: string;
   result: ExtractionResult | null;
   error: string | null;
+  extractionTier: ExtractionTier;
 }

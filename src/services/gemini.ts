@@ -1,14 +1,28 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { ExtractionResult, Antibody } from "../types";
+import { ExtractionResult, Antibody, ExtractionTier, AntibodyProperties } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export type ExtractionMode = 'sequences' | 'full';
 
-// Models
-const DISCOVERY_MODEL = "gemini-3.1-flash-lite-preview"; // Fast for finding names
-const EXTRACTION_MODEL = "gemini-3.1-pro-preview";      // Highest quality for sequences
-const ENRICHMENT_MODEL = "gemini-3.1-pro-preview";      // Highest quality for properties
+// Model Mapping
+const MODELS = {
+  fast: {
+    discovery: "gemini-3.1-flash-lite-preview",
+    extraction: "gemini-3.1-flash-lite-preview",
+    enrichment: "gemini-3.1-flash-lite-preview"
+  },
+  balanced: {
+    discovery: "gemini-3.1-flash-lite-preview",
+    extraction: "gemini-3-flash-preview",
+    enrichment: "gemini-3-flash-preview"
+  },
+  extended: {
+    discovery: "gemini-3.1-flash-lite-preview",
+    extraction: "gemini-3.1-pro-preview",
+    enrichment: "gemini-3.1-pro-preview"
+  }
+};
 
 function cleanJson(text: string): string {
   let cleaned = text.trim();
@@ -96,6 +110,7 @@ export async function extractSequences(
   input: string | { data: string; mimeType: string },
   pageContext?: string,
   mode: ExtractionMode = 'sequences',
+  tier: ExtractionTier = 'balanced',
   onProgress?: (step: string) => void
 ): Promise<ExtractionResult> {
   let totalUsage = {
@@ -104,6 +119,7 @@ export async function extractSequences(
     totalTokenCount: 0
   };
 
+  const tierModels = MODELS[tier];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const inputParts = typeof input === "string" 
     ? [{ text: input }] 
@@ -127,7 +143,7 @@ Return a JSON object with:
 - mAbNames: string[] (list of all unique mAb names found)`;
 
   const discResponse: GenerateContentResponse = await ai.models.generateContent({
-    model: DISCOVERY_MODEL,
+    model: tierModels.discovery,
     contents: { parts: [...inputParts, { text: `List all mAb names found in this document. Be exhaustive.${contextPrompt}` }] },
     config: {
       systemInstruction: discoveryInstruction,
@@ -149,7 +165,8 @@ Return a JSON object with:
       patentId: discoveryData.patentId || "Unknown",
       patentTitle: discoveryData.patentTitle || "Unknown",
       antibodies: [],
-      usageMetadata: totalUsage
+      usageMetadata: totalUsage,
+      tier
     };
   }
 
@@ -157,7 +174,7 @@ Return a JSON object with:
 
   // Step 2: Extraction Phase - Extract sequences in batches
   const antibodies: Antibody[] = [];
-  const batchSize = 5; // Small batches for high precision
+  const batchSize = tier === 'fast' ? 10 : 5; // Larger batches for fast tier
   
   for (let i = 0; i < mAbNames.length; i += batchSize) {
     const currentBatch = mAbNames.slice(i, i + batchSize);
@@ -171,11 +188,12 @@ Requirements:
 2. Sequence Extraction: Extract full variable region sequences for Heavy and Light chains.
 3. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately.
 4. Clean sequences: Remove non-amino acid characters.
+5. Metadata: Identify company, country, indication, and molecule number if available.
 
 Return a JSON object with an "antibodies" array matching the requested names.`;
 
     const extResponse: GenerateContentResponse = await ai.models.generateContent({
-      model: EXTRACTION_MODEL,
+      model: tierModels.extraction,
       contents: { parts: [...inputParts, { text: `Extract sequences for: ${currentBatch.join(', ')}.${contextPrompt}` }] },
       config: {
         systemInstruction: extractionInstruction,
@@ -217,6 +235,20 @@ Return a JSON object with an "antibodies" array matching the requested names.`;
                   },
                   confidence: { type: Type.NUMBER },
                   summary: { type: Type.STRING },
+                  properties: {
+                    type: Type.OBJECT,
+                    properties: {
+                      company: { type: Type.STRING },
+                      country: { type: Type.STRING },
+                      indication: { type: Type.STRING },
+                      moleculeNumber: { type: Type.STRING },
+                      mabType: { type: Type.STRING },
+                      mabSpecies: { type: Type.STRING },
+                      mabFormat: { type: Type.STRING },
+                      targetSpecies: { type: Type.STRING },
+                      sequenceReference: { type: Type.STRING },
+                    }
+                  }
                 },
                 required: ["mAbName", "chains", "confidence", "summary"],
               },
@@ -247,14 +279,15 @@ Return a JSON object with an "antibodies" array matching the requested names.`;
     patentId: discoveryData.patentId || "Unknown",
     patentTitle: discoveryData.patentTitle || "Unknown",
     antibodies,
-    usageMetadata: totalUsage
+    usageMetadata: totalUsage,
+    tier
   };
 
   // Step 3: Enrichment Phase - Extract properties in batches
   if (mode === 'full' && result.antibodies.length > 0) {
     if (onProgress) onProgress(`Enriching properties for ${result.antibodies.length} antibodies...`);
     
-    const propBatchSize = 10;
+    const propBatchSize = tier === 'fast' ? 15 : 10;
     for (let i = 0; i < result.antibodies.length; i += propBatchSize) {
       const batch = result.antibodies.slice(i, i + propBatchSize);
       const batchNames = batch.map(a => a.mAbName);
@@ -265,18 +298,21 @@ Return a JSON object with an "antibodies" array matching the requested names.`;
 For the antibodies [${batchNames.join(', ')}], perform a DEEP SEARCH for functional data and SAR details.
 Search tables and examples for binding data, IC50s, and mutations.
 
+IMPORTANT: Present SAR (Structure-Activity Relationship) as a structured table-like string with segments (e.g., "Mutation | Effect | Value").
+
 Extract:
 1. Target Activity: Binding affinity, IC50, EC50.
-2. Functional SAR: Mutation effects.
+2. Functional SAR: Mutation effects in a SEGMENTED/TABULAR format.
 3. Cell Line: Production host.
 4. ADMET/PK: Pharmacokinetics and toxicity.
 5. Physicochemical: Tm, pI, stability.
 6. Evidence Page: Page number or section.
+7. Activity Availability: Yes/No for Binding, PK, Functional, Expression.
 
 Return JSON mapping mAb names to properties.`;
 
       const propResponse: GenerateContentResponse = await ai.models.generateContent({
-        model: ENRICHMENT_MODEL,
+        model: tierModels.enrichment,
         contents: { parts: [...inputParts, { text: `Deep search properties for: ${batchNames.join(', ')}.${contextPrompt}` }] },
         config: {
           systemInstruction: propertyInstruction,
@@ -299,6 +335,10 @@ Return JSON mapping mAb names to properties.`;
                     functionalSAR: { type: Type.STRING },
                     otherProperties: { type: Type.STRING },
                     evidencePage: { type: Type.STRING },
+                    bindingActivity: { type: Type.STRING, enum: ["Yes", "No"] },
+                    pkActivity: { type: Type.STRING, enum: ["Yes", "No"] },
+                    functionalActivity: { type: Type.STRING, enum: ["Yes", "No"] },
+                    expressionSystem: { type: Type.STRING, enum: ["Yes", "No"] },
                   },
                   required: ["mAbName"],
                 }
