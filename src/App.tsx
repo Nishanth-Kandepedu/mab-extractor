@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -65,6 +65,7 @@ function AppContent() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [finalTime, setFinalTime] = useState<number | null>(null);
+  const extractionStartTimeRef = useRef<number | null>(null);
 
   const toggleTab = (idx: number, tab: 'sequences' | 'properties') => {
     setActiveTabs(prev => ({ ...prev, [idx]: tab }));
@@ -72,15 +73,15 @@ function AppContent() {
 
   useEffect(() => {
     let interval: any;
-    if (state.isExtracting && startTime) {
+    if (state.isExtracting && extractionStartTimeRef.current) {
       interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+        setElapsedTime(Math.floor((Date.now() - (extractionStartTimeRef.current || 0)) / 1000));
       }, 1000);
     } else {
       clearInterval(interval);
     }
     return () => clearInterval(interval);
-  }, [state.isExtracting, startTime]);
+  }, [state.isExtracting]);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('sequences');
@@ -236,6 +237,7 @@ function AppContent() {
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Reading file...', error: null }));
     const now = Date.now();
+    extractionStartTimeRef.current = now;
     setStartTime(now);
     setElapsedTime(0);
     setFinalTime(null);
@@ -257,7 +259,7 @@ function AppContent() {
             extractionMode,
             (step) => setState(prev => ({ ...prev, extractionStep: step }))
           );
-          const duration = Math.floor((Date.now() - now) / 1000);
+          const duration = Math.floor((Date.now() - (extractionStartTimeRef.current || now)) / 1000);
           setFinalTime(duration);
           setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
           setShowHistory(false);
@@ -286,6 +288,7 @@ function AppContent() {
 
     setState(prev => ({ ...prev, isExtracting: true, extractionStep: 'Preparing text...', error: null }));
     const now = Date.now();
+    extractionStartTimeRef.current = now;
     setStartTime(now);
     setElapsedTime(0);
     setFinalTime(null);
@@ -296,7 +299,7 @@ function AppContent() {
         extractionMode,
         (step) => setState(prev => ({ ...prev, extractionStep: step }))
       );
-      const duration = Math.floor((Date.now() - now) / 1000);
+      const duration = Math.floor((Date.now() - (extractionStartTimeRef.current || now)) / 1000);
       setFinalTime(duration);
       setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractionStep: undefined }));
       setShowHistory(false);
