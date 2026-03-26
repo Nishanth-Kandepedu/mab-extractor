@@ -41,6 +41,7 @@ export interface ExtractionResult {
   status?: 'pending' | 'validated' | 'rejected';
   usageMetadata?: UsageMetadata;
   extractionTime?: number; // in milliseconds
+  rawResponse?: string; // For debugging truncated responses
 }
 
 export interface AppState {

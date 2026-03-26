@@ -3,17 +3,21 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a world-class bioinformatics expert specializing in antibody sequence extraction from complex patent documents.
-Your task is to identify and extract ALL monoclonal antibody (mAb) sequences with 100% precision.
+const SYSTEM_INSTRUCTION = `You are a specialized Antibody Sequence Extractor. Your goal is to find and extract ALL monoclonal antibody (mAb) sequences from patent documents.
 
-CRITICAL RULES:
-1. NO PLACEHOLDERS: NEVER use "...", "[...]", or truncated sequences. Extract full amino acid sequences.
-2. HANDLE SPLIT SEQUENCES: Reconstruct sequences by removing spaces/numbers/line breaks.
-3. CDR PRECISION: CDRs MUST be exact substrings of the 'fullSequence'.
-4. TABLE EXTRACTION: Iterate through EVERY row in tables. Do not skip entries.
-5. EXHAUSTIVE SEARCH: Scan the entire document. If there are 30+ antibodies, extract all of them.
-6. TOKEN EFFICIENCY: Keep 'reasoning' extremely short (max 30 chars). ONLY include the source location (e.g., "Table 1, Row 4").
-7. NO REDUNDANCY: Do not include validation checks in the output; the client will handle them.`;
+CORE RULES:
+1. SCOPE: If a specific page, range, or section is provided in the prompt, ONLY extract from that scope. If no scope is given, scan the entire document.
+2. EXHAUSTIVE SEARCH: Within the scope, find every single antibody. Look in tables, text descriptions, and sequence listings.
+3. TOKEN LIMIT: If there are more than 15 antibodies in the scope, extract ONLY the first 15 and set "isExhaustive": false with a "coverageNote" explaining that more sequences remain.
+4. REASONING: Keep the "reasoning" field extremely short (max 30 chars). Just state the source location (e.g., "Table 1, Row 4").
+5. OUTPUT: Return ONLY a valid JSON object matching the provided schema. No markdown, no preamble.
+
+EXTRACTION GUIDELINES:
+- Capture the mAb Name (e.g., "mAb1", "Antibody A").
+- Extract both Heavy and Light chains if available.
+- Identify CDRs (CDR1, CDR2, CDR3) and their exact sequences.
+- Provide the full variable region sequence for each chain.
+- If a sequence is split across lines, join it without spaces.`;
 
 const EXTRACTION_SCHEMA = {
   type: Type.OBJECT,
@@ -70,66 +74,116 @@ function tryRepairJson(json: string): string {
     console.warn("Attempting to repair truncated JSON...");
     let repaired = json.trim();
     
-    // Handle unclosed strings
-    const quotes = (repaired.match(/"/g) || []).length;
-    if (quotes % 2 !== 0) {
+    // 1. Handle unclosed strings first
+    let isInsideString = false;
+    for (let i = 0; i < repaired.length; i++) {
+      if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+        isInsideString = !isInsideString;
+      }
+    }
+    if (isInsideString) {
       repaired += '"';
     }
 
-    // Remove trailing commas which are common in truncated JSON
-    repaired = repaired.replace(/,\s*$/, "");
+    // 2. Remove trailing commas or partial keys/values
+    repaired = repaired.replace(/[,:\[\{\s]+$/, "");
     
-    // Count open/close markers
-    const openBraces = (repaired.match(/\{/g) || []).length;
-    const closeBraces = (repaired.match(/\}/g) || []).length;
-    const openBrackets = (repaired.match(/\[/g) || []).length;
-    const closeBrackets = (repaired.match(/\]/g) || []).length;
+    // 3. Stack-based closure
+    const stack: string[] = [];
+    for (let i = 0; i < repaired.length; i++) {
+      const char = repaired[i];
+      if (char === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+        // Skip string content
+        i++;
+        while (i < repaired.length && (repaired[i] !== '"' || repaired[i-1] === '\\')) {
+          i++;
+        }
+        continue;
+      }
+      if (char === '{') stack.push('}');
+      if (char === '[') stack.push(']');
+      if (char === '}') stack.pop();
+      if (char === ']') stack.pop();
+    }
 
-    // Close arrays first, then objects
-    for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
-    for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+    // Close in reverse order
+    let closed = repaired;
+    const tempStack = [...stack];
+    while (tempStack.length > 0) {
+      closed += tempStack.pop();
+    }
     
     try {
-      JSON.parse(repaired);
-      return repaired;
+      JSON.parse(closed);
+      return closed;
     } catch (e2) {
-      // If still failing, try to find the last complete antibody object
-      // We look for the last "chains" array end and its parent object end
-      // However, if it's truncated after the array, we need to strip the partial content
-      const lastChainsEnd = repaired.lastIndexOf(']');
-      if (lastChainsEnd !== -1) {
-        // Strip everything after the last closing bracket of the chains array
-        let partial = repaired.substring(0, lastChainsEnd + 1);
+      // 4. Salvage approach: Find complete antibody objects
+      console.warn("Stack-based repair failed, attempting to salvage complete objects...");
+      
+      const antibodies: any[] = [];
+      // Look for objects that have mAbName and chains
+      const antibodyRegex = /\{[^{}]*"mAbName"[^]*?"chains"[^]*?\}\s*\}\s*/g;
+      
+      // This is still hard with regex. Let's try to find the start of the array
+      const arrayStart = json.indexOf('"antibodies"');
+      if (arrayStart === -1) return json;
+      
+      const startBracket = json.indexOf('[', arrayStart);
+      if (startBracket === -1) return json;
+      
+      let currentPos = startBracket + 1;
+      while (currentPos < json.length) {
+        const objectStart = json.indexOf('{', currentPos);
+        if (objectStart === -1) break;
         
-        // Reconstruct the JSON structure
-        let fallback = partial + '}'; // Close current antibody object
-        fallback += ']'; // Close antibodies array
-        fallback += '}'; // Close root object
+        // Find matching closing brace for this object
+        let braceCount = 0;
+        let insideString = false;
+        let objectEnd = -1;
         
-        try {
-          JSON.parse(fallback);
-          return fallback;
-        } catch (e3) {
-          // If that fails, maybe it was truncated even earlier, or the structure is different
-          // Try to find the last complete antibody object by looking for the last complete object in the array
-          const lastCompleteObjectMatch = repaired.match(/\{[^{}]*mAbName[^{}]*\}/g);
-          if (lastCompleteObjectMatch) {
-            const lastValidIndex = repaired.lastIndexOf(lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1]);
-            const truncatedArray = repaired.substring(0, lastValidIndex + lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1].length);
-            
-            let fallback2 = truncatedArray + ']'; // Close antibodies array
-            fallback2 += '}'; // Close root object
-            
-            try {
-              JSON.parse(fallback2);
-              return fallback2;
-            } catch (e4) {
-              return json;
+        for (let i = objectStart; i < json.length; i++) {
+          const char = json[i];
+          if (char === '"' && (i === 0 || json[i-1] !== '\\')) {
+            insideString = !insideString;
+          }
+          if (!insideString) {
+            if (char === '{') braceCount++;
+            if (char === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                objectEnd = i;
+                break;
+              }
             }
           }
-          return json;
+        }
+        
+        if (objectEnd !== -1) {
+          const objectStr = json.substring(objectStart, objectEnd + 1);
+          try {
+            const obj = JSON.parse(objectStr);
+            if (obj.mAbName && obj.chains) {
+              antibodies.push(obj);
+            }
+          } catch (e) {
+            // Skip invalid object
+          }
+          currentPos = objectEnd + 1;
+        } else {
+          break; // Truncated object
         }
       }
+      
+      if (antibodies.length > 0) {
+        return JSON.stringify({
+          patentId: "Unknown (Recovered)",
+          patentTitle: "Unknown (Recovered)",
+          isExhaustive: false,
+          coverageNote: "Partial recovery from truncated response.",
+          antibodies: antibodies
+        });
+      }
+      
       return json;
     }
   }
@@ -199,10 +253,16 @@ export async function extractSequences(
             totalTokenCount: response.usageMetadata.totalTokenCount || 0,
           };
         }
+        
+        // Add raw response for debugging in case of partial data
+        result.rawResponse = text;
+        
         return result;
       } catch (e) {
         console.error("JSON Parse Error on text:", text);
-        throw new Error("The AI response was too large and could not be parsed. Please use the 'Target Page / Range' feature to focus on a smaller section of the document.");
+        const error = new Error("The AI response was too large and could not be parsed. This usually happens when a single page contains a massive number of sequences. Try focusing on a smaller range (e.g., just one specific table or a single page).");
+        (error as any).rawResponse = text;
+        throw error;
       }
     } catch (e: any) {
       lastError = e;

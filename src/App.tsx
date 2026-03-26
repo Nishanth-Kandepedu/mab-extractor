@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, X } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, X, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
 import { extractSequences } from './services/gemini';
@@ -53,6 +53,8 @@ function AppContent() {
     result: null,
     error: null,
   });
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
   const [copied, setCopied] = useState(false);
@@ -228,10 +230,12 @@ function AppContent() {
           if (result.usageMetadata) {
             result.usageMetadata.cost = calculateCost(result.usageMetadata);
           }
+          setDebugInfo(result.rawResponse || null);
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
-        } catch (err) {
+        } catch (err: any) {
           console.error('Extraction error:', err);
+          setDebugInfo(err.rawResponse || null);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
         }
       };
@@ -257,9 +261,12 @@ function AppContent() {
       if (result.usageMetadata) {
         result.usageMetadata.cost = calculateCost(result.usageMetadata);
       }
+      setDebugInfo(result.rawResponse || null);
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Extraction error:', err);
+      setDebugInfo(err.rawResponse || null);
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
   }, [inputText, pageContext]);
@@ -572,9 +579,14 @@ function AppContent() {
                 />
                 <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 flex items-start gap-2">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-amber-700 leading-relaxed">
-                    <span className="font-bold uppercase">Pro Tip:</span> For large patents (50+ pages), specifying a target page or table significantly improves extraction coverage and precision.
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-amber-700 leading-relaxed">
+                      <span className="font-bold uppercase">Pro Tip:</span> For large patents (50+ pages), specifying a target page or table significantly improves extraction coverage and precision.
+                    </p>
+                    <p className="text-[10px] text-amber-700 leading-relaxed">
+                      <span className="font-bold uppercase">Note:</span> Each extraction is limited to 15 sequences to ensure data integrity. If more exist, use the "Target Page / Range" to extract the next set.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -667,11 +679,81 @@ function AppContent() {
                 className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3"
               >
                 <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
+                  {debugInfo && (
+                    <button 
+                      onClick={() => setShowDebug(true)}
+                      className="mt-3 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:text-red-800 flex items-center gap-1"
+                    >
+                      <Terminal className="w-3 h-3" />
+                      View Raw AI Response (Debug)
+                    </button>
+                  )}
                 </div>
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Debug Modal */}
+          <AnimatePresence>
+            {showDebug && debugInfo && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden"
+                >
+                  <div className="p-6 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
+                        <Terminal className="text-white w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-zinc-900">Raw AI Response</h3>
+                        <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Troubleshooting Data</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(debugInfo);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-medium hover:bg-zinc-50 transition-all"
+                      >
+                        {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copied ? 'Copied!' : 'Copy to Clipboard'}
+                      </button>
+                      <button 
+                        onClick={() => setShowDebug(false)}
+                        className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-auto p-6 bg-zinc-900">
+                    <pre className="text-[11px] font-mono text-emerald-400 whitespace-pre-wrap leading-relaxed">
+                      {debugInfo}
+                    </pre>
+                  </div>
+                  <div className="p-4 border-t border-zinc-200 bg-zinc-50 flex justify-between items-center">
+                    <p className="text-[10px] text-zinc-500 italic">
+                      This data is the raw output from the Gemini model before parsing.
+                    </p>
+                    <button 
+                      onClick={() => setShowDebug(false)}
+                      className="px-6 py-2 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
         </div>
