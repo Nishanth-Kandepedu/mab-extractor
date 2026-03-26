@@ -7,16 +7,14 @@ const SYSTEM_INSTRUCTION = `You are a specialized Antibody Sequence Extractor. Y
 
 CORE RULES:
 1. SCOPE: If a specific page, range, or section is provided, ONLY extract from that scope.
-2. LIMIT: Extract a maximum of 30 antibodies per response. If more exist, set "isExhaustive": false and note this in "coverageNote".
-3. CONCISENESS: Keep "reasoning" extremely short (e.g., "Table 1"). Do not include unnecessary text.
-4. FORMAT: Return ONLY a valid JSON object. No markdown, no preamble.
+2. FORMAT: Return ONLY a valid JSON object matching the schema. No markdown, no preamble.
+3. CONCISENESS: Keep "reasoning" extremely short.
 
 EXTRACTION GUIDELINES:
 - Capture mAb Name.
 - Extract Heavy and Light chains.
-- Identify CDRs (type, sequence, start/end).
-- Provide full variable region sequence.
-- Join split sequences without spaces.`;
+- Identify CDRs.
+- Provide full variable region sequence.`;
 
 const EXTRACTION_SCHEMA = {
   type: Type.OBJECT,
@@ -214,7 +212,7 @@ export async function extractSequences(
         return result;
       } catch (e) {
         console.error("JSON Parse Error on text:", text);
-        const error = new Error("[v2.1] The AI response was too complex to parse automatically. This happens when a document section contains an extreme amount of data. Try focusing on a single table or a smaller page range.");
+        const error = new Error("The AI response was too complex to parse automatically. Try focusing on a smaller page range or a specific table.");
         (error as any).rawResponse = text;
         throw error;
       }

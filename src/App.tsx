@@ -501,7 +501,7 @@ function AppContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
-            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v2.1</p>
+            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
           </div>
         </div>
         
@@ -582,9 +582,6 @@ function AppContent() {
                   <div className="space-y-2">
                     <p className="text-[10px] text-amber-700 leading-relaxed">
                       <span className="font-bold uppercase">Pro Tip:</span> For large patents (50+ pages), specifying a target page or table significantly improves extraction coverage and precision.
-                    </p>
-                    <p className="text-[10px] text-amber-700 leading-relaxed">
-                      <span className="font-bold uppercase">Note:</span> Each extraction is limited to 30 sequences to ensure data integrity. If more exist, use the "Target Page / Range" to extract the next set.
                     </p>
                   </div>
                 </div>
