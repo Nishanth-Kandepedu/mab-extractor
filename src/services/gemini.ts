@@ -128,26 +128,44 @@ export async function extractSequences(
   // Step 1: Discovery Phase - Find all mAb names
   if (onProgress) onProgress('Discovering all antibodies in the document...');
   
-  const discoveryInstruction = `You are a world-class bioinformatics expert. 
-Scan the provided document and list EVERY SINGLE monoclonal antibody (mAb) name mentioned.
-Be exhaustive. Check:
-1. Main text and examples.
-2. All tables (especially sequence listing tables or activity tables).
-3. Figure captions.
-4. Sequence listings (look for "SEQ ID NO" associations with names).
+  const discoveryInstruction = `You are a world-class bioinformatics expert specializing in antibody patent analysis.
+Analyze the provided patent document and identify all unique monoclonal antibodies (mAbs) mentioned.
 
-If a name looks like an antibody identifier (e.g., "mAb 1", "Ab-A", "Antibody 12", "14C10"), include it.
-Return a JSON object with:
-- patentId: string
-- patentTitle: string
-- mAbNames: string[] (list of all unique mAb names found)`;
+Requirements:
+1. List every unique mAb name or identifier (e.g., "Ab1", "mAb-X", "12C4").
+2. For each mAb, identify the associated SEQ ID NOs for Heavy (VH) and Light (VL/VK) chain variable regions if mentioned.
+3. Identify the primary target antigen name.
+
+Return a JSON object with a "mAbs" array.`;
 
   const discResponse: GenerateContentResponse = await ai.models.generateContent({
     model: tierModels.discovery,
-    contents: { parts: [...inputParts, { text: `List all mAb names found in this document. Be exhaustive.${contextPrompt}` }] },
+    contents: { parts: [...inputParts, { text: `Identify all monoclonal antibodies and their associated SEQ ID NOs.${contextPrompt}` }] },
     config: {
       systemInstruction: discoveryInstruction,
       responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          mAbs: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                target: { type: Type.STRING },
+                seqIdHeavy: { type: Type.STRING, description: "SEQ ID NO for Heavy chain variable region" },
+                seqIdLight: { type: Type.STRING, description: "SEQ ID NO for Light chain variable region" },
+                hasSequences: { type: Type.BOOLEAN },
+              },
+              required: ["name", "hasSequences"],
+            },
+          },
+          patentId: { type: Type.STRING },
+          patentTitle: { type: Type.STRING },
+        },
+        required: ["mAbs"],
+      },
     }
   });
 
@@ -157,48 +175,62 @@ Return a JSON object with:
     totalUsage.totalTokenCount += discResponse.usageMetadata.totalTokenCount || 0;
   }
 
-  const discoveryData = await safeJsonParse<{ patentId: string; patentTitle: string; mAbNames: string[] }>(discResponse.text);
-  const mAbNames = Array.from(new Set(discoveryData.mAbNames || [])); // Ensure unique
-  
-  if (mAbNames.length === 0) {
-    return {
-      patentId: discoveryData.patentId || "Unknown",
-      patentTitle: discoveryData.patentTitle || "Unknown",
-      antibodies: [],
-      usageMetadata: totalUsage,
-      tier
-    };
-  }
+    const discoveryData = await safeJsonParse<{ patentId: string; patentTitle: string; mAbs: any[] }>(discResponse.text);
+    const mAbsInfo = discoveryData.mAbs || [];
+    const mAbNames = mAbsInfo.map((m: any) => m.name);
+    const mAbHints = mAbsInfo.map((m: any) => `${m.name}: Heavy SEQ ID ${m.seqIdHeavy || 'unknown'}, Light SEQ ID ${m.seqIdLight || 'unknown'}`).join('; ');
+    
+    if (mAbNames.length === 0) {
+      return {
+        patentId: discoveryData.patentId || "Unknown",
+        patentTitle: discoveryData.patentTitle || "Unknown",
+        antibodies: [],
+        usageMetadata: totalUsage,
+        tier
+      };
+    }
 
-  if (onProgress) onProgress(`Found ${mAbNames.length} antibodies. Extracting sequences...`);
+    if (onProgress) onProgress(`Found ${mAbNames.length} antibodies. Extracting sequences...`);
 
-  // Step 2: Extraction Phase - Extract sequences in batches
-  const antibodies: Antibody[] = [];
-  const batchSize = tier === 'fast' ? 10 : 5; // Larger batches for fast tier
-  
-  for (let i = 0; i < mAbNames.length; i += batchSize) {
-    const currentBatch = mAbNames.slice(i, i + batchSize);
-    if (onProgress) onProgress(`Extracting sequences for batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(mAbNames.length/batchSize)} (${currentBatch.join(', ')})...`);
+    // Step 2: Extraction Phase - Extract sequences in batches
+    const antibodies: Antibody[] = [];
+    const batchSize = tier === 'extended' ? 3 : (tier === 'fast' ? 10 : 5); // Even smaller batches for Extended tier to ensure absolute precision
+    
+    for (let i = 0; i < mAbNames.length; i += batchSize) {
+      const currentBatch = mAbNames.slice(i, i + batchSize);
+      const currentBatchHints = mAbsInfo
+        .filter((m: any) => currentBatch.includes(m.name))
+        .map((m: any) => `${m.name} (Heavy SEQ ID: ${m.seqIdHeavy || 'N/A'}, Light SEQ ID: ${m.seqIdLight || 'N/A'})`)
+        .join('; ');
 
-    const extractionInstruction = `You are a world-class bioinformatics expert.
-Extract the variable region sequences and CDRs for the following antibodies: [${currentBatch.join(', ')}].
+      if (onProgress) onProgress(`Extracting sequences for batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(mAbNames.length/batchSize)} (${currentBatch.join(', ')})...`);
 
-Requirements:
-1. Target Name: Identify the target antigen name for each mAb.
-2. Sequence Extraction: Extract full variable region sequences for Heavy and Light chains.
-3. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain accurately.
-4. Clean sequences: Remove non-amino acid characters.
-5. Metadata: Identify company, country, indication, and molecule number if available.
+      const extractionInstruction = `You are a world-class bioinformatics expert specializing in antibody sequence extraction from patents.
+Your task is to extract the EXACT variable region sequences and CDRs for the following antibodies: [${currentBatch.join(', ')}].
+
+HINTS FOR THIS BATCH:
+${currentBatchHints}
+
+CRITICAL REQUIREMENTS FOR VERBATIM ACCURACY:
+1. VERBATIM EXTRACTION: You MUST copy sequences character-by-character from the source. DO NOT summarize, DO NOT guess, and DO NOT "fix" sequences. A single character error is a total failure.
+2. SEQUENCE CLEANING: Patent documents often include line numbers (e.g., 10, 20, 30) and spaces within sequence listings. You MUST ignore these numbers and spaces, but you MUST NOT miss any amino acid characters (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y).
+3. CHAIN DIFFERENTIATION: Carefully distinguish between Heavy (VH) and Light (VL, VK, or Vλ) chains. Use the SEQ ID NO hints provided to find the correct sequences.
+4. CDR IDENTIFICATION: Use standard Kabat/Chothia logic. CDR sequences MUST be exact substrings of the full variable region sequence you extracted.
+5. TARGET IDENTIFICATION: Identify the specific target antigen for each mAb.
+6. METADATA: Extract Company, Country, Indication, and Molecule Number if explicitly stated.
+
+DOUBLE-CHECK: Before finalizing the JSON, verify that every single amino acid in your extracted sequence matches the source document exactly.
 
 Return a JSON object with an "antibodies" array matching the requested names.`;
 
-    const extResponse: GenerateContentResponse = await ai.models.generateContent({
-      model: tierModels.extraction,
-      contents: { parts: [...inputParts, { text: `Extract sequences for: ${currentBatch.join(', ')}.${contextPrompt}` }] },
+      const extResponse: GenerateContentResponse = await ai.models.generateContent({
+        model: tierModels.extraction,
+        contents: { parts: [...inputParts, { text: `Extract sequences for: ${currentBatch.join(', ')}. Hints: ${currentBatchHints}.${contextPrompt} Ensure 100% verbatim accuracy.` }] },
       config: {
         systemInstruction: extractionInstruction,
         responseMimeType: "application/json",
         maxOutputTokens: 8192,
+        temperature: 0, // Set temperature to 0 for maximum deterministic accuracy
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -294,30 +326,26 @@ Return a JSON object with an "antibodies" array matching the requested names.`;
       
       if (onProgress) onProgress(`Searching properties for batch ${Math.floor(i/propBatchSize) + 1}/${Math.ceil(result.antibodies.length/propBatchSize)}...`);
 
-      const propertyInstruction = `You are a world-class bioinformatics expert. 
-For the antibodies [${batchNames.join(', ')}], perform a DEEP SEARCH for functional data and SAR details.
-Search tables and examples for binding data, IC50s, and mutations.
+      const propertyInstruction = `You are a world-class bioinformatics expert specializing in antibody pharmacology.
+For the following antibodies: [${batchNames.join(', ')}], extract detailed functional and pharmacological properties from the patent.
 
-IMPORTANT: Present SAR (Structure-Activity Relationship) as a structured table-like string with segments (e.g., "Mutation | Effect | Value").
+CRITICAL INSTRUCTIONS:
+1. STRUCTURE-ACTIVITY RELATIONSHIP (SAR): This is the most important field. Look for tables or text describing mutations, affinity changes, or binding kinetics. You MUST present this as a structured table-like string using segments (e.g., "Mutation | Effect | Value"). If no SAR is found, state "No SAR data identified in document."
+2. BINDING & FUNCTIONAL ACTIVITY: Extract specific values (EC50, KD, IC50) and the assay used.
+3. ADMET & PK: Look for half-life, clearance, volume of distribution, and toxicity data.
+4. PHYSICOCHEMICAL: Extract stability, aggregation, and solubility data.
+5. EVIDENCE: Always cite the specific page, table, or paragraph where the data was found.
 
-Extract:
-1. Target Activity: Binding affinity, IC50, EC50.
-2. Functional SAR: Mutation effects in a SEGMENTED/TABULAR format.
-3. Cell Line: Production host.
-4. ADMET/PK: Pharmacokinetics and toxicity.
-5. Physicochemical: Tm, pI, stability.
-6. Evidence Page: Page number or section.
-7. Activity Availability: Yes/No for Binding, PK, Functional, Expression.
-
-Return JSON mapping mAb names to properties.`;
+Return a JSON object with a "properties" array.`;
 
       const propResponse: GenerateContentResponse = await ai.models.generateContent({
         model: tierModels.enrichment,
-        contents: { parts: [...inputParts, { text: `Deep search properties for: ${batchNames.join(', ')}.${contextPrompt}` }] },
+        contents: { parts: [...inputParts, { text: `Extract all properties and SAR for: ${batchNames.join(', ')}.${contextPrompt}` }] },
         config: {
           systemInstruction: propertyInstruction,
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
+          temperature: 0,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
