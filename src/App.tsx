@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, X, Terminal } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
 import { extractSequences } from './services/gemini';
@@ -53,8 +53,6 @@ function AppContent() {
     result: null,
     error: null,
   });
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
   const [copied, setCopied] = useState(false);
@@ -89,17 +87,6 @@ function AppContent() {
     const inputCost = (usage.promptTokenCount / 1000000) * 1.25;
     const outputCost = (usage.candidatesTokenCount / 1000000) * 5.00;
     return inputCost + outputCost;
-  };
-
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    
-    if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    }
-    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   // Auth Listener
@@ -185,7 +172,6 @@ function AppContent() {
 
     const q = query(
       collection(db, 'extractions'),
-      where('userId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
@@ -230,12 +216,10 @@ function AppContent() {
           if (result.usageMetadata) {
             result.usageMetadata.cost = calculateCost(result.usageMetadata);
           }
-          setDebugInfo(result.rawResponse || null);
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
-        } catch (err: any) {
+        } catch (err) {
           console.error('Extraction error:', err);
-          setDebugInfo(err.rawResponse || null);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
         }
       };
@@ -261,12 +245,9 @@ function AppContent() {
       if (result.usageMetadata) {
         result.usageMetadata.cost = calculateCost(result.usageMetadata);
       }
-      setDebugInfo(result.rawResponse || null);
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
-    } catch (err: any) {
-      console.error('Extraction error:', err);
-      setDebugInfo(err.rawResponse || null);
+    } catch (err) {
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
   }, [inputText, pageContext]);
@@ -323,8 +304,8 @@ function AppContent() {
     }
   }, []);
 
-  const handleExportCsv = useCallback((results?: any) => {
-    const targetResults = Array.isArray(results) ? results : (state.result ? [state.result] : []);
+  const handleExportCsv = useCallback((results?: ExtractionResult[]) => {
+    const targetResults = results || (state.result ? [state.result] : []);
     if (targetResults.length === 0) return;
     
     const rows: any[] = [];
@@ -341,7 +322,7 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
-            summary: mAb.reasoning,
+            summary: mAb.summary,
             extractionTimeMs: res.extractionTime || 0,
             costUsd: res.usageMetadata?.cost || 0
           };
@@ -364,8 +345,8 @@ function AppContent() {
     document.body.removeChild(link);
   }, [state.result]);
 
-  const handleExportFasta = useCallback((results?: any) => {
-    const targetResults = Array.isArray(results) ? results : (state.result ? [state.result] : []);
+  const handleExportFasta = useCallback((results?: ExtractionResult[]) => {
+    const targetResults = results || (state.result ? [state.result] : []);
     if (targetResults.length === 0) return;
     
     const fasta = targetResults.flatMap(res => 
@@ -577,14 +558,6 @@ function AppContent() {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   disabled={state.isExtracting}
                 />
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-2">
-                    <p className="text-[10px] text-amber-700 leading-relaxed">
-                      <span className="font-bold uppercase">Pro Tip:</span> For large patents (50+ pages), specifying a target page or table significantly improves extraction coverage and precision.
-                    </p>
-                  </div>
-                </div>
               </div>
 
               <div 
@@ -676,81 +649,11 @@ function AppContent() {
                 className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3"
               >
                 <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div className="flex-1">
+                <div>
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
-                  {debugInfo && (
-                    <button 
-                      onClick={() => setShowDebug(true)}
-                      className="mt-3 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:text-red-800 flex items-center gap-1"
-                    >
-                      <Terminal className="w-3 h-3" />
-                      View Raw AI Response (Debug)
-                    </button>
-                  )}
                 </div>
               </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Debug Modal */}
-          <AnimatePresence>
-            {showDebug && debugInfo && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm">
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden"
-                >
-                  <div className="p-6 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
-                        <Terminal className="text-white w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-zinc-900">Raw AI Response</h3>
-                        <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Troubleshooting Data</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(debugInfo);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-medium hover:bg-zinc-50 transition-all"
-                      >
-                        {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        {copied ? 'Copied!' : 'Copy to Clipboard'}
-                      </button>
-                      <button 
-                        onClick={() => setShowDebug(false)}
-                        className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-auto p-6 bg-zinc-900">
-                    <pre className="text-[11px] font-mono text-emerald-400 whitespace-pre-wrap leading-relaxed">
-                      {debugInfo}
-                    </pre>
-                  </div>
-                  <div className="p-4 border-t border-zinc-200 bg-zinc-50 flex justify-between items-center">
-                    <p className="text-[10px] text-zinc-500 italic">
-                      This data is the raw output from the Gemini model before parsing.
-                    </p>
-                    <button 
-                      onClick={() => setShowDebug(false)}
-                      className="px-6 py-2 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
             )}
           </AnimatePresence>
         </div>
@@ -767,19 +670,6 @@ function AppContent() {
                 <div className="flex gap-3">
                   {history.length > 0 && (
                     <>
-                      <button 
-                        onClick={async () => {
-                          if (window.confirm('Are you sure you want to clear your entire history?')) {
-                            for (const item of history) {
-                              if (item.id) await deleteExtraction(item.id);
-                            }
-                          }
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-600 rounded-xl text-sm font-medium hover:bg-red-600/20 transition-all"
-                      >
-                        <X className="w-4 h-4" />
-                        Clear All
-                      </button>
                       <button 
                         onClick={() => handleExportCsv(history)}
                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all"
@@ -876,7 +766,7 @@ function AppContent() {
                   <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
                   <div className="mt-4 text-center">
                     <p className="text-2xl font-mono font-bold text-indigo-600">
-                      {formatTime(elapsedTime)}
+                      {(elapsedTime / 1000).toFixed(1)}s
                     </p>
                     <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-mono mt-1">Elapsed Time</p>
                   </div>
@@ -966,41 +856,10 @@ function AppContent() {
                         </button>
                       </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap gap-6">
+                    <div className="mt-4 pt-4 border-t border-white/10 flex gap-6">
                       <div className="flex flex-col">
                         <span className="text-[10px] text-zinc-500 uppercase font-bold">Total mAbs</span>
                         <span className="text-lg font-bold">{state.result.antibodies.length}</span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-zinc-500 uppercase font-bold">Coverage Status</span>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-sm font-bold uppercase",
-                            state.result.isExhaustive ? "text-emerald-400" : "text-amber-400"
-                          )}>
-                            {state.result.isExhaustive ? "Exhaustive" : "Partial"}
-                          </span>
-                          {!state.result.isExhaustive && (
-                            <div className="flex items-center gap-2">
-                              <div className="group relative">
-                                <AlertCircle className="w-4 h-4 text-amber-400 cursor-help" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-zinc-800 text-white text-[10px] rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed border border-white/10">
-                                  <p className="font-bold mb-1 uppercase tracking-wider text-amber-400">Coverage Note:</p>
-                                  {state.result.coverageNote}
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => {
-                                  // Scroll to top and focus input
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className="text-[9px] font-bold text-amber-400 underline underline-offset-2 hover:text-amber-300"
-                              >
-                                Refine with Target Page
-                              </button>
-                            </div>
-                          )}
-                        </div>
                       </div>
                       {state.result.usageMetadata && (
                         <>
@@ -1022,7 +881,7 @@ function AppContent() {
                         <div className="flex flex-col">
                           <span className="text-[10px] text-zinc-500 uppercase font-bold">Time Taken</span>
                           <span className="text-lg font-bold text-indigo-400">
-                            {formatTime(state.result.extractionTime)}
+                            {(state.result.extractionTime / 1000).toFixed(1)}s
                           </span>
                         </div>
                       )}
@@ -1035,56 +894,13 @@ function AppContent() {
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
                           <div className="h-px bg-zinc-200 flex-1" />
-                          <div className="flex flex-col items-center gap-1">
-                            <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-widest px-4 py-1 bg-white rounded-full border border-zinc-200 shadow-sm">
-                              {mAb.mAbName}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                              <div className="w-24 h-1.5 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200">
-                                <div 
-                                  className={cn(
-                                    "h-full transition-all duration-1000",
-                                    mAb.confidence > 0.8 ? "bg-emerald-500" :
-                                    mAb.confidence > 0.5 ? "bg-amber-500" : "bg-red-500"
-                                  )}
-                                  style={{ width: `${mAb.confidence * 100}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">
-                                {Math.round(mAb.confidence * 100)}% Confidence
-                              </span>
-                            </div>
-                          </div>
+                          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
+                            {mAb.mAbName}
+                          </h3>
                           <div className="h-px bg-zinc-200 flex-1" />
                         </div>
                         
                         <div className="grid grid-cols-1 gap-6">
-                          {mAb.reasoning && (
-                            <details className="group bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden">
-                              <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-zinc-100 transition-colors list-none">
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
-                                  <Search className="w-3 h-3" />
-                                  AI Extraction Reasoning
-                                </span>
-                                <ChevronRight className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" />
-                              </summary>
-                              <div className="px-4 py-3 text-xs text-zinc-600 leading-relaxed border-t border-zinc-200 bg-white">
-                                {mAb.reasoning}
-                                {mAb.validation && (
-                                  <div className="mt-3 pt-3 border-t border-zinc-100 flex gap-4">
-                                    <div className="flex items-center gap-1.5">
-                                      <div className={cn("w-1.5 h-1.5 rounded-full", mAb.validation.cdrsMatchFullSequence ? "bg-emerald-500" : "bg-red-500")} />
-                                      <span className="text-[9px] font-bold text-zinc-400 uppercase">CDRs Validated</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <div className={cn("w-1.5 h-1.5 rounded-full", mAb.validation.chainsPairedCorrectly ? "bg-emerald-500" : "bg-red-500")} />
-                                      <span className="text-[9px] font-bold text-zinc-400 uppercase">Chains Paired</span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </details>
-                          )}
                           {mAb.chains.map((chain, chainIdx) => (
                             <SequenceDisplay 
                               key={chainIdx} 
@@ -1096,8 +912,8 @@ function AppContent() {
                         </div>
                         
                         <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
-                          <span className="font-bold not-italic text-zinc-700 mr-2">Source Location:</span>
-                          {mAb.reasoning}
+                          <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
+                          {mAb.summary}
                         </div>
                       </div>
                     ))}

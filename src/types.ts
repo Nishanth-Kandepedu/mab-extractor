@@ -15,11 +15,7 @@ export interface Antibody {
   mAbName: string;
   chains: Chain[];
   confidence: number;
-  reasoning: string;
-  validation?: {
-    cdrsMatchFullSequence: boolean;
-    chainsPairedCorrectly: boolean;
-  };
+  summary: string;
 }
 
 export interface UsageMetadata {
@@ -34,14 +30,11 @@ export interface ExtractionResult {
   userId?: string;
   patentId: string;
   patentTitle: string;
-  isExhaustive: boolean;
-  coverageNote: string;
   antibodies: Antibody[];
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
   usageMetadata?: UsageMetadata;
   extractionTime?: number; // in milliseconds
-  rawResponse?: string; // For debugging truncated responses
 }
 
 export interface AppState {
