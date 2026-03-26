@@ -14,19 +14,23 @@ CRITICAL ACCURACY RULES:
 5. TABLE EXTRACTION: Patents often list multiple antibodies in large tables (e.g., "Table 1", "Table 5"). You MUST iterate through EVERY row. Do not skip any entries.
 6. SEQ ID NO MAPPING: If the text refers to a sequence by its "SEQ ID NO", you MUST find that sequence in the document and extract it.
 7. CHAIN PAIRING: Ensure that Heavy and Light chains are correctly paired into a single mAb object. Use mAb names, clone IDs, or contextual proximity to pair them.
+8. EXHAUSTIVE SEARCH: Patents can be very long. You MUST scan the entire document. Do not stop after finding the first few antibodies. If there are 30+ antibodies, you must extract all of them.
+9. NO TRUNCATION OF LIST: Ensure the 'antibodies' array contains every single antibody found in the document.
 
 Self-Correction & Reasoning:
 - Before outputting, perform a "Self-Verification" step:
     - Verify that every CDR sequence is a 100% match to a substring of the 'fullSequence'.
     - Verify that the 'fullSequence' is complete and not truncated.
     - Verify that no antibodies from the source text were missed.
-- Provide a 'reasoning' field explaining exactly how you identified the mAb, where you found the sequences (e.g., "Table 3, row 5"), and how you paired the chains.
+- Provide a 'reasoning' field explaining exactly how you identified the mAb, where you found the sequences (e.g., "Table 3, row 5"), and how you paired the chains. Keep this concise to save output space.
 - Perform a 'validation' check to ensure CDRs match the full sequence and chains are paired correctly.
 
 Output Schema:
 {
   "patentId": "string",
   "patentTitle": "string",
+  "isExhaustive": boolean,
+  "coverageNote": "string explaining if any sections were skipped due to length or complexity",
   "antibodies": [
     {
       "mAbName": "string",
@@ -85,11 +89,14 @@ export async function extractSequences(
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
+          maxOutputTokens: 8192,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               patentId: { type: Type.STRING },
               patentTitle: { type: Type.STRING },
+              isExhaustive: { type: Type.BOOLEAN },
+              coverageNote: { type: Type.STRING },
               antibodies: {
                 type: Type.ARRAY,
                 items: {
@@ -136,7 +143,7 @@ export async function extractSequences(
                 },
               },
             },
-            required: ["patentId", "patentTitle", "antibodies"],
+            required: ["patentId", "patentTitle", "isExhaustive", "coverageNote", "antibodies"],
           },
         },
       });

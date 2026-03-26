@@ -570,6 +570,12 @@ function AppContent() {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   disabled={state.isExtracting}
                 />
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-700 leading-relaxed">
+                    <span className="font-bold uppercase">Pro Tip:</span> For large patents (50+ pages), specifying a target page or table significantly improves extraction coverage and precision.
+                  </p>
+                </div>
               </div>
 
               <div 
@@ -881,10 +887,41 @@ function AppContent() {
                         </button>
                       </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-white/10 flex gap-6">
+                    <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap gap-6">
                       <div className="flex flex-col">
                         <span className="text-[10px] text-zinc-500 uppercase font-bold">Total mAbs</span>
                         <span className="text-lg font-bold">{state.result.antibodies.length}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-zinc-500 uppercase font-bold">Coverage Status</span>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-sm font-bold uppercase",
+                            state.result.isExhaustive ? "text-emerald-400" : "text-amber-400"
+                          )}>
+                            {state.result.isExhaustive ? "Exhaustive" : "Partial"}
+                          </span>
+                          {!state.result.isExhaustive && (
+                            <div className="flex items-center gap-2">
+                              <div className="group relative">
+                                <AlertCircle className="w-4 h-4 text-amber-400 cursor-help" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-zinc-800 text-white text-[10px] rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed border border-white/10">
+                                  <p className="font-bold mb-1 uppercase tracking-wider text-amber-400">Coverage Note:</p>
+                                  {state.result.coverageNote}
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  // Scroll to top and focus input
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="text-[9px] font-bold text-amber-400 underline underline-offset-2 hover:text-amber-300"
+                              >
+                                Refine with Target Page
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {state.result.usageMetadata && (
                         <>

@@ -35,6 +35,8 @@ export interface ExtractionResult {
   userId?: string;
   patentId: string;
   patentTitle: string;
+  isExhaustive: boolean;
+  coverageNote: string;
   antibodies: Antibody[];
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
