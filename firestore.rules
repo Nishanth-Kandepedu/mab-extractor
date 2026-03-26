@@ -22,16 +22,6 @@ service cloud.firestore {
     //   - patentId: string (required)
     //   - patentTitle: string (required)
     //   - antibodies: array (required)
-    //     - mAbName: string
-    //     - chains: array
-    //     - properties: object (optional)
-    //       - targetActivity: string
-    //       - cellLine: string
-    //       - admet: string
-    //       - pk: string
-    //       - physchem: string
-    //       - otherProperties: string
-    //       - evidencePage: string
     //   - createdAt: timestamp (required, immutable)
     //   - status: string (required, enum: ['pending', 'validated', 'rejected'])
     //
@@ -106,7 +96,7 @@ service cloud.firestore {
     }
 
     match /extractions/{extractionId} {
-      allow read: if isAuthenticated(); // Allow all authenticated users to see extractions for validation
+      allow read: if isDocOwner() || isAdmin();
       allow create: if isAuthenticated() && isValidExtraction(request.resource.data) && 
                     request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && isValidExtraction(request.resource.data) && 
