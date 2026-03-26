@@ -22,6 +22,7 @@ export interface UsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount: number;
   totalTokenCount: number;
+  cost?: number;
 }
 
 export interface ExtractionResult {
@@ -33,6 +34,7 @@ export interface ExtractionResult {
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
   usageMetadata?: UsageMetadata;
+  extractionTime?: number; // in milliseconds
 }
 
 export interface AppState {
