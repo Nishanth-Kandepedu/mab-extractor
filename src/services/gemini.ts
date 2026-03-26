@@ -13,33 +13,54 @@ CRITICAL RULES:
 4. TABLE EXTRACTION: Iterate through EVERY row in tables. Do not skip entries.
 5. EXHAUSTIVE SEARCH: Scan the entire document. If there are 30+ antibodies, extract all of them.
 6. TOKEN EFFICIENCY: Keep 'reasoning' extremely short (max 30 chars). ONLY include the source location (e.g., "Table 1, Row 4").
+7. NO REDUNDANCY: Do not include validation checks in the output; the client will handle them.`;
 
-Output Schema:
-{
-  "patentId": "string",
-  "patentTitle": "string",
-  "isExhaustive": boolean,
-  "coverageNote": "string explaining if any sections were skipped",
-  "antibodies": [
-    {
-      "mAbName": "string",
-      "chains": [
-        {
-          "type": "Heavy" | "Light",
-          "fullSequence": "string",
-          "cdrs": [
-            { "type": "CDR1", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR2", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR3", "sequence": "string", "start": number, "end": number }
-          ]
-        }
-      ],
-      "confidence": number,
-      "reasoning": "string (max 60 chars)",
-      "validation": { "cdrsMatchFullSequence": boolean, "chainsPairedCorrectly": boolean }
+const EXTRACTION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    patentId: { type: Type.STRING },
+    patentTitle: { type: Type.STRING },
+    isExhaustive: { type: Type.BOOLEAN },
+    coverageNote: { type: Type.STRING },
+    antibodies: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          mAbName: { type: Type.STRING },
+          chains: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                fullSequence: { type: Type.STRING },
+                cdrs: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                      sequence: { type: Type.STRING },
+                      start: { type: Type.NUMBER },
+                      end: { type: Type.NUMBER }
+                    },
+                    required: ["type", "sequence"]
+                  }
+                }
+              },
+              required: ["type", "fullSequence", "cdrs"]
+            }
+          },
+          confidence: { type: Type.NUMBER },
+          reasoning: { type: Type.STRING }
+        },
+        required: ["mAbName", "chains", "confidence", "reasoning"]
+      }
     }
-  ]
-}`;
+  },
+  required: ["patentId", "patentTitle", "antibodies"]
+};
 
 function tryRepairJson(json: string): string {
   try {
@@ -50,11 +71,8 @@ function tryRepairJson(json: string): string {
     let repaired = json.trim();
     
     // Handle unclosed strings
-    const lastQuote = repaired.lastIndexOf('"');
-    const secondLastQuote = repaired.lastIndexOf('"', lastQuote - 1);
-    const isInsideString = (repaired.match(/"/g) || []).length % 2 !== 0;
-    
-    if (isInsideString) {
+    const quotes = (repaired.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
       repaired += '"';
     }
 
@@ -75,28 +93,40 @@ function tryRepairJson(json: string): string {
       JSON.parse(repaired);
       return repaired;
     } catch (e2) {
-      // If still failing, try to find the last complete antibody object in the array
-      // This is a last resort: find the last complete object in the 'antibodies' array
-      const lastCompleteObjectMatch = repaired.match(/\{[^{}]*mAbName[^{}]*\}/g);
-      if (lastCompleteObjectMatch) {
-        const lastValidIndex = repaired.lastIndexOf(lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1]);
-        const truncatedArray = repaired.substring(0, lastValidIndex + lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1].length);
+      // If still failing, try to find the last complete antibody object
+      // We look for the last "chains" array end and its parent object end
+      // However, if it's truncated after the array, we need to strip the partial content
+      const lastChainsEnd = repaired.lastIndexOf(']');
+      if (lastChainsEnd !== -1) {
+        // Strip everything after the last closing bracket of the chains array
+        let partial = repaired.substring(0, lastChainsEnd + 1);
         
-        // Try to reconstruct the root object
-        let fallback = truncatedArray;
-        if (!fallback.endsWith(']')) fallback += ']';
-        if (!fallback.endsWith('}')) fallback += '}';
+        // Reconstruct the JSON structure
+        let fallback = partial + '}'; // Close current antibody object
+        fallback += ']'; // Close antibodies array
+        fallback += '}'; // Close root object
         
-        // Ensure we have the start of the root object if it was somehow lost (unlikely but safe)
-        if (!fallback.startsWith('{')) {
-           // This is getting too complex for a simple repair, but let's try one more thing
-           return json; 
-        }
-
         try {
           JSON.parse(fallback);
           return fallback;
         } catch (e3) {
+          // If that fails, maybe it was truncated even earlier, or the structure is different
+          // Try to find the last complete antibody object by looking for the last complete object in the array
+          const lastCompleteObjectMatch = repaired.match(/\{[^{}]*mAbName[^{}]*\}/g);
+          if (lastCompleteObjectMatch) {
+            const lastValidIndex = repaired.lastIndexOf(lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1]);
+            const truncatedArray = repaired.substring(0, lastValidIndex + lastCompleteObjectMatch[lastCompleteObjectMatch.length - 1].length);
+            
+            let fallback2 = truncatedArray + ']'; // Close antibodies array
+            fallback2 += '}'; // Close root object
+            
+            try {
+              JSON.parse(fallback2);
+              return fallback2;
+            } catch (e4) {
+              return json;
+            }
+          }
           return json;
         }
       }
@@ -139,60 +169,7 @@ export async function extractSequences(
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              patentId: { type: Type.STRING },
-              patentTitle: { type: Type.STRING },
-              isExhaustive: { type: Type.BOOLEAN },
-              coverageNote: { type: Type.STRING },
-              antibodies: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    mAbName: { type: Type.STRING },
-                    chains: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                          fullSequence: { type: Type.STRING },
-                          cdrs: {
-                            type: Type.ARRAY,
-                            items: {
-                              type: Type.OBJECT,
-                              properties: {
-                                type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                                sequence: { type: Type.STRING },
-                                start: { type: Type.INTEGER },
-                                end: { type: Type.INTEGER },
-                              },
-                              required: ["type", "sequence", "start", "end"],
-                            },
-                          },
-                        },
-                        required: ["type", "fullSequence", "cdrs"],
-                      },
-                    },
-                    confidence: { type: Type.NUMBER },
-                    reasoning: { type: Type.STRING },
-                    validation: {
-                      type: Type.OBJECT,
-                      properties: {
-                        cdrsMatchFullSequence: { type: Type.BOOLEAN },
-                        chainsPairedCorrectly: { type: Type.BOOLEAN },
-                      },
-                      required: ["cdrsMatchFullSequence", "chainsPairedCorrectly"],
-                    },
-                  },
-                  required: ["mAbName", "chains", "confidence", "reasoning", "validation"],
-                },
-              },
-            },
-            required: ["patentId", "patentTitle", "isExhaustive", "coverageNote", "antibodies"],
-          },
+          responseSchema: EXTRACTION_SCHEMA,
         },
       });
 

@@ -334,7 +334,7 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
-            summary: mAb.summary,
+            summary: mAb.reasoning,
             extractionTimeMs: res.extractionTime || 0,
             costUsd: res.usageMetadata?.cost || 0
           };
@@ -1017,8 +1017,8 @@ function AppContent() {
                         </div>
                         
                         <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
-                          <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
-                          {mAb.summary}
+                          <span className="font-bold not-italic text-zinc-700 mr-2">Source Location:</span>
+                          {mAb.reasoning}
                         </div>
                       </div>
                     ))}

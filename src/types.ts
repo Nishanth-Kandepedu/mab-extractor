@@ -15,8 +15,7 @@ export interface Antibody {
   mAbName: string;
   chains: Chain[];
   confidence: number;
-  summary: string;
-  reasoning?: string;
+  reasoning: string;
   validation?: {
     cdrsMatchFullSequence: boolean;
     chainsPairedCorrectly: boolean;
