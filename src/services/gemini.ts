@@ -13,15 +13,10 @@ Guidelines:
 2. If the data is in a table, iterate through all rows to capture every unique antibody.
 3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
 4. Provide metadata: Patent ID and Patent Title.
-5. OCR Error Mitigation & Systematic Correction:
-   Patent documents often contain systematic OCR noise. Use the following knowledge to perform a "second-pass" verification of every sequence:
-   - Systematic Hot-Spots (Highest Priority):
-     * Position 12 (VL chains): Extremely prone to L -> V substitutions (AI often reads L as V). Verify if 'V' at pos 12 should actually be 'L'.
-     * Position 75 (VH chains): Extremely prone to T -> I substitutions (AI often reads T as I). Verify if 'I' at pos 75 should actually be 'T'.
-     * Positions 61, 83, 84, 88, 97: High error rates. Cross-reference these positions carefully.
-   - Common Visual Confusions:
-     * L <-> V, T <-> I, G <-> S, S <-> G, G <-> T, K <-> L, S <-> R, P <-> G, E <-> D, L <-> E, P <-> Q.
-   - Source Priority: If a sequence is found in both a table and a sequence listing, use the sequence listing as the primary source of truth for character accuracy.
+5. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
+   - Actively check for L vs V confusions (especially at position 12 in VL chains).
+   - Actively check for T vs I, S vs A, and S vs R confusions.
+   - If a sequence is found in both a table and a sequence listing, use the sequence listing as the primary source of truth for character accuracy.
 6. Return the data in a structured JSON format.
 
 Output Schema:
