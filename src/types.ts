@@ -16,6 +16,11 @@ export interface Antibody {
   chains: Chain[];
   confidence: number;
   summary: string;
+  reasoning?: string;
+  validation?: {
+    cdrsMatchFullSequence: boolean;
+    chainsPairedCorrectly: boolean;
+  };
 }
 
 export interface UsageMetadata {

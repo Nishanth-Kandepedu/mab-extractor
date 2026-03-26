@@ -315,8 +315,8 @@ function AppContent() {
     }
   }, []);
 
-  const handleExportCsv = useCallback((results?: ExtractionResult[]) => {
-    const targetResults = results || (state.result ? [state.result] : []);
+  const handleExportCsv = useCallback((results?: any) => {
+    const targetResults = Array.isArray(results) ? results : (state.result ? [state.result] : []);
     if (targetResults.length === 0) return;
     
     const rows: any[] = [];
@@ -356,8 +356,8 @@ function AppContent() {
     document.body.removeChild(link);
   }, [state.result]);
 
-  const handleExportFasta = useCallback((results?: ExtractionResult[]) => {
-    const targetResults = results || (state.result ? [state.result] : []);
+  const handleExportFasta = useCallback((results?: any) => {
+    const targetResults = Array.isArray(results) ? results : (state.result ? [state.result] : []);
     if (targetResults.length === 0) return;
     
     const fasta = targetResults.flatMap(res => 
@@ -905,13 +905,56 @@ function AppContent() {
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
                           <div className="h-px bg-zinc-200 flex-1" />
-                          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
-                            {mAb.mAbName}
-                          </h3>
+                          <div className="flex flex-col items-center gap-1">
+                            <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-widest px-4 py-1 bg-white rounded-full border border-zinc-200 shadow-sm">
+                              {mAb.mAbName}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-1.5 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200">
+                                <div 
+                                  className={cn(
+                                    "h-full transition-all duration-1000",
+                                    mAb.confidence > 0.8 ? "bg-emerald-500" :
+                                    mAb.confidence > 0.5 ? "bg-amber-500" : "bg-red-500"
+                                  )}
+                                  style={{ width: `${mAb.confidence * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">
+                                {Math.round(mAb.confidence * 100)}% Confidence
+                              </span>
+                            </div>
+                          </div>
                           <div className="h-px bg-zinc-200 flex-1" />
                         </div>
                         
                         <div className="grid grid-cols-1 gap-6">
+                          {mAb.reasoning && (
+                            <details className="group bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden">
+                              <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-zinc-100 transition-colors list-none">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                                  <Search className="w-3 h-3" />
+                                  AI Extraction Reasoning
+                                </span>
+                                <ChevronRight className="w-3 h-3 text-zinc-400 group-open:rotate-90 transition-transform" />
+                              </summary>
+                              <div className="px-4 py-3 text-xs text-zinc-600 leading-relaxed border-t border-zinc-200 bg-white">
+                                {mAb.reasoning}
+                                {mAb.validation && (
+                                  <div className="mt-3 pt-3 border-t border-zinc-100 flex gap-4">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", mAb.validation.cdrsMatchFullSequence ? "bg-emerald-500" : "bg-red-500")} />
+                                      <span className="text-[9px] font-bold text-zinc-400 uppercase">CDRs Validated</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", mAb.validation.chainsPairedCorrectly ? "bg-emerald-500" : "bg-red-500")} />
+                                      <span className="text-[9px] font-bold text-zinc-400 uppercase">Chains Paired</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          )}
                           {mAb.chains.map((chain, chainIdx) => (
                             <SequenceDisplay 
                               key={chainIdx} 

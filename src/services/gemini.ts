@@ -17,8 +17,14 @@ Accuracy Guidelines:
     - Heavy Chain: CDR3 is typically preceded by 'C-A-R' or 'C-T-R' and followed by 'W-G-Q-G'.
     - Light Chain: CDR3 is typically preceded by 'C' and followed by 'F-G-Q-G' or 'F-G-G-G'.
 - Table Extraction: Patents often list multiple antibodies in large tables (e.g., "Table 1", "Table 5"). You MUST iterate through EVERY row. Do not skip any entries.
-- Context Awareness: If a patent describes "Antibody A" and "Antibody B", ensure they are extracted as separate objects.
+- SEQ ID NO Mapping: If the text refers to a sequence by its "SEQ ID NO", you MUST find that sequence in the document and extract it.
+- Chain Pairing: Ensure that Heavy and Light chains are correctly paired into a single mAb object. If they are listed separately, use their names or context to pair them.
 - Handle Fragments: If only CDRs are provided without the full variable region, extract them and note it in the summary.
+
+Self-Correction & Reasoning:
+- Before outputting, double-check that every CDR sequence is a 100% match to a substring of the 'fullSequence'.
+- Provide a 'reasoning' field explaining how you identified the mAb and paired the chains.
+- Perform a 'validation' check to ensure CDRs match the full sequence and chains are paired correctly.
 
 Output Schema:
 {
@@ -39,7 +45,12 @@ Output Schema:
         }
       ],
       "confidence": number (0-1),
-      "summary": "string explaining the source and any assumptions made"
+      "summary": "string explaining the source and any assumptions made",
+      "reasoning": "detailed explanation of the extraction and pairing logic",
+      "validation": {
+        "cdrsMatchFullSequence": boolean,
+        "chainsPairedCorrectly": boolean
+      }
     }
   ]
 }`;
@@ -54,7 +65,7 @@ export async function extractSequences(
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table or sequence listing. Ensure EVERY antibody row is captured and paired correctly.\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -62,7 +73,7 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' or 'Sequence Listing' where multiple antibodies are listed. Capture and pair every single one correctly.` });
   }
 
   let attempts = 0;
@@ -114,8 +125,17 @@ export async function extractSequences(
                     },
                     confidence: { type: Type.NUMBER },
                     summary: { type: Type.STRING },
+                    reasoning: { type: Type.STRING },
+                    validation: {
+                      type: Type.OBJECT,
+                      properties: {
+                        cdrsMatchFullSequence: { type: Type.BOOLEAN },
+                        chainsPairedCorrectly: { type: Type.BOOLEAN },
+                      },
+                      required: ["cdrsMatchFullSequence", "chainsPairedCorrectly"],
+                    },
                   },
-                  required: ["mAbName", "chains", "confidence", "summary"],
+                  required: ["mAbName", "chains", "confidence", "summary", "reasoning", "validation"],
                 },
               },
             },
