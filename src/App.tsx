@@ -62,7 +62,40 @@ function AppContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Timer Effect
+  useEffect(() => {
+    if (state.isExtracting) {
+      setElapsedTime(0);
+      timerRef.current = setInterval(() => {
+        setElapsedTime(prev => prev + 100);
+      }, 100);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [state.isExtracting]);
+
+  const calculateCost = (usage?: { promptTokenCount: number; candidatesTokenCount: number }) => {
+    if (!usage) return 0;
+    // Pricing for gemini-3.1-pro-preview: $1.25 / 1M input, $5.00 / 1M output
+    const inputCost = (usage.promptTokenCount / 1000000) * 1.25;
+    const outputCost = (usage.candidatesTokenCount / 1000000) * 5.00;
+    return inputCost + outputCost;
+  };
+
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const tenths = Math.floor((ms % 1000) / 100);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}.${tenths}`;
+  };
 
   // Auth Listener
   useEffect(() => {
@@ -175,6 +208,7 @@ function AppContent() {
     if (!file) return;
     console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
+    const startTime = Date.now();
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     
     try {
@@ -185,6 +219,11 @@ function AppContent() {
         
         try {
           const result = await extractSequences({ data, mimeType: file!.type }, pageContext);
+          const endTime = Date.now();
+          result.extractionTime = endTime - startTime;
+          if (result.usageMetadata) {
+            result.usageMetadata.cost = calculateCost(result.usageMetadata);
+          }
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
         } catch (err) {
@@ -205,9 +244,15 @@ function AppContent() {
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
     
+    const startTime = Date.now();
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     try {
       const result = await extractSequences(inputText, pageContext);
+      const endTime = Date.now();
+      result.extractionTime = endTime - startTime;
+      if (result.usageMetadata) {
+        result.usageMetadata.cost = calculateCost(result.usageMetadata);
+      }
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
     } catch (err) {
@@ -239,7 +284,9 @@ function AppContent() {
         ...state.result,
         userId: user.uid,
         createdAt: Timestamp.now(),
-        status: 'pending'
+        status: 'pending',
+        extractionTime: state.result.extractionTime,
+        usageMetadata: state.result.usageMetadata
       };
       await addDoc(collection(db, 'extractions'), docData);
       setIsSaving(false);
@@ -265,25 +312,30 @@ function AppContent() {
     }
   }, []);
 
-  const handleExportCsv = useCallback(() => {
-    if (!state.result) return;
+  const handleExportCsv = useCallback((results?: ExtractionResult[]) => {
+    const targetResults = results || (state.result ? [state.result] : []);
+    if (targetResults.length === 0) return;
     
     const rows: any[] = [];
-    state.result.antibodies.forEach(mAb => {
-      mAb.chains.forEach(chain => {
-        const row = {
-          mAbName: mAb.mAbName,
-          patentId: state.result?.patentId,
-          patentTitle: state.result?.patentTitle,
-          chainType: chain.type,
-          fullSequence: chain.fullSequence,
-          CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
-          CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
-          CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
-          confidence: mAb.confidence,
-          summary: mAb.summary
-        };
-        rows.push(row);
+    targetResults.forEach(res => {
+      res.antibodies.forEach(mAb => {
+        mAb.chains.forEach(chain => {
+          const row = {
+            mAbName: mAb.mAbName,
+            patentId: res.patentId,
+            patentTitle: res.patentTitle,
+            chainType: chain.type,
+            fullSequence: chain.fullSequence,
+            CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
+            CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
+            CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+            confidence: mAb.confidence,
+            summary: mAb.summary,
+            extractionTimeMs: res.extractionTime || 0,
+            costUsd: res.usageMetadata?.cost || 0
+          };
+          rows.push(row);
+        });
       });
     });
 
@@ -292,7 +344,35 @@ function AppContent() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `mAb-extraction-${state.result.patentId || 'result'}.csv`);
+    const filename = targetResults.length === 1 
+      ? `mAb-extraction-${targetResults[0].patentId || 'result'}.csv`
+      : `mAb-bulk-export-${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [state.result]);
+
+  const handleExportFasta = useCallback((results?: ExtractionResult[]) => {
+    const targetResults = results || (state.result ? [state.result] : []);
+    if (targetResults.length === 0) return;
+    
+    const fasta = targetResults.flatMap(res => 
+      res.antibodies.flatMap(mAb => 
+        mAb.chains.map(chain => 
+          `>${mAb.mAbName} | ${chain.type} Chain | ${res.patentId}\n${chain.fullSequence}`
+        )
+      )
+    ).join('\n');
+    
+    const blob = new Blob([fasta], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filename = targetResults.length === 1 
+      ? `mAb-extraction-${targetResults[0].patentId || 'result'}.fasta`
+      : `mAb-bulk-export-${new Date().toISOString().split('T')[0]}.fasta`;
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -595,9 +675,29 @@ function AppContent() {
                   <History className="w-6 h-6 text-indigo-600" />
                   Extraction History
                 </h2>
-                <button onClick={() => setShowHistory(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
-                  Back to Analyzer
-                </button>
+                <div className="flex gap-3">
+                  {history.length > 0 && (
+                    <>
+                      <button 
+                        onClick={() => handleExportCsv(history)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all"
+                      >
+                        <Download className="w-4 h-4" />
+                        Bulk CSV
+                      </button>
+                      <button 
+                        onClick={() => handleExportFasta(history)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-all"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Bulk FASTA
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => setShowHistory(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
+                    Back to Analyzer
+                  </button>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 gap-4">
@@ -672,7 +772,13 @@ function AppContent() {
                     </div>
                   </div>
                   <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-4 text-center">
+                    <p className="text-2xl font-mono font-bold text-indigo-600">
+                      {formatTime(elapsedTime)}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-mono mt-1">Elapsed Time</p>
+                  </div>
+                  <div className="mt-6 space-y-2">
                     <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Validating multiple antibody entries...</p>
@@ -774,11 +880,18 @@ function AppContent() {
                           <div className="flex flex-col">
                             <span className="text-[10px] text-zinc-500 uppercase font-bold">Est. Cost (USD)</span>
                             <span className="text-lg font-bold text-emerald-400">
-                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 1.25 + 
-                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
+                              ${(state.result.usageMetadata.cost || 0).toFixed(4)}
                             </span>
                           </div>
                         </>
+                      )}
+                      {state.result.extractionTime && (
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold">Time Taken</span>
+                          <span className="text-lg font-bold text-indigo-400">
+                            {formatTime(state.result.extractionTime)}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

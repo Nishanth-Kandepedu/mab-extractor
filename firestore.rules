@@ -96,7 +96,7 @@ service cloud.firestore {
     }
 
     match /extractions/{extractionId} {
-      allow read: if isAuthenticated(); // Allow all authenticated users to see extractions for validation
+      allow read: if isDocOwner() || isAdmin();
       allow create: if isAuthenticated() && isValidExtraction(request.resource.data) && 
                     request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && isValidExtraction(request.resource.data) && 

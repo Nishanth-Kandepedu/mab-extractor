@@ -65,6 +65,7 @@ export async function extractSequences(
     contents: { parts },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
+      temperature: 0,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
