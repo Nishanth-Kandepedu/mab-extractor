@@ -9,8 +9,8 @@ For each mAb, extract the Heavy and Light chain variable regions.
 For each chain, you must also identify the Complementarity-Determining Regions (CDRs): CDR1, CDR2, and CDR3.
 
 Guidelines:
-1. Extract the full variable region sequence for each antibody identified.
-2. If the data is in a table, iterate through all rows to capture every unique antibody.
+1. Systematic Extraction: Before generating the JSON, internally identify the total number of antibodies listed in the source. Ensure the final "antibodies" array length matches this count exactly.
+2. If the data is in a table, iterate through every single row. Do not skip rows even if they appear repetitive.
 3. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
 4. Provide metadata: Patent ID and Patent Title.
 5. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
