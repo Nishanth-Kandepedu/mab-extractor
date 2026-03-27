@@ -3,7 +3,7 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-export const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
+const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 Guidelines:
@@ -39,49 +39,12 @@ Output Schema:
   ]
 }`;
 
-export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
-
-export interface LLMOptions {
-  provider: LLMProvider;
-  model?: string;
-}
-
-export async function extractWithLLM(
+export async function extractSequences(
   input: string | { data: string; mimeType: string },
-  options: LLMOptions,
   pageContext?: string
 ): Promise<ExtractionResult> {
-  const { provider, model } = options;
-
-  if (provider === 'gemini') {
-    return extractWithGemini(input, model || 'gemini-3.1-pro-preview', pageContext);
-  }
-
-  // For OpenAI and Anthropic, we call our backend API
-  const response = await fetch('/api/extract', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      provider,
-      model,
-      input: typeof input === 'string' ? input : undefined, // Currently only supporting text for non-Gemini
-      systemInstruction: SYSTEM_INSTRUCTION,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to extract with ' + provider);
-  }
-
-  return await response.json();
-}
-
-async function extractWithGemini(
-  input: string | { data: string; mimeType: string },
-  modelName: string,
-  pageContext?: string
-): Promise<ExtractionResult> {
+  const model = "gemini-3.1-pro-preview";
+  
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
@@ -98,12 +61,13 @@ async function extractWithGemini(
   }
 
   const response: GenerateContentResponse = await ai.models.generateContent({
-    model: modelName,
+    model,
     contents: { parts },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 65536,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -152,11 +116,22 @@ async function extractWithGemini(
     },
   });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from AI");
+  let text = response.text;
+  if (!text) {
+    console.error("Empty response from AI. Usage Metadata:", response.usageMetadata);
+    throw new Error("No response from AI. The extraction may have timed out or exceeded token limits.");
+  }
+  
+  // Strip markdown if present
+  if (text.includes("```json")) {
+    text = text.split("```json")[1].split("```")[0].trim();
+  } else if (text.includes("```")) {
+    text = text.split("```")[1].split("```")[0].trim();
+  }
   
   try {
     const result = JSON.parse(text) as ExtractionResult;
+    // Extract usage metadata if available
     if (response.usageMetadata) {
       result.usageMetadata = {
         promptTokenCount: response.usageMetadata.promptTokenCount || 0,
@@ -166,7 +141,9 @@ async function extractWithGemini(
     }
     return result;
   } catch (e) {
-    console.error("Failed to parse AI response:", text);
-    throw new Error("Failed to parse extraction result");
+    console.error("Failed to parse AI response. Text length:", text.length);
+    console.error("Text preview (last 100 chars):", text.slice(-100));
+    console.error("Usage Metadata:", response.usageMetadata);
+    throw new Error(`Failed to parse extraction result. The output may have been truncated (Length: ${text.length}).`);
   }
 }
