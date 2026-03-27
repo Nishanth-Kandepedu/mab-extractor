@@ -35,7 +35,6 @@ IMPORTANT EXTRACTION RULES:
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 11. Return the data in the specified JSON format.
-12. Evidence Location: For each antibody, specify the page number or table number where the sequences were found (e.g., "Page 42", "Table 12").
 
 Output Schema:
 {
@@ -44,7 +43,6 @@ Output Schema:
   "antibodies": [
     {
       "mAbName": "string",
-      "evidenceLocation": "string",
       "chains": [
         {
           "type": "Heavy" | "Light",
@@ -122,92 +120,69 @@ async function extractWithGemini(
     parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-fidelity verbatim extraction for all 34+ antibodies.` });
   }
 
-  const schema = {
-    type: Type.OBJECT,
-    properties: {
-      patentId: { type: Type.STRING },
-      patentTitle: { type: Type.STRING },
-      antibodies: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            mAbName: { type: Type.STRING },
-            evidenceLocation: { type: Type.STRING, description: "Page or Table number where the mAb sequences were found" },
-            chains: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                  fullSequence: { type: Type.STRING },
-                  cdrs: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                        sequence: { type: Type.STRING },
-                        start: { type: Type.INTEGER },
-                        end: { type: Type.INTEGER },
-                      },
-                      required: ["type", "sequence", "start", "end"],
-                    },
-                  },
-                },
-                required: ["type", "fullSequence", "cdrs"],
-              },
-            },
-            confidence: { type: Type.NUMBER },
-            summary: { type: Type.STRING },
-            needsReview: { type: Type.BOOLEAN },
-            reviewReason: { type: Type.STRING },
-          },
-          required: ["mAbName", "evidenceLocation", "chains", "confidence", "summary"],
-        },
-      },
-    },
-    required: ["patentId", "patentTitle", "antibodies"],
-  };
-
   const response: GenerateContentResponse = await ai.models.generateContent({
     model: modelName,
     contents: { parts },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: modelName.includes('gemini-3') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
+      thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
       responseMimeType: "application/json",
-      responseSchema: schema,
-      maxOutputTokens: 16384, // Increase limit for large extractions
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          patentId: { type: Type.STRING },
+          patentTitle: { type: Type.STRING },
+          antibodies: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                mAbName: { type: Type.STRING },
+                chains: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                      fullSequence: { type: Type.STRING },
+                      cdrs: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                            sequence: { type: Type.STRING },
+                            start: { type: Type.INTEGER },
+                            end: { type: Type.INTEGER },
+                          },
+                          required: ["type", "sequence", "start", "end"],
+                        },
+                      },
+                    },
+                    required: ["type", "fullSequence", "cdrs"],
+                  },
+                },
+                confidence: { type: Type.NUMBER },
+                summary: { type: Type.STRING },
+                needsReview: { type: Type.BOOLEAN },
+                reviewReason: { type: Type.STRING },
+              },
+              required: ["mAbName", "chains", "confidence", "summary"],
+            },
+          },
+        },
+        required: ["patentId", "patentTitle", "antibodies"],
+      },
     },
   });
 
-  const text = response.text?.trim() || "";
+  const text = response.text;
   if (!text) throw new Error("No response from AI");
   
-  // Clean JSON from potential markdown wrappers
-  const cleanedText = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-  
-  let result: ExtractionResult;
   try {
-    result = JSON.parse(cleanedText) as ExtractionResult;
-  } catch (parseError) {
-    console.error("JSON Parse Error. Raw text:", text);
-    // Fallback: try to find JSON block with regex if cleaning failed
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        result = JSON.parse(jsonMatch[0]) as ExtractionResult;
-      } catch (innerError) {
-        throw new Error("Failed to parse extraction result: Invalid JSON structure");
-      }
-    } else {
-      throw new Error("Failed to parse extraction result: No JSON found in response");
-    }
-  }
-  
-  try {
+    let result = JSON.parse(text) as ExtractionResult;
+    
     // Post-processing and Validation
     result.antibodies = result.antibodies.map(mAb => {
       let needsReview = mAb.needsReview || false;
@@ -323,29 +298,25 @@ async function extractWithGemini(
           config: {
             systemInstruction: SYSTEM_INSTRUCTION,
             responseMimeType: "application/json",
-            responseSchema: schema,
-            maxOutputTokens: 4096, // Smaller limit for single mAb re-extraction
           }
         });
 
         if (targetedResponse.text) {
           try {
             const targetedResult = JSON.parse(targetedResponse.text) as ExtractionResult;
-            if (targetedResult && Array.isArray(targetedResult.antibodies)) {
-              const updatedMab = targetedResult.antibodies.find(m => m.mAbName === mAb.mAbName) || targetedResult.antibodies[0];
-              if (updatedMab) {
-                // Replace the old one with the new one if it looks better
-                const index = result.antibodies.findIndex(m => m.mAbName === mAb.mAbName);
-                if (index !== -1) {
-                  result.antibodies[index] = {
-                    ...updatedMab,
-                    reviewReason: `[RE-EXTRACTED] ${updatedMab.reviewReason || ""}`.trim()
-                  };
-                }
+            const updatedMab = targetedResult.antibodies.find(m => m.mAbName === mAb.mAbName);
+            if (updatedMab) {
+              // Replace the old one with the new one if it looks better
+              const index = result.antibodies.findIndex(m => m.mAbName === mAb.mAbName);
+              if (index !== -1) {
+                result.antibodies[index] = {
+                  ...updatedMab,
+                  reviewReason: `[RE-EXTRACTED] ${updatedMab.reviewReason || ""}`.trim()
+                };
               }
             }
           } catch (e) {
-            console.error("Failed to parse targeted re-extraction for " + mAb.mAbName, e);
+            console.error("Failed to parse targeted re-extraction", e);
           }
         }
       }
