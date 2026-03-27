@@ -70,50 +70,6 @@ export async function extractSequences(
       thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
       maxOutputTokens: 65536,
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          patentId: { type: Type.STRING },
-          patentTitle: { type: Type.STRING },
-          antibodies: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                mAbName: { type: Type.STRING },
-                chains: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                      fullSequence: { type: Type.STRING },
-                      cdrs: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: Type.STRING },
-                            start: { type: Type.INTEGER },
-                            end: { type: Type.INTEGER },
-                          },
-                          required: ["type", "sequence", "start", "end"],
-                        },
-                      },
-                    },
-                    required: ["type", "fullSequence", "cdrs"],
-                  },
-                },
-                confidence: { type: Type.NUMBER },
-                summary: { type: Type.STRING },
-              },
-              required: ["mAbName", "chains", "confidence", "summary"],
-            },
-          },
-        },
-        required: ["patentId", "patentTitle", "antibodies"],
-      },
     },
   });
 
@@ -131,7 +87,44 @@ export async function extractSequences(
   }
   
   try {
-    const result = JSON.parse(text) as ExtractionResult;
+    // Attempt to repair truncated JSON if it looks incomplete
+    let processedText = text.trim();
+    
+    // Check if it ends abruptly (not with } or ])
+    if (!processedText.endsWith('}') && !processedText.endsWith(']')) {
+      console.warn("Response appears truncated, attempting to repair JSON...");
+      
+      // If it ends in the middle of a string, close the string first
+      const lastQuoteIndex = processedText.lastIndexOf('"');
+      const lastBraceIndex = processedText.lastIndexOf('{');
+      const lastBracketIndex = processedText.lastIndexOf('[');
+      
+      // Heuristic: if the last quote is after the last brace/bracket, we might be in a string
+      if (lastQuoteIndex > lastBraceIndex && lastQuoteIndex > lastBracketIndex) {
+        // Count quotes to see if we have an odd number
+        const quoteCount = (processedText.match(/"/g) || []).length;
+        if (quoteCount % 2 !== 0) {
+          processedText += '"';
+        }
+      }
+
+      // Simple repair: add missing closing brackets
+      let openBraces = (processedText.match(/\{/g) || []).length;
+      let closeBraces = (processedText.match(/\}/g) || []).length;
+      let openBrackets = (processedText.match(/\[/g) || []).length;
+      let closeBrackets = (processedText.match(/\]/g) || []).length;
+      
+      while (openBrackets > closeBrackets) {
+        processedText += ']';
+        closeBrackets++;
+      }
+      while (openBraces > closeBraces) {
+        processedText += '}';
+        closeBraces++;
+      }
+    }
+
+    const result = JSON.parse(processedText) as ExtractionResult;
     // Extract usage metadata if available
     if (response.usageMetadata) {
       result.usageMetadata = {
@@ -145,6 +138,6 @@ export async function extractSequences(
     console.error("Failed to parse AI response. Text length:", text.length);
     console.error("Text preview (last 100 chars):", text.slice(-100));
     console.error("Usage Metadata:", response.usageMetadata);
-    throw new Error(`Failed to parse extraction result. The output may have been truncated (Length: ${text.length}).`);
+    throw new Error(`Failed to parse extraction result. The output may have been truncated or contains invalid characters (Length: ${text.length}).`);
   }
 }
