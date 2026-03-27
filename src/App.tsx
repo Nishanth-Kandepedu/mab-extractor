@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, Sparkles } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
 import { extractSequences } from './services/gemini';
@@ -450,13 +450,7 @@ function AppContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
-            <div className="flex items-center gap-2">
-              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
-              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 rounded text-[9px] text-indigo-600 font-bold uppercase tracking-tighter">
-                <Sparkles className="w-2.5 h-2.5" />
-                Gemini 3.1 Pro
-              </div>
-            </div>
+            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
           </div>
         </div>
         
@@ -569,10 +563,6 @@ function AppContent() {
                       <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
                       <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
                       <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
-                      <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-zinc-400 font-medium uppercase tracking-wider">
-                        <Sparkles className="w-3 h-3 text-indigo-400" />
-                        High-Thinking Extraction
-                      </div>
                     </>
                   )}
                 </div>
@@ -609,14 +599,10 @@ function AppContent() {
                   ) : (
                     <>
                       <Search className="w-4 h-4" />
-                      Analyze with Gemini Pro
+                      Analyze Text
                     </>
                   )}
                 </button>
-                <p className="text-[10px] text-center text-zinc-400 font-medium uppercase tracking-widest flex items-center justify-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-indigo-400" />
-                  Verbatim Accuracy Mode
-                </p>
               </div>
             </div>
           </div>

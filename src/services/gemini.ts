@@ -4,17 +4,16 @@ import { ExtractionResult } from "../types";
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
-Your primary goal is 100% Coverage (extracting every single mAb) and 100% Verbatim Accuracy.
+Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 Guidelines:
-1. Comprehensive Extraction: Scan the ENTIRE document/text from beginning to end. Identify and extract EVERY unique monoclonal antibody (mAb) mentioned. 
-2. Multi-Table/Multi-Page Scan: Antibodies are often listed in large tables that span multiple pages or are split across multiple tables (e.g., Table 1, Table 2, etc.). You MUST scan all tables and all pages to find every antibody.
-3. Expected Count: There are typically 30-40+ antibodies in these patents (e.g., 34 antibodies). Do not stop until you have captured every single one identified in the document.
-4. Verbatim Sequences: Extract amino acid sequences EXACTLY as they appear. For each mAb, you must find both the Heavy (VH) and Light (VL) chain variable regions.
-5. VL Chain Focus: Pay extra attention to Light chain (VL) sequences, as they are historically more prone to errors. Verify them character-by-character.
-6. Source Priority: Use "Sequence Listings" as the primary source of truth for character accuracy if available.
-7. CDR Identification: Identify CDR1, CDR2, and CDR3 for each chain based on standard numbering (IMGT/Kabat).
-8. Output Format: Return the data in the specified JSON format. Ensure the JSON is complete and not truncated.
+1. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+2. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-fidelity task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+3. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+4. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+5. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+6. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+7. Return the data in the specified JSON format.
 
 Output Schema:
 {
@@ -50,7 +49,7 @@ export async function extractSequences(
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Thoroughly extract ALL mAb sequences from the following text.${contextPrompt} Scan the entire text to ensure every single antibody (typically 34+) is captured without exception.\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -58,7 +57,7 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Thoroughly extract ALL mAb sequences from this document.${contextPrompt} There are approximately 34 antibodies in the tables; you MUST scan all pages and tables to capture all of them with 100% verbatim accuracy.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-fidelity verbatim extraction for all 34+ antibodies.` });
   }
 
   const response: GenerateContentResponse = await ai.models.generateContent({
@@ -67,9 +66,53 @@ export async function extractSequences(
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       maxOutputTokens: 65536,
       responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          patentId: { type: Type.STRING },
+          patentTitle: { type: Type.STRING },
+          antibodies: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                mAbName: { type: Type.STRING },
+                chains: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                      fullSequence: { type: Type.STRING },
+                      cdrs: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                            sequence: { type: Type.STRING },
+                            start: { type: Type.INTEGER },
+                            end: { type: Type.INTEGER },
+                          },
+                          required: ["type", "sequence", "start", "end"],
+                        },
+                      },
+                    },
+                    required: ["type", "fullSequence", "cdrs"],
+                  },
+                },
+                confidence: { type: Type.NUMBER },
+                summary: { type: Type.STRING },
+              },
+              required: ["mAbName", "chains", "confidence", "summary"],
+            },
+          },
+        },
+        required: ["patentId", "patentTitle", "antibodies"],
+      },
     },
   });
 
@@ -87,44 +130,7 @@ export async function extractSequences(
   }
   
   try {
-    // Attempt to repair truncated JSON if it looks incomplete
-    let processedText = text.trim();
-    
-    // Check if it ends abruptly (not with } or ])
-    if (!processedText.endsWith('}') && !processedText.endsWith(']')) {
-      console.warn("Response appears truncated, attempting to repair JSON...");
-      
-      // If it ends in the middle of a string, close the string first
-      const lastQuoteIndex = processedText.lastIndexOf('"');
-      const lastBraceIndex = processedText.lastIndexOf('{');
-      const lastBracketIndex = processedText.lastIndexOf('[');
-      
-      // Heuristic: if the last quote is after the last brace/bracket, we might be in a string
-      if (lastQuoteIndex > lastBraceIndex && lastQuoteIndex > lastBracketIndex) {
-        // Count quotes to see if we have an odd number
-        const quoteCount = (processedText.match(/"/g) || []).length;
-        if (quoteCount % 2 !== 0) {
-          processedText += '"';
-        }
-      }
-
-      // Simple repair: add missing closing brackets
-      let openBraces = (processedText.match(/\{/g) || []).length;
-      let closeBraces = (processedText.match(/\}/g) || []).length;
-      let openBrackets = (processedText.match(/\[/g) || []).length;
-      let closeBrackets = (processedText.match(/\]/g) || []).length;
-      
-      while (openBrackets > closeBrackets) {
-        processedText += ']';
-        closeBrackets++;
-      }
-      while (openBraces > closeBraces) {
-        processedText += '}';
-        closeBraces++;
-      }
-    }
-
-    const result = JSON.parse(processedText) as ExtractionResult;
+    const result = JSON.parse(text) as ExtractionResult;
     // Extract usage metadata if available
     if (response.usageMetadata) {
       result.usageMetadata = {
@@ -138,6 +144,6 @@ export async function extractSequences(
     console.error("Failed to parse AI response. Text length:", text.length);
     console.error("Text preview (last 100 chars):", text.slice(-100));
     console.error("Usage Metadata:", response.usageMetadata);
-    throw new Error(`Failed to parse extraction result. The output may have been truncated or contains invalid characters (Length: ${text.length}).`);
+    throw new Error(`Failed to parse extraction result. The output may have been truncated (Length: ${text.length}).`);
   }
 }
