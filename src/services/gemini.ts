@@ -66,8 +66,8 @@ export async function extractSequences(
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
-      maxOutputTokens: 16384,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 65536,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
