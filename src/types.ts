@@ -43,6 +43,8 @@ export interface Antibody {
   confidence: number;
   summary: string;
   properties?: AntibodyProperties;
+  needsReview?: boolean;
+  reviewReason?: string;
 }
 
 export interface UsageMetadata {

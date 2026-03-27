@@ -1074,11 +1074,29 @@ function AppContent() {
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
                           <div className="h-px bg-zinc-200 flex-1" />
-                          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
-                            {mAb.mAbName}
-                          </h3>
+                          <div className="flex flex-col items-center gap-1">
+                            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
+                              {mAb.mAbName}
+                            </h3>
+                            {mAb.needsReview && (
+                              <div className="flex items-center gap-1.5 px-3 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-full text-[10px] font-bold uppercase animate-pulse">
+                                <AlertCircle className="w-3 h-3" />
+                                Needs Review
+                              </div>
+                            )}
+                          </div>
                           <div className="h-px bg-zinc-200 flex-1" />
                         </div>
+                        
+                        {mAb.needsReview && mAb.reviewReason && (
+                          <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-xs text-red-700 flex items-start gap-3">
+                            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                            <div>
+                              <span className="font-bold block mb-1">Review Reason:</span>
+                              {mAb.reviewReason}
+                            </div>
+                          </div>
+                        )}
                         
                         <div className="grid grid-cols-1 gap-6">
                           {mAb.chains.map((chain, chainIdx) => (
