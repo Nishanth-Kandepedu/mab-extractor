@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody } from './types';
-import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
+import { extractSequences } from './services/gemini';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile } from 'firebase/auth';
@@ -52,10 +52,6 @@ function AppContent() {
     isExtracting: false,
     result: null,
     error: null,
-  });
-  const [llmOptions, setLlmOptions] = useState<LLMOptions>({
-    provider: 'gemini',
-    model: 'gemini-3.1-pro-preview'
   });
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
@@ -190,9 +186,7 @@ function AppContent() {
         const data = base64.split(',')[1];
         
         try {
-          const startTime = Date.now();
-          const result = await extractWithLLM({ data, mimeType: file!.type }, llmOptions, pageContext);
-          result.extractionTime = Date.now() - startTime;
+          const result = await extractSequences({ data, mimeType: file!.type }, pageContext);
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
         } catch (err) {
@@ -215,9 +209,7 @@ function AppContent() {
     
     setState(prev => ({ ...prev, isExtracting: true, error: null }));
     try {
-      const startTime = Date.now();
-      const result = await extractWithLLM(inputText, llmOptions, pageContext);
-      result.extractionTime = Date.now() - startTime;
+      const result = await extractSequences(inputText, pageContext);
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
     } catch (err) {
@@ -458,7 +450,13 @@ function AppContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
-            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 rounded text-[9px] text-indigo-600 font-bold uppercase tracking-tighter">
+                <Sparkles className="w-2.5 h-2.5" />
+                Gemini 3.1 Pro
+              </div>
+            </div>
           </div>
         </div>
         
@@ -513,59 +511,6 @@ function AppContent() {
       <main className="max-w-[1600px] mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Model Selection */}
-          <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <RotateCcw className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-zinc-800">Model Benchmarking</h2>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-2">
-                {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
-                    className={cn(
-                      "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                      llmOptions.provider === p 
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                        : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-              <select
-                value={llmOptions.model}
-                onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              >
-                {llmOptions.provider === 'gemini' && (
-                  <>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
-                  </>
-                )}
-                {llmOptions.provider === 'openai' && (
-                  <>
-                    <option value="gpt-4o">GPT-4o (Omni)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="o1-preview">o1 Preview (Reasoning)</option>
-                  </>
-                )}
-                {llmOptions.provider === 'anthropic' && (
-                  <>
-                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
-                  </>
-                )}
-              </select>
-            </div>
-          </div>
-
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm sticky top-24">
             <div className="flex items-center gap-2 mb-6">
               <FileUp className="w-5 h-5 text-indigo-600" />
@@ -624,6 +569,10 @@ function AppContent() {
                       <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
                       <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
                       <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
+                      <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-zinc-400 font-medium uppercase tracking-wider">
+                        <Sparkles className="w-3 h-3 text-indigo-400" />
+                        High-Thinking Extraction
+                      </div>
                     </>
                   )}
                 </div>
@@ -660,10 +609,14 @@ function AppContent() {
                   ) : (
                     <>
                       <Search className="w-4 h-4" />
-                      Analyze Text
+                      Analyze with Gemini Pro
                     </>
                   )}
                 </button>
+                <p className="text-[10px] text-center text-zinc-400 font-medium uppercase tracking-widest flex items-center justify-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                  Verbatim Accuracy Mode
+                </p>
               </div>
             </div>
           </div>
@@ -807,19 +760,7 @@ function AppContent() {
                           )}
                         </div>
                         <h2 className="text-xl font-bold">{state.result.patentTitle}</h2>
-                        <div className="flex items-center gap-4 mt-1">
-                          <p className="text-sm text-zinc-400 font-mono">{state.result.patentId}</p>
-                          {state.result.extractionTime && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Time: {(state.result.extractionTime / 1000).toFixed(1)}s
-                            </span>
-                          )}
-                          {state.result.usageMetadata && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Tokens: {state.result.usageMetadata.totalTokenCount}
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-sm text-zinc-400 mt-1 font-mono">{state.result.patentId}</p>
                       </div>
                       <div className="flex gap-2">
                         {user && !state.result.id && (
