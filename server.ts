@@ -23,7 +23,13 @@ async function startServer() {
 
     try {
       if (provider === 'openai') {
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey || apiKey === 'undefined') {
+          return res.status(400).json({ 
+            error: 'Missing OpenAI API Key. Please add OPENAI_API_KEY to the Secrets/Settings menu in AI Studio.' 
+          });
+        }
+        const openai = new OpenAI({ apiKey });
         const response = await openai.chat.completions.create({
           model: model || 'gpt-4o',
           messages: [
@@ -37,7 +43,13 @@ async function startServer() {
       }
 
       if (provider === 'anthropic') {
-        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey || apiKey === 'undefined') {
+          return res.status(400).json({ 
+            error: 'Missing Anthropic API Key. Please add ANTHROPIC_API_KEY to the Secrets/Settings menu in AI Studio.' 
+          });
+        }
+        const anthropic = new Anthropic({ apiKey });
         const response = await anthropic.messages.create({
           model: model || 'claude-3-5-sonnet-latest',
           max_tokens: 4096,
