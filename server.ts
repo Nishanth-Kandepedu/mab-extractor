@@ -15,18 +15,35 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // Log available environment variables (keys only for security)
+  console.log('--- Environment Diagnostics ---');
+  console.log('Available Keys:', Object.keys(process.env).filter(key => 
+    key.includes('API') || key.includes('KEY') || key.includes('URL')
+  ));
+  console.log('OPENAI_API_KEY present:', !!process.env.OPENAI_API_KEY);
+  console.log('ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
+  console.log('-------------------------------');
+
   app.use(express.json({ limit: '50mb' }));
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
     const { provider, model, input, systemInstruction, responseSchema } = req.body;
 
+    // Helper to find keys case-insensitively
+    const findKey = (pattern: string) => {
+      const key = Object.keys(process.env).find(k => k.toUpperCase().includes(pattern.toUpperCase()));
+      return key ? process.env[key] : null;
+    };
+
     try {
       if (provider === 'openai') {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey || apiKey === 'undefined') {
+        const apiKey = findKey('OPENAI_API_KEY');
+        console.log(`[Debug] OpenAI Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
+        
+        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
           return res.status(400).json({ 
-            error: 'Missing OpenAI API Key. Please add OPENAI_API_KEY to the Secrets/Settings menu in AI Studio.' 
+            error: 'Missing OpenAI API Key. Please add OPENAI_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
           });
         }
         const openai = new OpenAI({ apiKey });
@@ -43,10 +60,12 @@ async function startServer() {
       }
 
       if (provider === 'anthropic') {
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey || apiKey === 'undefined') {
+        const apiKey = findKey('ANTHROPIC_API_KEY');
+        console.log(`[Debug] Anthropic Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
+
+        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
           return res.status(400).json({ 
-            error: 'Missing Anthropic API Key. Please add ANTHROPIC_API_KEY to the Secrets/Settings menu in AI Studio.' 
+            error: 'Missing Anthropic API Key. Please add ANTHROPIC_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
           });
         }
         const anthropic = new Anthropic({ apiKey });
