@@ -75,29 +75,31 @@ function AppContent() {
 
   // Auth Listener
   useEffect(() => {
+    let userDocUnsubscribe: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (userDocUnsubscribe) {
+        userDocUnsubscribe();
+        userDocUnsubscribe = null;
+      }
+
       if (u) {
-        // If it's a real Firebase user, we might need to fetch their role from Firestore
-        // For anonymous users, we handle role in handleGuestLogin
         setUser(u);
-        try {
-          const userRef = doc(db, 'users', u.uid);
-          const userSnap = await getDocFromServer(userRef);
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
+        // Listen to user document for role and other data
+        const userRef = doc(db, 'users', u.uid);
+        userDocUnsubscribe = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
             setUser(prev => prev ? { ...prev, ...userData } as any : null);
           } else {
-            await setDoc(userRef, {
-              uid: u.uid,
-              email: u.email || '',
-              displayName: u.displayName || 'Guest Curator',
-              photoURL: u.photoURL || null,
-              role: 'user'
-            });
+            // If doc doesn't exist, create a default one
+            // But only if we're not in the middle of handleGuestLogin
+            // Actually, handleGuestLogin will create it. 
+            // We'll just wait for it to exist.
           }
-        } catch (error) {
-          console.error('Error fetching/creating user doc:', error);
-        }
+        }, (error) => {
+          console.error('Error listening to user doc:', error);
+        });
       } else {
         setUser(null);
         setState({ isExtracting: false, result: null, error: null });
@@ -105,7 +107,11 @@ function AppContent() {
         setPageContext('');
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (userDocUnsubscribe) userDocUnsubscribe();
+    };
   }, []);
 
   // Timer Logic
@@ -124,8 +130,8 @@ function AppContent() {
     e.preventDefault();
     const { username, password } = loginForm;
     
-    const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username) && password === 'Guest1@';
-    const isAdminUser = username === 'Admin' && password === 'Admin1@';
+    const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username.toLowerCase()) && password === 'Guest1@';
+    const isAdminUser = username.toLowerCase() === 'admin' && password === 'Admin1@';
 
     if (isGuestUser || isAdminUser) {
       try {
@@ -136,18 +142,14 @@ function AppContent() {
         const role = isAdminUser ? 'admin' : 'guest';
         
         // Update user document with role
-        try {
-          await setDoc(doc(db, 'users', anonUser.uid), {
-            uid: anonUser.uid,
-            displayName,
-            role,
-            isAnonymous: true
-          });
-        } catch (dbErr) {
-          console.error('Error saving guest role to Firestore:', dbErr);
-        }
+        await setDoc(doc(db, 'users', anonUser.uid), {
+          uid: anonUser.uid,
+          displayName,
+          role,
+          isAnonymous: true
+        });
 
-        setUser({ ...anonUser, displayName, role } as any);
+        // We don't need to call setUser here, onAuthStateChanged will handle it
         setLoginError('');
         
         // Force Gemini 3.1 Pro for guests
@@ -156,20 +158,7 @@ function AppContent() {
         }
       } catch (err: any) {
         console.error('Anonymous login failed:', err);
-        const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
-        const mockUser: any = {
-          uid: `mock-${username}`,
-          displayName: `${displayName} (Offline Mode)`,
-          email: `${username}@example.com`,
-          isGuest: true,
-          role: isAdminUser ? 'admin' : 'guest'
-        };
-        setUser(mockUser);
-        setLoginError('');
-        
-        if (mockUser.role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
-        }
+        setLoginError('Login failed. Please try again.');
       }
     } else {
       setLoginError('Invalid credentials');
@@ -244,6 +233,7 @@ function AppContent() {
             const docData = {
               ...result,
               userId: user.uid,
+              userDisplayName: user.displayName || 'Admin',
               createdAt: Timestamp.now(),
               status: 'pending',
               autoSaved: true
@@ -319,6 +309,7 @@ function AppContent() {
       const docData = {
         ...state.result,
         userId: user.uid,
+        userDisplayName: user.displayName || 'Guest User',
         createdAt: Timestamp.now(),
         status: 'pending'
       };
@@ -356,6 +347,7 @@ function AppContent() {
         mAb.chains.forEach(chain => {
           const row = {
             mAbName: mAb.mAbName,
+            evidenceLocation: mAb.evidenceLocation || 'N/A',
             patentId: state.result?.patentId,
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
@@ -816,12 +808,13 @@ function AppContent() {
               <div className="bg-zinc-900 text-zinc-400 p-3 rounded-xl text-[10px] font-mono flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span>UID: {user.uid}</span>
-                  <span>Role: {(user as any).role}</span>
+                  <span>Role: {(user as any).role || 'Loading...'}</span>
                   <span>History Count: {history.length}</span>
+                  <span>Auth Ready: {user ? 'Yes' : 'No'}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>System Live</span>
+                  <span className={cn("w-2 h-2 rounded-full animate-pulse", (user as any).role === 'admin' ? "bg-emerald-500" : "bg-amber-500")}></span>
+                  <span>{(user as any).role === 'admin' ? 'Admin Active' : 'Verifying Role...'}</span>
                 </div>
               </div>
 
@@ -869,8 +862,9 @@ function AppContent() {
                     <tbody className="divide-y divide-zinc-100">
                       {history.slice(0, 10).map((item) => (
                         <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-zinc-600">
-                            {item.userId === user.uid ? 'You (Admin)' : 'Guest User'}
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-zinc-600">{(item as any).userDisplayName || 'Guest User'}</p>
+                            <p className="text-[10px] text-zinc-400 font-mono">{item.userId === user.uid ? 'You' : 'External'}</p>
                           </td>
                           <td className="px-6 py-4">
                             <p className="font-bold truncate max-w-[200px]">{item.patentTitle}</p>
@@ -1128,6 +1122,11 @@ function AppContent() {
                             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
                               {mAb.mAbName}
                             </h3>
+                            {mAb.evidenceLocation && (
+                              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-tighter">
+                                Found at: {mAb.evidenceLocation}
+                              </span>
+                            )}
                             {mAb.needsReview && (
                               <div className="flex items-center gap-1.5 px-3 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-full text-[10px] font-bold uppercase animate-pulse">
                                 <AlertCircle className="w-3 h-3" />

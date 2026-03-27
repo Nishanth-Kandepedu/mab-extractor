@@ -35,6 +35,7 @@ IMPORTANT EXTRACTION RULES:
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 11. Return the data in the specified JSON format.
+12. Evidence Location: For each antibody, specify the page number or table number where the sequences were found (e.g., "Page 42", "Table 12").
 
 Output Schema:
 {
@@ -43,6 +44,7 @@ Output Schema:
   "antibodies": [
     {
       "mAbName": "string",
+      "evidenceLocation": "string",
       "chains": [
         {
           "type": "Heavy" | "Light",
@@ -139,6 +141,7 @@ async function extractWithGemini(
               type: Type.OBJECT,
               properties: {
                 mAbName: { type: Type.STRING },
+                evidenceLocation: { type: Type.STRING, description: "Page or Table number where the mAb sequences were found" },
                 chains: {
                   type: Type.ARRAY,
                   items: {
@@ -168,7 +171,7 @@ async function extractWithGemini(
                 needsReview: { type: Type.BOOLEAN },
                 reviewReason: { type: Type.STRING },
               },
-              required: ["mAbName", "chains", "confidence", "summary"],
+              required: ["mAbName", "evidenceLocation", "chains", "confidence", "summary"],
             },
           },
         },
