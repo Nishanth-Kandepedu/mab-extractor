@@ -1,25 +1,18 @@
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse, ThinkingLevel } from "@google/genai";
 import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a bioinformatics expert specializing in antibody sequence extraction from patent documents. 
-Your task is to identify and extract ALL monoclonal antibody (mAb) sequences mentioned in the document or specific section.
-For each mAb, extract the Heavy and Light chain variable regions.
-For each chain, you must also identify the Complementarity-Determining Regions (CDRs): CDR1, CDR2, and CDR3.
+const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
+Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 Guidelines:
-1. ID-Mapping Strategy: Before extracting sequences, scan the document to create a master list of all unique mAb Names or IDs (e.g., "mAb 1", "Antibody 2419"). 
-2. Verification: For every mAb ID identified in the master list, you MUST find and extract both the Heavy and Light chain variable regions. If an ID is found but a chain is missing, re-scan the document specifically for that missing component.
-3. Filtering: Distinguish between mAb sequences and auxiliary sequences (linkers, tags, or unrelated proteins). Only include sequences that are explicitly part of a monoclonal antibody structure.
-4. Systematic Extraction: Ensure the final "antibodies" array length matches the total count of unique mAb IDs identified in your master list.
-5. Identify CDRs accurately based on standard numbering schemes (like IMGT, Kabat, or Chothia).
-6. Provide metadata: Patent ID and Patent Title.
-7. OCR Error Mitigation: Patent documents often contain OCR noise. Be extremely vigilant about character-level accuracy, especially for similar-looking amino acids:
-   - Actively check for L vs V confusions (especially at position 12 in VL chains).
-   - Actively check for T vs I, S vs A, and S vs R confusions.
-   - If a sequence is found in both a table and a sequence listing, use the sequence listing as the primary source of truth for character accuracy.
-8. Return the data in a structured JSON format.
+1. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+2. High-Fidelity Extraction: Extract sequences EXACTLY as they appear. Do not "correct" or "guess" amino acids unless there is a clear OCR typo that contradicts a high-fidelity sequence listing.
+3. VL Chain Verification: Light chain (VL) sequences are historically more prone to errors in this document type. Perform a second-pass verification specifically for all Light chain sequences to ensure character-level perfection.
+4. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+5. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+6. Return the data in the specified JSON format.
 
 Output Schema:
 {
@@ -55,7 +48,7 @@ export async function extractSequences(
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
   if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: The data is likely in a table. Ensure EVERY antibody row is captured.\n\n${input}` });
+    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}` });
   } else {
     parts.push({
       inlineData: {
@@ -63,7 +56,7 @@ export async function extractSequences(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Pay special attention to tables like 'TABLE 1' where multiple antibodies are listed. Capture every single one.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-fidelity verbatim extraction for all 34+ antibodies.` });
   }
 
   const response: GenerateContentResponse = await ai.models.generateContent({
@@ -72,6 +65,7 @@ export async function extractSequences(
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
