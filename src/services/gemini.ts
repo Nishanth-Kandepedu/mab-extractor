@@ -8,11 +8,12 @@ Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 Guidelines:
 1. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-2. High-Fidelity Extraction: Extract sequences EXACTLY as they appear. Do not "correct" or "guess" amino acids unless there is a clear OCR typo that contradicts a high-fidelity sequence listing.
-3. VL Chain Verification: Light chain (VL) sequences are historically more prone to errors in this document type. Perform a second-pass verification specifically for all Light chain sequences to ensure character-level perfection.
-4. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-5. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-6. Return the data in the specified JSON format.
+2. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-fidelity task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+3. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+4. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+5. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+6. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+7. Return the data in the specified JSON format.
 
 Output Schema:
 {
