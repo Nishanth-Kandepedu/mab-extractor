@@ -61,6 +61,8 @@ function AppContent() {
   const [pageContext, setPageContext] = useState('');
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
@@ -91,17 +93,20 @@ function AppContent() {
           if (docSnap.exists()) {
             const userData = docSnap.data();
             setUser(prev => prev ? { ...prev, ...userData } as any : null);
+            setUserRole(userData.role || 'guest');
           } else {
-            // If doc doesn't exist, create a default one
-            // But only if we're not in the middle of handleGuestLogin
-            // Actually, handleGuestLogin will create it. 
-            // We'll just wait for it to exist.
+            setUserRole('guest');
           }
+          setIsAuthReady(true);
         }, (error) => {
           console.error('Error listening to user doc:', error);
+          setUserRole('guest');
+          setIsAuthReady(true);
         });
       } else {
         setUser(null);
+        setUserRole(null);
+        setIsAuthReady(true);
         setState({ isExtracting: false, result: null, error: null });
         setInputText('');
         setPageContext('');
@@ -179,12 +184,12 @@ function AppContent() {
 
   // History Listener
   useEffect(() => {
-    if (!user) {
-      setHistory([]);
+    if (!user || !isAuthReady) {
+      if (!user && isAuthReady) setHistory([]);
       return;
     }
 
-    const q = (user as any)?.role === 'admin'
+    const q = userRole === 'admin'
       ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
@@ -199,7 +204,7 @@ function AppContent() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userRole, isAuthReady]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
@@ -309,7 +314,7 @@ function AppContent() {
       const docData = {
         ...state.result,
         userId: user.uid,
-        userDisplayName: user.displayName || 'Guest User',
+        userDisplayName: user.displayName || (userRole === 'admin' ? 'System Admin' : 'Guest User'),
         createdAt: Timestamp.now(),
         status: 'pending'
       };
@@ -319,7 +324,7 @@ function AppContent() {
       setIsSaving(false);
       handleFirestoreError(error, OperationType.CREATE, 'extractions');
     }
-  }, [state.result, user]);
+  }, [state.result, user, userRole]);
 
   const updateStatus = useCallback(async (id: string, status: 'validated' | 'rejected') => {
     try {
@@ -534,7 +539,13 @@ function AppContent() {
           )}
           {user ? (
             <div className="flex items-center gap-4">
-              {(user as any)?.role === 'admin' && (
+              {userRole === null && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-zinc-50 border border-zinc-200 rounded-lg text-[10px] text-zinc-500 font-medium">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Verifying Role...
+                </div>
+              )}
+              {userRole === 'admin' && (
                 <button 
                   onClick={() => {
                     setShowAdminDashboard(!showAdminDashboard);
@@ -560,7 +571,7 @@ function AppContent() {
                 )}
               >
                 <History className="w-4 h-4" />
-                { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
+                { userRole === 'admin' ? 'All History' : 'My History' } ({history.length})
               </button>
               <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
                 <div className="text-right hidden sm:block">
@@ -783,7 +794,7 @@ function AppContent() {
 
         {/* Right Column: Results */}
         <div className="lg:col-span-8 space-y-8">
-          {showAdminDashboard && (user as any)?.role === 'admin' ? (
+          {showAdminDashboard && userRole === 'admin' ? (
             <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -808,13 +819,13 @@ function AppContent() {
               <div className="bg-zinc-900 text-zinc-400 p-3 rounded-xl text-[10px] font-mono flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span>UID: {user.uid}</span>
-                  <span>Role: {(user as any).role || 'Loading...'}</span>
+                  <span>Role: {userRole || 'Loading...'}</span>
                   <span>History Count: {history.length}</span>
                   <span>Auth Ready: {user ? 'Yes' : 'No'}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={cn("w-2 h-2 rounded-full animate-pulse", (user as any).role === 'admin' ? "bg-emerald-500" : "bg-amber-500")}></span>
-                  <span>{(user as any).role === 'admin' ? 'Admin Active' : 'Verifying Role...'}</span>
+                  <span className={cn("w-2 h-2 rounded-full animate-pulse", userRole === 'admin' ? "bg-emerald-500" : "bg-amber-500")}></span>
+                  <span>{userRole === 'admin' ? 'Admin Active' : 'Verifying Role...'}</span>
                 </div>
               </div>
 
