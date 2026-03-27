@@ -3,7 +3,7 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
+export const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 Guidelines:
@@ -39,12 +39,49 @@ Output Schema:
   ]
 }`;
 
-export async function extractSequences(
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
+
+export interface LLMOptions {
+  provider: LLMProvider;
+  model?: string;
+}
+
+export async function extractWithLLM(
   input: string | { data: string; mimeType: string },
+  options: LLMOptions,
   pageContext?: string
 ): Promise<ExtractionResult> {
-  const model = "gemini-3.1-pro-preview";
-  
+  const { provider, model } = options;
+
+  if (provider === 'gemini') {
+    return extractWithGemini(input, model || 'gemini-3.1-pro-preview', pageContext);
+  }
+
+  // For OpenAI and Anthropic, we call our backend API
+  const response = await fetch('/api/extract', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider,
+      model,
+      input: typeof input === 'string' ? input : undefined, // Currently only supporting text for non-Gemini
+      systemInstruction: SYSTEM_INSTRUCTION,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to extract with ' + provider);
+  }
+
+  return await response.json();
+}
+
+async function extractWithGemini(
+  input: string | { data: string; mimeType: string },
+  modelName: string,
+  pageContext?: string
+): Promise<ExtractionResult> {
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
@@ -61,12 +98,12 @@ export async function extractSequences(
   }
 
   const response: GenerateContentResponse = await ai.models.generateContent({
-    model,
+    model: modelName,
     contents: { parts },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -120,7 +157,6 @@ export async function extractSequences(
   
   try {
     const result = JSON.parse(text) as ExtractionResult;
-    // Extract usage metadata if available
     if (response.usageMetadata) {
       result.usageMetadata = {
         promptTokenCount: response.usageMetadata.promptTokenCount || 0,
