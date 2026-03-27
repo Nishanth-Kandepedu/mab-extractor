@@ -63,6 +63,7 @@ function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -124,12 +125,12 @@ function AppContent() {
     const { username, password } = loginForm;
     
     const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username) && password === 'Guest1@';
-    const isAdminUser = username === 'Admin user' && password === 'Admin1@';
+    const isAdminUser = username === 'Admin' && password === 'Admin1@';
 
     if (isGuestUser || isAdminUser) {
       try {
         const { user: anonUser } = await signInAnonymously(auth);
-        const displayName = isAdminUser ? 'Admin User' : `Guest Curator (${username})`;
+        const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
         
         const role = isAdminUser ? 'admin' : 'guest';
@@ -155,7 +156,7 @@ function AppContent() {
         }
       } catch (err: any) {
         console.error('Anonymous login failed:', err);
-        const displayName = isAdminUser ? 'Admin User' : `Guest Curator (${username})`;
+        const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         const mockUser: any = {
           uid: `mock-${username}`,
           displayName: `${displayName} (Offline Mode)`,
@@ -194,10 +195,9 @@ function AppContent() {
       return;
     }
 
-    const q = query(
-      collection(db, 'extractions'),
-      orderBy('createdAt', 'desc')
-    );
+    const q = (user as any)?.role === 'admin'
+      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
@@ -448,7 +448,7 @@ function AppContent() {
                 value={loginForm.username}
                 onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                placeholder="guest, guest2, guest3, or Admin user"
+                placeholder="guest, guest2, guest3, or Admin"
               />
             </div>
             <div>
@@ -514,15 +514,33 @@ function AppContent() {
           )}
           {user ? (
             <div className="flex items-center gap-4">
+              {(user as any)?.role === 'admin' && (
+                <button 
+                  onClick={() => {
+                    setShowAdminDashboard(!showAdminDashboard);
+                    setShowHistory(false);
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                    showAdminDashboard ? "bg-amber-600 text-white" : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                  )}
+                >
+                  <Database className="w-4 h-4" />
+                  Admin Dashboard
+                </button>
+              )}
               <button 
-                onClick={() => setShowHistory(!showHistory)}
+                onClick={() => {
+                  setShowHistory(!showHistory);
+                  setShowAdminDashboard(false);
+                }}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
                   showHistory ? "bg-indigo-600 text-white" : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
                 )}
               >
                 <History className="w-4 h-4" />
-                History ({history.length})
+                { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
               </button>
               <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
                 <div className="text-right hidden sm:block">
@@ -745,7 +763,90 @@ function AppContent() {
 
         {/* Right Column: Results */}
         <div className="lg:col-span-8 space-y-8">
-          {showHistory ? (
+          {showAdminDashboard && (user as any)?.role === 'admin' ? (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Database className="w-6 h-6 text-amber-600" />
+                  Admin Intelligence Dashboard
+                </h2>
+                <button onClick={() => setShowAdminDashboard(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
+                  Back to Analyzer
+                </button>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Total Extractions', value: history.length, icon: History, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: 'Total Tokens', value: history.reduce((acc, curr) => acc + (curr.usageMetadata?.totalTokenCount || 0), 0).toLocaleString(), icon: Database, color: 'text-purple-600', bg: 'bg-purple-50' },
+                  { label: 'Avg Extraction Time', value: `${(history.reduce((acc, curr) => acc + (curr.extractionTime || 0), 0) / (history.length || 1) / 1000).toFixed(1)}s`, icon: Loader2, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: 'Est. Total Cost', value: `$${(history.reduce((acc, curr) => {
+                    const input = curr.usageMetadata?.promptTokenCount || 0;
+                    const output = curr.usageMetadata?.candidatesTokenCount || 0;
+                    // Rough estimate: $3.50/1M input, $10.50/1M output
+                    return acc + (input * 0.0000035) + (output * 0.0000105);
+                  }, 0)).toFixed(2)}`, icon: Save, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+                ].map((stat, i) => (
+                  <div key={i} className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4", stat.bg)}>
+                      <stat.icon className={cn("w-5 h-5", stat.color)} />
+                    </div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{stat.label}</p>
+                    <p className="text-2xl font-bold text-zinc-900 mt-1">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recent Activity Table */}
+              <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                  <h3 className="font-bold text-sm">System-wide Activity</h3>
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">Real-time Feed</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-100">
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">User</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Patent</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">mAbs</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Tokens</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Time</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {history.slice(0, 10).map((item) => (
+                        <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-zinc-600">
+                            {item.userId === user.uid ? 'You (Admin)' : 'Guest User'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-bold truncate max-w-[200px]">{item.patentTitle}</p>
+                            <p className="text-[10px] text-zinc-400 font-mono">{item.patentId}</p>
+                          </td>
+                          <td className="px-6 py-4 text-zinc-500 font-mono">{item.antibodies.length}</td>
+                          <td className="px-6 py-4 text-zinc-500 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4 text-zinc-500 font-mono">{((item.extractionTime || 0) / 1000).toFixed(1)}s</td>
+                          <td className="px-6 py-4">
+                            <span className={cn(
+                              "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                              item.status === 'validated' ? "bg-emerald-100 text-emerald-700" :
+                              item.status === 'rejected' ? "bg-red-100 text-red-700" :
+                              "bg-amber-100 text-amber-700"
+                            )}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : showHistory ? (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
