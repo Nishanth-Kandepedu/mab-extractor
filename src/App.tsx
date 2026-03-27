@@ -238,6 +238,20 @@ function AppContent() {
           result.extractionTime = Date.now() - startTime;
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
+
+          // Auto-save for admins
+          if ((user as any)?.role === 'admin') {
+            const docData = {
+              ...result,
+              userId: user.uid,
+              createdAt: Timestamp.now(),
+              status: 'pending',
+              autoSaved: true
+            };
+            addDoc(collection(db, 'extractions'), docData).catch(err => {
+              console.error('Auto-save failed:', err);
+            });
+          }
         } catch (err) {
           console.error('Extraction error:', err);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
@@ -263,6 +277,20 @@ function AppContent() {
       result.extractionTime = Date.now() - startTime;
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
+
+      // Auto-save for admins
+      if ((user as any)?.role === 'admin') {
+        const docData = {
+          ...result,
+          userId: user.uid,
+          createdAt: Timestamp.now(),
+          status: 'pending',
+          autoSaved: true
+        };
+        addDoc(collection(db, 'extractions'), docData).catch(err => {
+          console.error('Auto-save failed:', err);
+        });
+      }
     } catch (err) {
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
@@ -766,13 +794,35 @@ function AppContent() {
           {showAdminDashboard && (user as any)?.role === 'admin' ? (
             <div className="space-y-8">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Database className="w-6 h-6 text-amber-600" />
-                  Admin Intelligence Dashboard
-                </h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Database className="w-6 h-6 text-amber-600" />
+                    Admin Intelligence Dashboard
+                  </h2>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium hover:bg-zinc-200 transition-all"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Refresh Data
+                  </button>
+                </div>
                 <button onClick={() => setShowAdminDashboard(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
                   Back to Analyzer
                 </button>
+              </div>
+
+              {/* Debug Info for Admin */}
+              <div className="bg-zinc-900 text-zinc-400 p-3 rounded-xl text-[10px] font-mono flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span>UID: {user.uid}</span>
+                  <span>Role: {(user as any).role}</span>
+                  <span>History Count: {history.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>System Live</span>
+                </div>
               </div>
 
               {/* Stats Grid */}

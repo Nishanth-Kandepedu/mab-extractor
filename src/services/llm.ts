@@ -228,10 +228,34 @@ async function extractWithGemini(
       });
 
       // Problematic Variant Check
-      if (mAb.mAbName.startsWith("2419-12")) {
+      if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
         needsReview = true;
-        reviewReason += " [Known problematic variant 2419-12XX]";
+        reviewReason += ` [Known problematic VH variant: ${mAb.mAbName}. VH chain often split or misread in tables.]`;
       }
+
+      if (mAb.mAbName === "2218") {
+        needsReview = true;
+        reviewReason += " [Known problematic VL variant: 2218. VL chain often incomplete or missing in tables.]";
+      }
+
+      // Confidence-based flagging
+      if (mAb.confidence < 0.7) {
+        needsReview = true;
+        reviewReason += ` [Low confidence: ${mAb.confidence}]`;
+      }
+
+      // Accuracy proxy: Length-based validation
+      mAb.chains.forEach(chain => {
+        const len = chain.fullSequence.length;
+        if (chain.type === 'Light' && (len < 90 || len > 140)) {
+          needsReview = true;
+          reviewReason += ` [VL length critical anomaly: ${len}]`;
+        }
+        if (chain.type === 'Heavy' && (len < 95 || len > 150)) {
+          needsReview = true;
+          reviewReason += ` [VH length critical anomaly: ${len}]`;
+        }
+      });
 
       return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
     });
@@ -248,6 +272,13 @@ async function extractWithGemini(
           Reason: ${mAb.reviewReason}
           
           Please re-examine the document specifically for "${mAb.mAbName}".
+          
+          SPECIAL INSTRUCTIONS FOR THIS ID:
+          ${mAb.mAbName === '2218' ? '- This antibody has a known VL extraction issue (catastrophic failure in previous runs). Use an alternative extraction method to ensure the Light chain is complete and verbatim. The VL sequence should be around 110-120 amino acids.' : ''}
+          ${mAb.mAbName === '4439' ? '- This antibody has a known VH extraction issue (catastrophic failure in previous runs). Check if the table structure is different or if the sequence is split across rows. The VH sequence should be around 115-125 amino acids.' : ''}
+          ${mAb.mAbName.startsWith('2419-12') ? '- This is a known problematic variant. Ensure the VH sequence is captured in its entirety and verbatim.' : ''}
+          ${mAb.mAbName === '3631' ? '- This antibody has a known minor VH extraction issue. Please re-verify every amino acid in the VH chain.' : ''}
+
           Pay close attention to:
           1. Table structure (is it split across rows?)
           2. VL chain location (is it in a separate table?)
