@@ -67,7 +67,7 @@ export async function extractSequences(
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       maxOutputTokens: 65536,
       responseMimeType: "application/json",
       responseSchema: {
@@ -123,10 +123,11 @@ export async function extractSequences(
     throw new Error("No response from AI. The extraction may have timed out or exceeded token limits.");
   }
   
-  // Strip markdown if present
-  if (text.includes("```json")) {
+  // Clean the text - in JSON mode it should be pure JSON, but we handle edge cases
+  text = text.trim();
+  if (text.startsWith("```json")) {
     text = text.split("```json")[1].split("```")[0].trim();
-  } else if (text.includes("```")) {
+  } else if (text.startsWith("```")) {
     text = text.split("```")[1].split("```")[0].trim();
   }
   
@@ -145,6 +146,6 @@ export async function extractSequences(
     console.error("Failed to parse AI response. Text length:", text.length);
     console.error("Text preview (last 100 chars):", text.slice(-100));
     console.error("Usage Metadata:", response.usageMetadata);
-    throw new Error(`Failed to parse extraction result. The output may have been truncated (Length: ${text.length}).`);
+    throw new Error(`Failed to parse extraction result. The output was likely too large for a single pass (Length: ${text.length}). Please try extracting a smaller range of pages.`);
   }
 }

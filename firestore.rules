@@ -10,10 +10,11 @@ service cloud.firestore {
     // Document ID: {userId}
     // Fields:
     //   - uid: string (required)
-    //   - email: string (required, email format)
+    //   - email: string (optional, email format)
     //   - displayName: string (optional)
     //   - photoURL: string (optional)
-    //   - role: string (required, enum: ['admin', 'user'])
+    //   - role: string (required, enum: ['admin', 'user', 'guest'])
+    //   - isAnonymous: bool (optional)
     //
     // Collection: extractions
     // Document ID: {extractionId}
@@ -66,10 +67,10 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'isAnonymous']) &&
              data.uid is string && data.uid.size() > 0 &&
              (data.email == null || (data.email is string && isValidEmail(data.email))) &&
-             data.role in ['admin', 'user'];
+             data.role in ['admin', 'user', 'guest'];
     }
 
     function isValidExtraction(data) {
@@ -89,7 +90,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    ((isOwner(userId) && request.resource.data.role == 'user') || isAdmin());
+                    ((isOwner(userId) && (request.resource.data.role == 'user' || request.resource.data.role == 'guest')) || isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
                     ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
       allow delete: if isAdmin();

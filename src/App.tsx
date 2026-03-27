@@ -70,16 +70,22 @@ function AppContent() {
   const [loginError, setLoginError] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [timer, setTimer] = useState(0);
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (u) {
+        // If it's a real Firebase user, we might need to fetch their role from Firestore
+        // For anonymous users, we handle role in handleGuestLogin
         setUser(u);
-        // Create user document if it doesn't exist
         try {
           const userRef = doc(db, 'users', u.uid);
           const userSnap = await getDocFromServer(userRef);
-          if (!userSnap.exists()) {
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            setUser(prev => prev ? { ...prev, ...userData } as any : null);
+          } else {
             await setDoc(userRef, {
               uid: u.uid,
               email: u.email || '',
@@ -89,8 +95,7 @@ function AppContent() {
             });
           }
         } catch (error) {
-          // Ignore errors during user doc creation (might be permissions)
-          console.error('Error creating user doc:', error);
+          console.error('Error fetching/creating user doc:', error);
         }
       } else {
         setUser(null);
@@ -102,29 +107,67 @@ function AppContent() {
     return () => unsubscribe();
   }, []);
 
+  // Timer Logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (state.isExtracting) {
+      setTimer(0);
+      interval = setInterval(() => {
+        setTimer(t => t + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [state.isExtracting]);
+
   const handleGuestLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginForm.username === 'guest' && loginForm.password === 'Guest1@') {
+    const { username, password } = loginForm;
+    
+    const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username) && password === 'Guest1@';
+    const isAdminUser = username === 'Admin user' && password === 'Admin1@';
+
+    if (isGuestUser || isAdminUser) {
       try {
         const { user: anonUser } = await signInAnonymously(auth);
-        await updateProfile(anonUser, { displayName: 'Guest Curator' });
-        setUser(anonUser);
+        const displayName = isAdminUser ? 'Admin User' : `Guest Curator (${username})`;
+        await updateProfile(anonUser, { displayName });
+        
+        const role = isAdminUser ? 'admin' : 'guest';
+        
+        // Update user document with role
+        try {
+          await setDoc(doc(db, 'users', anonUser.uid), {
+            uid: anonUser.uid,
+            displayName,
+            role,
+            isAnonymous: true
+          });
+        } catch (dbErr) {
+          console.error('Error saving guest role to Firestore:', dbErr);
+        }
+
+        setUser({ ...anonUser, displayName, role } as any);
         setLoginError('');
+        
+        // Force Gemini 3.1 Pro for guests
+        if (role === 'guest') {
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+        }
       } catch (err: any) {
         console.error('Anonymous login failed:', err);
-        // Fallback to mock guest if Firebase Anonymous Auth is not enabled or restricted
-        if (err.code === 'auth/operation-not-allowed' || err.code === 'auth/admin-restricted-operation') {
-          const mockGuest: any = {
-            uid: 'guest-user',
-            displayName: 'Guest Curator (Offline Mode)',
-            email: 'guest@example.com',
-            isGuest: true
-          };
-          setUser(mockGuest);
-          setLoginError('');
-          // We'll show a warning in the UI later
-        } else {
-          setLoginError(`Guest login failed: ${err.message || 'Unknown error'}`);
+        const displayName = isAdminUser ? 'Admin User' : `Guest Curator (${username})`;
+        const mockUser: any = {
+          uid: `mock-${username}`,
+          displayName: `${displayName} (Offline Mode)`,
+          email: `${username}@example.com`,
+          isGuest: true,
+          role: isAdminUser ? 'admin' : 'guest'
+        };
+        setUser(mockUser);
+        setLoginError('');
+        
+        if (mockUser.role === 'guest') {
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
         }
       }
     } else {
@@ -405,7 +448,7 @@ function AppContent() {
                 value={loginForm.username}
                 onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                placeholder="guest"
+                placeholder="guest, guest2, guest3, or Admin user"
               />
             </div>
             <div>
@@ -423,7 +466,7 @@ function AppContent() {
               type="submit"
               className="w-full bg-zinc-900 text-white py-3 rounded-xl font-medium text-sm hover:bg-zinc-800 transition-colors"
             >
-              Sign In as Guest
+              Sign In
             </button>
           </form>
 
@@ -515,37 +558,50 @@ function AppContent() {
         <div className="lg:col-span-4 space-y-6">
           {/* Model Selection */}
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <RotateCcw className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-zinc-800">Model Benchmarking</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-semibold text-zinc-800">Model Benchmarking</h2>
+              </div>
+              {(user as any)?.role === 'guest' && (
+                <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-tight">
+                  Restricted Access
+                </span>
+              )}
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-2">
-                {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
-                    className={cn(
-                      "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                      llmOptions.provider === p 
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                        : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
+                {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => {
+                  const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
+                  return (
+                    <button
+                      key={p}
+                      disabled={isDisabled}
+                      onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                      className={cn(
+                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
+                        llmOptions.provider === p 
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
+                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
+                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
               </div>
               <select
                 value={llmOptions.model}
                 onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                disabled={(user as any)?.role === 'guest'}
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
+                    <option value="gemini-3-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 3 Flash (Fast)</option>
+                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                   </>
                 )}
                 {llmOptions.provider === 'openai' && (
@@ -773,6 +829,11 @@ function AppContent() {
                     </div>
                   </div>
                   <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
+                  <div className="mt-2 mb-6">
+                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-xl font-mono font-bold border border-indigo-100">
+                      {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
