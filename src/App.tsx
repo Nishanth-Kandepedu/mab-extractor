@@ -15,6 +15,23 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const AntibodyIcon = ({ className }: { className?: string }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2.5" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M12 12L4 4" />
+    <path d="M12 12L20 4" />
+    <path d="M12 12V22" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" />
+  </svg>
+);
+
 // Error Boundary Component
 class ErrorBoundary extends React.Component<any, any> {
   state = { hasError: false, error: null };
@@ -62,6 +79,7 @@ function AppContent() {
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -71,6 +89,8 @@ function AppContent() {
   const [exportSuccess, setExportSuccess] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [requestAccessForm, setRequestAccessForm] = useState({ name: '', email: '', message: '' });
+  const [requestStatus, setRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [timer, setTimer] = useState(0);
@@ -90,9 +110,9 @@ function AppContent() {
             const profile: UserProfile = {
               uid: u.uid,
               email: u.email,
-              displayName: u.displayName || userData.displayName || 'User',
+              displayName: u.displayName || userData.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
               photoURL: u.photoURL,
-              role: userData.role || 'user',
+              role: userData.role || (u.isAnonymous ? 'guest' : 'user'),
               isAnonymous: u.isAnonymous,
               createdAt: userData.createdAt
             };
@@ -103,21 +123,24 @@ function AppContent() {
               setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           } else {
-            // New user (likely Google sign-in)
+            // New user or anonymous session without doc
+            const role = u.isAnonymous ? 'guest' : 'user';
             const newUser: UserProfile = {
               uid: u.uid,
               email: u.email || '',
-              displayName: u.displayName || 'User',
+              displayName: u.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
               photoURL: u.photoURL || null,
-              role: 'user',
+              role: role,
               isAnonymous: u.isAnonymous,
               createdAt: Timestamp.now()
             };
+            
+            // Only create doc if not anonymous or if we want to persist guest info
+            // For now, let's create it to ensure isAdmin() works for anonymous admins
             await setDoc(userRef, newUser);
             setUser(newUser);
             
-            // Default guests to Pro
-            if (newUser.role === 'guest') {
+            if (role === 'guest') {
               setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           }
@@ -127,9 +150,9 @@ function AppContent() {
           setUser({
             uid: u.uid,
             email: u.email,
-            displayName: u.displayName || 'User',
+            displayName: u.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
             photoURL: u.photoURL,
-            role: 'user',
+            role: u.isAnonymous ? 'guest' : 'user',
             isAnonymous: u.isAnonymous
           });
         }
@@ -142,6 +165,7 @@ function AppContent() {
         setShowHistory(false);
       }
       setIsAuthLoading(false);
+      setIsAuthReady(true);
     });
     return () => unsubscribe();
   }, []);
@@ -239,6 +263,26 @@ function AppContent() {
     }
   };
 
+  const handleRequestAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestAccessForm.name || !requestAccessForm.email || !requestAccessForm.message) return;
+    
+    setRequestStatus('sending');
+    try {
+      await addDoc(collection(db, 'access_requests'), {
+        ...requestAccessForm,
+        timestamp: Timestamp.now(),
+        status: 'new'
+      });
+      setRequestStatus('success');
+      setRequestAccessForm({ name: '', email: '', message: '' });
+      setTimeout(() => setRequestStatus('idle'), 5000);
+    } catch (err) {
+      console.error('Request access failed:', err);
+      setRequestStatus('error');
+    }
+  };
+
   const handleLogout = async () => {
     try {
       if (user) {
@@ -287,7 +331,7 @@ function AppContent() {
       })) as ExtractionResult[];
       setHistory(docs);
     }, (error) => {
-      console.error('History listener error:', error);
+      handleFirestoreError(error, OperationType.GET, 'extractions');
     });
 
     let unsubActivity = () => {};
@@ -300,7 +344,7 @@ function AppContent() {
         })) as ActivityLog[];
         setActivityLogs(logs);
       }, (error) => {
-        console.error('Activity listener error:', error);
+        handleFirestoreError(error, OperationType.GET, 'activity_logs');
       });
     }
 
@@ -357,10 +401,10 @@ function AppContent() {
               patentId: result.patentId,
               patentTitle: result.patentTitle,
               timestamp: Timestamp.now()
-            }).catch(err => console.error('Failed to log activity:', err));
+            }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
 
             addDoc(collection(db, 'extractions'), docData).catch(err => {
-              console.error('Save failed:', err);
+              handleFirestoreError(err, OperationType.WRITE, 'extractions');
             });
           }
         } catch (err) {
@@ -597,61 +641,150 @@ function AppContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA] p-8">
-        <div className="max-w-md w-full bg-white rounded-2xl p-8 shadow-xl border border-zinc-200">
-          <div className="flex items-center gap-3 mb-8 justify-center">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-              <Database className="text-white w-8 h-8" />
+      <div className="min-h-screen flex flex-col md:flex-row bg-white">
+        {/* Left Pane: Messaging & Atmosphere */}
+        <div className="hidden md:flex md:w-[65%] bg-[#050505] relative overflow-hidden flex-col p-12 justify-between">
+          {/* Background Glows */}
+          <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/20 rounded-full blur-[120px]" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[100px]" />
+          
+          {/* Logo */}
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-lg">
+              <AntibodyIcon className="text-zinc-900 w-5 h-5" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">mAb Extractor</h1>
+            <span className="text-white font-bold tracking-tight text-lg">AbMiner</span>
           </div>
 
-          <form onSubmit={handleGuestLogin} className="space-y-4 mb-8">
-            <div>
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Username</label>
-              <input
-                type="text"
-                value={loginForm.username}
-                onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                placeholder="guest, guest2, guest3, or Admin"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Password</label>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                placeholder="••••••••"
-              />
-            </div>
-            {loginError && <p className="text-xs text-red-600">{loginError}</p>}
-            <button
-              type="submit"
-              className="w-full bg-zinc-900 text-white py-3 rounded-xl font-medium text-sm hover:bg-zinc-800 transition-colors"
-            >
-              Sign In
-            </button>
-          </form>
+          {/* Main Content */}
+          <div className="relative z-10 max-w-2xl">
+            <h1 className="text-6xl lg:text-7xl font-bold text-white leading-[0.9] mb-8 tracking-tighter">
+              AbMiner<span className="text-indigo-500">.</span>
+            </h1>
+            
+            <p className="text-zinc-300 text-xl font-light leading-relaxed mb-12 max-w-xl">
+              High-quality antibody sequence mining from complex patent landscapes. 
+              Automated, validated, and analysis-ready.
+            </p>
 
-          <div className="relative mb-8">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-zinc-200"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-zinc-400 font-mono">OR</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+              {[
+                { label: 'Sequence Integrity', desc: 'Validated recovery of VH/VL chains from fragmented patent data.' },
+                { label: 'Structural Mapping', desc: 'Precise identification of CDR regions using standardized numbering.' },
+                { label: 'Full Provenance', desc: 'Direct traceability to source tables, SEQ IDs, and verbatim text.' },
+                { label: 'Discovery Acceleration', desc: 'Accelerated identification of therapeutic candidates within complex patent landscapes.' }
+              ].map((feature, i) => (
+                <div key={i} className="group">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1 h-3 bg-indigo-500/30 group-hover:bg-indigo-500 transition-colors" />
+                    <span className="text-white font-bold text-xs uppercase tracking-widest">{feature.label}</span>
+                  </div>
+                  <p className="text-zinc-500 text-xs leading-relaxed">{feature.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          <button 
-            onClick={signIn}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-zinc-200 text-zinc-700 py-3 rounded-xl font-medium text-sm hover:bg-zinc-50 transition-all"
-          >
-            <LogIn className="w-4 h-4" />
-            Continue with Google
-          </button>
+          {/* Footer Info */}
+          <div className="relative z-10 flex items-center gap-6 text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+            <span>abminer.bio</span>
+          </div>
+        </div>
+
+        {/* Right Pane: Login Form */}
+        <div className="flex-1 flex flex-col p-8 md:p-16 lg:p-24 justify-center bg-white overflow-y-auto">
+          <div className="max-w-sm w-full mx-auto">
+            <div className="mb-12">
+              <h2 className="text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Sign In</h2>
+              <p className="text-sm text-zinc-500">Access your research environment.</p>
+            </div>
+
+            <form onSubmit={handleGuestLogin} className="space-y-6 mb-12">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Username</label>
+                <input
+                  type="text"
+                  value={loginForm.username}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="Username"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Password</label>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+              {loginError && <p className="text-xs text-red-600 font-medium">{loginError}</p>}
+              <button
+                type="submit"
+                className="w-full bg-[#050505] text-white py-4 rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
+              >
+                Sign In
+              </button>
+            </form>
+
+            <div className="relative mb-12">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-zinc-100"></div>
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
+                <span className="bg-white px-4 text-zinc-300 font-bold">Waitlist</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleRequestAccess} className="space-y-6">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 mb-1">Join the Waitlist</h3>
+                <p className="text-xs text-zinc-500">Apply for early access to the AbMiner research platform.</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <input 
+                  type="text" 
+                  placeholder="Full Name" 
+                  required
+                  value={requestAccessForm.name}
+                  onChange={(e) => setRequestAccessForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                />
+                <input 
+                  type="email" 
+                  placeholder="Work Email" 
+                  required
+                  value={requestAccessForm.email}
+                  onChange={(e) => setRequestAccessForm(prev => ({ ...prev, email: e.target.value }))}
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                />
+              </div>
+              <textarea 
+                placeholder="Briefly describe your research focus..." 
+                required
+                value={requestAccessForm.message}
+                onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: e.target.value }))}
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none"
+              />
+              <button 
+                type="submit"
+                disabled={requestStatus === 'sending'}
+                className={cn(
+                  "w-full py-3 rounded-xl font-bold text-xs transition-all border",
+                  requestStatus === 'success' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                  requestStatus === 'error' ? "bg-red-50 text-red-700 border-red-100" :
+                  "bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100"
+                )}
+              >
+                {requestStatus === 'sending' ? 'Sending Request...' : 
+                 requestStatus === 'success' ? 'Request Submitted' :
+                 requestStatus === 'error' ? 'Submission Failed' : 'Join Waitlist'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     );
@@ -660,20 +793,20 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-8 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-[#050505] border-b border-white/10 px-8 py-4 flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-            <Database className="text-white w-6 h-6" />
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
+            <AntibodyIcon className="text-zinc-900 w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">mAb Extractor</h1>
-            <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Patent Intelligence Tool v1.0</p>
+            <h1 className="text-lg font-bold tracking-tight text-white">AbMiner</h1>
+            <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">High-Quality Antibody Intelligence</p>
           </div>
         </div>
         
         <div className="flex items-center gap-4">
           {(user as any)?.isGuest && !auth.currentUser && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-700 font-medium">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-500 font-medium">
               <AlertCircle className="w-3 h-3" />
               Guest Offline Mode (Saving Disabled)
             </div>
@@ -688,7 +821,7 @@ function AppContent() {
                   }}
                   className={cn(
                     "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    showAdminDashboard ? "bg-amber-600 text-white" : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                    showAdminDashboard ? "bg-amber-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
                   )}
                 >
                   <Database className="w-4 h-4" />
@@ -702,25 +835,25 @@ function AppContent() {
                 }}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                  showHistory ? "bg-indigo-600 text-white" : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                  showHistory ? "bg-indigo-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
                 )}
               >
                 <History className="w-4 h-4" />
                 { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
               </button>
-              <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
+              <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                 <div className="text-right hidden sm:block">
-                  <p className="text-xs font-bold text-zinc-900">{user.displayName}</p>
-                  <p className="text-[10px] text-zinc-500">{user.email}</p>
+                  <p className="text-xs font-bold text-white">{user.displayName}</p>
+                  <p className="text-[10px] text-zinc-400">{user.email}</p>
                 </div>
                 {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-zinc-200" />
+                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-white/10" />
                 ) : (
-                  <div className="w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center border border-zinc-200">
-                    <UserIcon className="w-4 h-4 text-zinc-400" />
+                  <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                    <UserIcon className="w-4 h-4 text-zinc-500" />
                   </div>
                 )}
-                <button onClick={handleLogout} className="p-2 text-zinc-400 hover:text-red-600 transition-colors">
+                <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-500 transition-colors">
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
@@ -728,7 +861,7 @@ function AppContent() {
           ) : (
             <button 
               onClick={signIn}
-              className="flex items-center gap-2 bg-zinc-900 text-white px-6 py-2 rounded-xl font-medium text-sm hover:bg-zinc-800 transition-all"
+              className="flex items-center gap-2 bg-white text-zinc-900 px-6 py-2 rounded-xl font-medium text-sm hover:bg-zinc-100 transition-all"
             >
               <LogIn className="w-4 h-4" />
               Sign In to Save
@@ -760,10 +893,10 @@ function AppContent() {
               <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-zinc-600">High-Precision Neural Engine (Flash)</span>
+                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Flash)</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
-                  Using optimized sequence extraction parameters for maximum verbatim accuracy and CDR identification.
+                  Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
                 </p>
               </div>
             ) : (
@@ -1353,6 +1486,15 @@ function AppContent() {
                             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
                               {mAb.mAbName}
                             </h3>
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                mAb.confidence >= 95 ? "bg-emerald-500" :
+                                mAb.confidence >= 80 ? "bg-amber-500" :
+                                "bg-red-500"
+                              )} />
+                              <span className="text-[10px] font-bold text-zinc-500">{mAb.confidence}% Confidence</span>
+                            </div>
                             {mAb.needsReview && (
                               <div className="flex items-center gap-1.5 px-3 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-full text-[10px] font-bold uppercase animate-pulse">
                                 <AlertCircle className="w-3 h-3" />
@@ -1390,9 +1532,14 @@ function AppContent() {
                         </div>
 
                         {mAb.evidenceStatement && (
-                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700">
-                            <span className="font-bold text-indigo-900 mr-2 uppercase tracking-wider text-[10px]">Evidence:</span>
-                            {mAb.evidenceStatement}
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700 flex items-start gap-3">
+                            <div className="w-5 h-5 bg-indigo-100 rounded flex items-center justify-center shrink-0">
+                              <Search className="w-3 h-3 text-indigo-600" />
+                            </div>
+                            <div>
+                              <span className="font-bold text-indigo-900 mr-2 uppercase tracking-wider text-[10px]">Evidence Source:</span>
+                              {mAb.evidenceStatement}
+                            </div>
                           </div>
                         )}
                       </div>

@@ -1,7 +1,7 @@
 # Technical Documentation & Architecture Guide
 
 ## 1. Project Overview
-The **Antibody Sequence Extractor** is a high-precision, AI-powered platform designed to automate the extraction of monoclonal antibody (mAb) sequences from complex patent documents (PDFs or raw text). It achieves near-perfect accuracy (99.24% amino acid fidelity) by combining advanced LLM reasoning with a robust validation and "healing" architecture.
+The **AbMiner** is a high-quality, AI-powered platform designed to automate the mining of antibody sequences from complex patent documents (PDFs or raw text). It achieves near-perfect amino acid accuracy by combining advanced LLM reasoning with a robust validation and "healing" architecture.
 
 ---
 
@@ -21,7 +21,7 @@ The **Antibody Sequence Extractor** is a high-precision, AI-powered platform des
 *   **Backend**: Node.js, Express.js (running on Google Cloud Run).
 *   **Database**: Firebase Firestore (NoSQL).
 *   **Authentication**: Firebase Auth (Google OAuth).
-*   **AI Engine**: Google Gemini 3.1 Pro / Flash.
+*   **AI Engine**: Google Gemini 3.1 Pro / Flash (Optimized for High-Quality Mining).
 *   **Utilities**: `pdfjs-dist` (PDF parsing), `papaparse` (CSV generation).
 
 ---
@@ -74,7 +74,7 @@ A specialized UI component that renders amino acid sequences with highlighted CD
 
 ## 6. Performance & Optimization
 *   **Client-Side Processing**: By parsing PDFs and calling the AI from the browser, the application minimizes server costs and maximizes privacy.
-*   **Token Management**: The app uses `Gemini 3.1 Flash` for smaller documents to save costs, while defaulting to `Gemini 3.1 Pro` for complex, high-fidelity extractions.
+*   **Token Management**: The app uses `Gemini 3.1 Flash` for smaller documents to save costs, while defaulting to `Gemini 3.1 Pro` for complex, high-quality mining tasks.
 *   **Real-time Sync**: Uses Firestore `onSnapshot` to ensure the Admin Dashboard is always up-to-date without page refreshes.
 
 ---

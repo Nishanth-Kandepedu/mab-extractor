@@ -61,6 +61,68 @@
     "/extractions/{extractionId}": {
       "schema": "Extraction",
       "description": "Stored extraction results"
+    },
+    "/activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Audit logs of user actions"
+    },
+    "/access_requests/{requestId}": {
+      "schema": "AccessRequest",
+      "description": "Beta access requests from new users"
+    }
+  },
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about the user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user", "guest"] }
+      },
+      "required": ["uid", "role"]
+    },
+    "Extraction": {
+      "title": "mAb Extraction Result",
+      "description": "A single extraction result from a patent",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "patentId": { "type": "string" },
+        "patentTitle": { "type": "string" },
+        "antibodies": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "validated", "rejected"] }
+      },
+      "required": ["userId", "patentId", "antibodies", "createdAt", "status"]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "A log of a user action",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userDisplayName": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "action", "timestamp"]
+    },
+    "AccessRequest": {
+      "title": "Access Request",
+      "description": "A beta access request",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["new", "processed"] }
+      },
+      "required": ["name", "email", "message", "timestamp", "status"]
     }
   }
 }

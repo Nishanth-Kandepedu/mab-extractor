@@ -3,7 +3,7 @@ import { ExtractionResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-export const SYSTEM_INSTRUCTION = `You are a high-precision bioinformatics expert specializing in antibody sequence extraction from patent documents. 
+export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 IMPORTANT EXTRACTION RULES:
@@ -29,7 +29,7 @@ IMPORTANT EXTRACTION RULES:
    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
 
 5. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-6. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-fidelity task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+6. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
 7. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
 8. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
@@ -228,7 +228,7 @@ async function extractWithGemini(
         mimeType: input.mimeType,
       },
     });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-fidelity verbatim extraction for all 34+ antibodies.` });
+    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining for all 34+ antibodies.` });
   }
 
   try {

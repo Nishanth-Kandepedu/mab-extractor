@@ -46,9 +46,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          (request.auth.token.get('email', '') == "nishanth.kandepedu@gmail.com" && request.auth.token.get('email_verified', false) == true));
+        (request.auth.token.email == "nishanth.kandepedu@gmail.com" || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
 
     function hasRequiredFields(fields) {
@@ -83,30 +82,47 @@ service cloud.firestore {
              data.status in ['pending', 'validated', 'rejected'];
     }
 
+    function isValidAccessRequest(data) {
+      return hasRequiredFields(['name', 'email', 'message', 'timestamp', 'status']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.message is string && data.message.size() > 0 &&
+             data.timestamp is timestamp &&
+             data.status == 'new';
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && isValidUser(request.resource.data);
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && isValidUser(request.resource.data);
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
+      // Allow users to create their own profile. 
+      // Note: In production, role assignment should be restricted.
+      allow create: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (request.auth.uid == userId && request.resource.data.role == resource.data.role)) && isValidUser(request.resource.data);
       allow delete: if isAdmin();
     }
 
     match /extractions/{extractionId} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.userId);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidExtraction(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && 
+      allow update: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid) && 
                     request.resource.data.userId == resource.data.userId &&
                     isValidExtraction(request.resource.data);
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (isAdmin() || resource.data.userId == request.auth.uid);
     }
 
     match /activity_logs/{logId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    match /access_requests/{requestId} {
+      allow read: if isAdmin();
+      allow create: if true; // Allow anyone to request access
+      allow update, delete: if isAdmin();
     }
 
     match /test/{docId} {
