@@ -45,7 +45,6 @@ export interface Antibody {
   properties?: AntibodyProperties;
   needsReview?: boolean;
   reviewReason?: string;
-  evidenceLocation?: string; // e.g., "Page 42", "Table 12"
 }
 
 export interface UsageMetadata {
