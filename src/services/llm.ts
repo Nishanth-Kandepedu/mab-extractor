@@ -34,7 +34,8 @@ IMPORTANT EXTRACTION RULES:
 8. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-11. Return the data in the specified JSON format. Do not include any other text or explanation. Return ONLY the JSON object.
+11. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+12. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 Output Schema:
 {
@@ -70,40 +71,109 @@ export interface LLMOptions {
 }
 
 /**
- * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
+ * Robustly extracts and repairs JSON from a string that might be truncated or malformed.
  */
 function extractJson(text: string): any {
-  // Try direct parsing first
+  if (!text || typeof text !== 'string') {
+    throw new Error("Empty or invalid response received from AI");
+  }
+
+  const cleanText = text.trim();
+
+  // 1. Try direct parsing
   try {
-    return JSON.parse(text);
+    return JSON.parse(cleanText);
   } catch (e) {
-    // Try to find JSON block in markdown
-    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
+    // Continue to more aggressive methods
+  }
+
+  // 2. Try to find JSON block in markdown
+  const markdownMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/) || cleanText.match(/```\s*([\s\S]*?)\s*```/);
+  if (markdownMatch && markdownMatch[1]) {
+    const inner = markdownMatch[1].trim();
+    try {
+      return JSON.parse(inner);
+    } catch (e) {
+      // Try to repair the inner content
       try {
-        return JSON.parse(match[1].trim());
-      } catch (e2) {
-        // Continue to fallback
-      }
+        return repairAndParseJson(inner);
+      } catch (e2) {}
+    }
+  }
+
+  // 3. Find the first '{' and try to parse/repair from there
+  const firstBrace = cleanText.indexOf('{');
+  if (firstBrace !== -1) {
+    const lastBrace = cleanText.lastIndexOf('}');
+    let candidate = "";
+    
+    if (lastBrace !== -1 && lastBrace > firstBrace) {
+      candidate = cleanText.substring(firstBrace, lastBrace + 1);
+    } else {
+      // No closing brace found, take everything from the first brace
+      candidate = cleanText.substring(firstBrace);
     }
 
-    // Fallback: find the first '{' and last '}'
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      const candidate = text.substring(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
+      // Final attempt: Repair and parse
       try {
-        return JSON.parse(candidate);
-      } catch (e3) {
-        // Continue to error
+        return repairAndParseJson(candidate);
+      } catch (e2) {
+        console.error("JSON Repair failed. Original text snippet:", cleanText.substring(0, 200));
+        throw new Error("Could not parse or repair JSON response. The response may be severely truncated or malformed.");
       }
     }
-    
-    console.error("Failed to parse AI response:", text);
-    console.error("Text length:", text.length);
-    console.error("First 100 chars:", text.substring(0, 100));
-    console.error("Last 100 chars:", text.substring(text.length - 100));
-    throw new Error("Could not find valid JSON in response");
+  }
+
+  throw new Error("No JSON structure found in the AI response.");
+}
+
+/**
+ * Attempts to repair truncated JSON by closing open brackets and braces.
+ */
+function repairAndParseJson(jsonStr: string): any {
+  let repaired = jsonStr.trim();
+  
+  // Remove trailing commas which are common in truncated JSON
+  repaired = repaired.replace(/,\s*$/, "");
+  repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+
+  const stack: string[] = [];
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (char === '{' || char === '[') {
+      stack.push(char);
+    } else if (char === '}' || char === ']') {
+      const last = stack.pop();
+      if ((char === '}' && last !== '{') || (char === ']' && last !== '[')) {
+        // Mismatched - this is a simple repairer, so we might just fail here
+        // but let's try to keep going
+      }
+    }
+  }
+
+  // Close remaining open structures in reverse order
+  while (stack.length > 0) {
+    const last = stack.pop();
+    if (last === '{') repaired += '}';
+    else if (last === '[') repaired += ']';
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch (e) {
+    // If it still fails, try one more aggressive trim to the last valid closing character
+    const lastClosing = Math.max(repaired.lastIndexOf('}'), repaired.lastIndexOf(']'));
+    if (lastClosing !== -1) {
+      try {
+        return JSON.parse(repaired.substring(0, lastClosing + 1));
+      } catch (e2) {
+        throw e; // Give up
+      }
+    }
+    throw e;
   }
 }
 
@@ -218,15 +288,31 @@ async function extractWithGemini(
       },
     });
 
+    const candidate = response.candidates?.[0];
+    const finishReason = candidate?.finishReason;
     const text = response.text;
-    if (!text) throw new Error("No response from AI");
+    
+    if (!text) {
+      if (finishReason === 'SAFETY') {
+        throw new Error("Gemini API blocked the response due to safety filters. This sometimes happens with complex sequence data.");
+      }
+      throw new Error(`Empty response from Gemini API (Finish Reason: ${finishReason || 'UNKNOWN'})`);
+    }
     
     // Check if the response is actually an error JSON (sometimes happens if the SDK doesn't throw)
     if (text.includes('"error"') && text.includes('"code": 429')) {
       throw new Error("Gemini API Quota Exceeded (429). Please try again in a few minutes or switch to a different model (e.g., Gemini 3 Flash).");
     }
 
-    let result = extractJson(text) as ExtractionResult;
+    let result: ExtractionResult;
+    try {
+      result = extractJson(text) as ExtractionResult;
+    } catch (parseError: any) {
+      if (finishReason === 'MAX_TOKENS') {
+        throw new Error("The extraction was too large and was truncated by the AI. Please try extracting a smaller section of the document or fewer antibodies at once.");
+      }
+      throw parseError;
+    }
     
     // Post-processing and Validation
     result.antibodies = result.antibodies.map(mAb => {
