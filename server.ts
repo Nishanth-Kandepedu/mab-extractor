@@ -11,40 +11,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
- */
-function extractJson(text: string): any {
-  // Try direct parsing first
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    // Try to find JSON block in markdown
-    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
-      try {
-        return JSON.parse(match[1].trim());
-      } catch (e2) {
-        // Continue to fallback
-      }
-    }
-
-    // Fallback: find the first '{' and last '}'
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      const candidate = text.substring(firstBrace, lastBrace + 1);
-      try {
-        return JSON.parse(candidate);
-      } catch (e3) {
-        // Continue to error
-      }
-    }
-    
-    throw new Error("Could not find valid JSON in response");
-  }
-}
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -90,8 +56,7 @@ async function startServer() {
           response_format: { type: 'json_object' },
           temperature: 0,
         });
-        const content = response.choices[0].message.content || '{}';
-        return res.json(extractJson(content));
+        return res.json(JSON.parse(response.choices[0].message.content || '{}'));
       }
 
       if (provider === 'anthropic') {
@@ -115,7 +80,7 @@ async function startServer() {
         });
         // Anthropic doesn't have a native JSON mode like OpenAI, so we parse the text
         const content = response.content[0].type === 'text' ? response.content[0].text : '';
-        return res.json(extractJson(content || '{}'));
+        return res.json(JSON.parse(content || '{}'));
       }
 
       res.status(400).json({ error: 'Invalid provider' });
