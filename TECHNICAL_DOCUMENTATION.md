@@ -1,7 +1,7 @@
 # Technical Documentation & Architecture Guide
 
 ## 1. Project Overview
-The **AbMiner** is a high-quality, AI-powered platform designed to automate the mining of antibody sequences from complex patent documents (PDFs or raw text). It achieves near-perfect amino acid accuracy by combining advanced LLM reasoning with a robust validation and "healing" architecture.
+**AbMiner: The Patent Antibody Mining Engine** is a high-quality, AI-powered platform designed to automate the mining of antibody sequences from complex patent documents (PDFs or raw text). It achieves near-perfect amino acid accuracy by combining advanced LLM reasoning with a robust validation and "healing" architecture.
 
 ---
 
