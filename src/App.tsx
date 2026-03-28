@@ -80,6 +80,10 @@ function AppContent() {
         // If it's a real Firebase user, we might need to fetch their role from Firestore
         // For anonymous users, we handle role in handleGuestLogin
         setUser(u);
+        
+        // Skip automatic creation for anonymous users as handleGuestLogin handles it
+        if (u.isAnonymous) return;
+
         try {
           const userRef = doc(db, 'users', u.uid);
           const userSnap = await getDocFromServer(userRef);
@@ -149,9 +153,9 @@ function AppContent() {
         setUser({ ...anonUser, displayName, role } as any);
         setLoginError('');
         
-        // Force Gemini 3.1 Pro for guests
+        // Force Gemini 3 Flash for guests to avoid quota issues
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
         }
       } catch (err: any) {
         console.error('Anonymous login failed:', err);
@@ -167,7 +171,7 @@ function AppContent() {
         setLoginError('');
         
         if (mockUser.role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
         }
       }
     } else {
