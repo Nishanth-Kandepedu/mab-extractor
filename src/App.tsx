@@ -899,7 +899,7 @@ function AppContent() {
               <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Flash)</span>
+                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
                   Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
