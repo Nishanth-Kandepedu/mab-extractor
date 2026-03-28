@@ -96,7 +96,7 @@ function AppContent() {
             });
           }
         } catch (error) {
-          console.error('Error fetching/creating user doc:', error);
+          handleFirestoreError(error, OperationType.GET, `users/${u.uid}`);
         }
       } else {
         setUser(null);
@@ -135,7 +135,6 @@ function AppContent() {
         
         const role = isAdminUser ? 'admin' : 'guest';
         
-        // Update user document with role
         try {
           await setDoc(doc(db, 'users', anonUser.uid), {
             uid: anonUser.uid,
@@ -144,7 +143,7 @@ function AppContent() {
             isAnonymous: true
           });
         } catch (dbErr) {
-          console.error('Error saving guest role to Firestore:', dbErr);
+          handleFirestoreError(dbErr, OperationType.WRITE, `users/${anonUser.uid}`);
         }
 
         setUser({ ...anonUser, displayName, role } as any);
@@ -607,65 +606,80 @@ function AppContent() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-indigo-600" />
-                <h2 className="font-semibold text-zinc-800">Model Benchmarking</h2>
+                <h2 className="font-semibold text-zinc-800">
+                  {(user as any)?.role === 'guest' ? 'AI Analysis Engine' : 'Model Benchmarking'}
+                </h2>
               </div>
               {(user as any)?.role === 'guest' && (
-                <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-tight">
-                  Restricted Access
+                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight">
+                  Active
                 </span>
               )}
             </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-2">
-                {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => {
-                  const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
-                  return (
-                    <button
-                      key={p}
-                      disabled={isDisabled}
-                      onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
-                      className={cn(
-                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                        llmOptions.provider === p 
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
-                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  );
-                })}
+            
+            {(user as any)?.role === 'guest' ? (
+              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-medium text-zinc-600">High-Precision Neural Engine (v3.1)</span>
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
+                  Using optimized sequence extraction parameters for maximum verbatim accuracy and CDR identification.
+                </p>
               </div>
-              <select
-                value={llmOptions.model}
-                onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
-                disabled={(user as any)?.role === 'guest'}
-              >
-                {llmOptions.provider === 'gemini' && (
-                  <>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                    <option value="gemini-3-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
-                  </>
-                )}
-                {llmOptions.provider === 'openai' && (
-                  <>
-                    <option value="gpt-4o">GPT-4o (Omni)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="o1-preview">o1 Preview (Reasoning)</option>
-                  </>
-                )}
-                {llmOptions.provider === 'anthropic' && (
-                  <>
-                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
-                  </>
-                )}
-              </select>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => {
+                    const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
+                    return (
+                      <button
+                        key={p}
+                        disabled={isDisabled}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                        className={cn(
+                          "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
+                          llmOptions.provider === p 
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
+                          isDisabled && "opacity-40 grayscale cursor-not-allowed"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+                <select
+                  value={llmOptions.model}
+                  onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                  disabled={(user as any)?.role === 'guest'}
+                >
+                  {llmOptions.provider === 'gemini' && (
+                    <>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
+                      <option value="gemini-3-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 3 Flash (Fast)</option>
+                      <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                    </>
+                  )}
+                  {llmOptions.provider === 'openai' && (
+                    <>
+                      <option value="gpt-4o">GPT-4o (Omni)</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                      <option value="o1-preview">o1 Preview (Reasoning)</option>
+                    </>
+                  )}
+                  {llmOptions.provider === 'anthropic' && (
+                    <>
+                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                      <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm sticky top-24">

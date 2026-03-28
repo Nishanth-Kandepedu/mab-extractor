@@ -34,7 +34,7 @@ IMPORTANT EXTRACTION RULES:
 8. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-11. Return the data in the specified JSON format.
+11. Return the data in the specified JSON format. Do not include any other text or explanation. Return ONLY the JSON object.
 
 Output Schema:
 {
@@ -67,6 +67,44 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
+}
+
+/**
+ * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
+ */
+function extractJson(text: string): any {
+  // Try direct parsing first
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Try to find JSON block in markdown
+    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1].trim());
+      } catch (e2) {
+        // Continue to fallback
+      }
+    }
+
+    // Fallback: find the first '{' and last '}'
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = text.substring(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch (e3) {
+        // Continue to error
+      }
+    }
+    
+    console.error("Failed to parse AI response:", text);
+    console.error("Text length:", text.length);
+    console.error("First 100 chars:", text.substring(0, 100));
+    console.error("Last 100 chars:", text.substring(text.length - 100));
+    throw new Error("Could not find valid JSON in response");
+  }
 }
 
 export async function extractWithLLM(
@@ -120,68 +158,74 @@ async function extractWithGemini(
     parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-fidelity verbatim extraction for all 34+ antibodies.` });
   }
 
-  const response: GenerateContentResponse = await ai.models.generateContent({
-    model: modelName,
-    contents: { parts },
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: 0,
-      thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          patentId: { type: Type.STRING },
-          patentTitle: { type: Type.STRING },
-          antibodies: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                mAbName: { type: Type.STRING },
-                chains: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                      fullSequence: { type: Type.STRING },
-                      cdrs: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: Type.STRING },
-                            start: { type: Type.INTEGER },
-                            end: { type: Type.INTEGER },
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: modelName,
+      contents: { parts },
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0,
+        thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
+        maxOutputTokens: 65536,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            patentId: { type: Type.STRING },
+            patentTitle: { type: Type.STRING },
+            antibodies: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  mAbName: { type: Type.STRING },
+                  chains: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                        fullSequence: { type: Type.STRING },
+                        cdrs: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                              sequence: { type: Type.STRING },
+                              start: { type: Type.INTEGER },
+                              end: { type: Type.INTEGER },
+                            },
+                            required: ["type", "sequence", "start", "end"],
                           },
-                          required: ["type", "sequence", "start", "end"],
                         },
                       },
+                      required: ["type", "fullSequence", "cdrs"],
                     },
-                    required: ["type", "fullSequence", "cdrs"],
                   },
+                  confidence: { type: Type.NUMBER },
+                  summary: { type: Type.STRING },
+                  needsReview: { type: Type.BOOLEAN },
+                  reviewReason: { type: Type.STRING },
                 },
-                confidence: { type: Type.NUMBER },
-                summary: { type: Type.STRING },
-                needsReview: { type: Type.BOOLEAN },
-                reviewReason: { type: Type.STRING },
+                required: ["mAbName", "chains", "confidence", "summary"],
               },
-              required: ["mAbName", "chains", "confidence", "summary"],
             },
           },
+          required: ["patentId", "patentTitle", "antibodies"],
         },
-        required: ["patentId", "patentTitle", "antibodies"],
       },
-    },
-  });
+    });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from AI");
-  
-  try {
-    let result = JSON.parse(text) as ExtractionResult;
+    const text = response.text;
+    if (!text) throw new Error("No response from AI");
+    
+    // Check if the response is actually an error JSON (sometimes happens if the SDK doesn't throw)
+    if (text.includes('"error"') && text.includes('"code": 429')) {
+      throw new Error("Gemini API Quota Exceeded (429). Please try again in a few minutes or switch to a different model (e.g., Gemini 3 Flash).");
+    }
+
+    let result = extractJson(text) as ExtractionResult;
     
     // Post-processing and Validation
     result.antibodies = result.antibodies.map(mAb => {
@@ -287,37 +331,42 @@ async function extractWithGemini(
           Return ONLY the data for this specific antibody in the same JSON format.
         `;
 
-        const targetedResponse = await ai.models.generateContent({
-          model: modelName,
-          contents: [
-            typeof input === 'string' 
-              ? { text: input } 
-              : { inlineData: { data: input.data, mimeType: input.mimeType } },
-            { text: targetedPrompt }
-          ],
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            responseMimeType: "application/json",
-          }
-        });
-
-        if (targetedResponse.text) {
-          try {
-            const targetedResult = JSON.parse(targetedResponse.text) as ExtractionResult;
-            const updatedMab = targetedResult.antibodies.find(m => m.mAbName === mAb.mAbName);
-            if (updatedMab) {
-              // Replace the old one with the new one if it looks better
-              const index = result.antibodies.findIndex(m => m.mAbName === mAb.mAbName);
-              if (index !== -1) {
-                result.antibodies[index] = {
-                  ...updatedMab,
-                  reviewReason: `[RE-EXTRACTED] ${updatedMab.reviewReason || ""}`.trim()
-                };
-              }
+        try {
+          const targetedResponse = await ai.models.generateContent({
+            model: modelName,
+            contents: [
+              typeof input === 'string' 
+                ? { text: input } 
+                : { inlineData: { data: input.data, mimeType: input.mimeType } },
+              { text: targetedPrompt }
+            ],
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              responseMimeType: "application/json",
             }
-          } catch (e) {
-            console.error("Failed to parse targeted re-extraction", e);
+          });
+
+          if (targetedResponse.text) {
+            try {
+              const targetedResult = extractJson(targetedResponse.text) as ExtractionResult;
+              const updatedMab = targetedResult.antibodies.find(m => m.mAbName === mAb.mAbName);
+              if (updatedMab) {
+                // Replace the old one with the new one if it looks better
+                const index = result.antibodies.findIndex(m => m.mAbName === mAb.mAbName);
+                if (index !== -1) {
+                  result.antibodies[index] = {
+                    ...updatedMab,
+                    reviewReason: `[RE-EXTRACTED] ${updatedMab.reviewReason || ""}`.trim()
+                  };
+                }
+              }
+            } catch (e) {
+              console.error("Failed to parse targeted re-extraction", e);
+            }
           }
+        } catch (targetedError: any) {
+          console.error("Targeted re-extraction failed (likely quota):", targetedError.message);
+          // Don't throw here, just continue with what we have
         }
       }
     }
@@ -330,8 +379,11 @@ async function extractWithGemini(
       };
     }
     return result;
-  } catch (e) {
-    console.error("Failed to parse AI response:", text);
-    throw new Error("Failed to parse extraction result");
+  } catch (e: any) {
+    if (e.message?.includes('429') || e.message?.includes('quota')) {
+      throw new Error("Gemini API Quota Exceeded (429). The current model (Gemini 3.1 Pro) has strict limits on the free tier. Please wait a few minutes or switch to 'Gemini 3 Flash' in the settings for higher throughput.");
+    }
+    console.error("Failed to parse AI response:", e);
+    throw new Error(`Failed to parse extraction result: ${e.message}`);
   }
 }
