@@ -92,6 +92,7 @@ function AppContent() {
   const [requestAccessForm, setRequestAccessForm] = useState({ name: '', email: '', message: '' });
   const [requestStatus, setRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const intendedRoleRef = React.useRef<string | null>(null);
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
@@ -124,11 +125,11 @@ function AppContent() {
             }
           } else {
             // New user or anonymous session without doc
-            const role = u.isAnonymous ? 'guest' : 'user';
+            const role = intendedRoleRef.current || (u.isAnonymous ? 'guest' : 'user');
             const newUser: UserProfile = {
               uid: u.uid,
               email: u.email || '',
-              displayName: u.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
+              displayName: u.displayName || (role === 'admin' ? 'Admin' : u.isAnonymous ? 'Guest Researcher' : 'User'),
               photoURL: u.photoURL || null,
               role: role,
               isAnonymous: u.isAnonymous,
@@ -147,16 +148,18 @@ function AppContent() {
         } catch (error) {
           console.error('Error fetching user data:', error);
           // Fallback to basic user info if Firestore fails
+          const role = intendedRoleRef.current || (u.isAnonymous ? 'guest' : 'user');
           setUser({
             uid: u.uid,
             email: u.email,
-            displayName: u.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
+            displayName: u.displayName || (role === 'admin' ? 'Admin' : u.isAnonymous ? 'Guest Researcher' : 'User'),
             photoURL: u.photoURL,
-            role: u.isAnonymous ? 'guest' : 'user',
+            role: role,
             isAnonymous: u.isAnonymous
           });
         }
       } else {
+        intendedRoleRef.current = null;
         setUser(null);
         setState({ isExtracting: false, result: null, error: null });
         setInputText('');
@@ -216,14 +219,15 @@ function AppContent() {
 
     if (isGuestUser || isAdminUser) {
       try {
+        const role = isAdminUser ? 'admin' : 'guest';
+        intendedRoleRef.current = role;
+        
         // Set persistence to session for guest/admin logins to avoid "sticky" logins on public terminals
         await setPersistence(auth, browserSessionPersistence);
         
         const { user: anonUser } = await signInAnonymously(auth);
         const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
-        
-        const role = isAdminUser ? 'admin' : 'guest';
         
         const userRef = doc(db, 'users', anonUser.uid);
         const newUser: UserProfile = {
@@ -256,6 +260,7 @@ function AppContent() {
         }
       } catch (err: any) {
         console.error('Login failed:', err);
+        intendedRoleRef.current = null;
         setLoginError(err.message || 'Login failed. Please check your internet connection.');
       }
     } else {
@@ -800,7 +805,7 @@ function AppContent() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-white">AbMiner</h1>
-            <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">High-Quality Antibody Intelligence</p>
+            <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">The Patent Antibody Mining Engine</p>
           </div>
         </div>
         
