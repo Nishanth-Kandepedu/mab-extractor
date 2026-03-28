@@ -55,6 +55,27 @@ export interface UsageMetadata {
   cost?: number;
 }
 
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  role: 'admin' | 'guest' | 'user';
+  isAnonymous?: boolean;
+  createdAt?: any;
+}
+
+export interface ActivityLog {
+  id?: string;
+  userId: string;
+  userDisplayName: string;
+  action: 'extraction_started' | 'extraction_completed' | 'download_csv' | 'login' | 'logout';
+  patentId?: string;
+  patentTitle?: string;
+  timestamp: any;
+  metadata?: any;
+}
+
 export interface ExtractionResult {
   id?: string;
   userId?: string;

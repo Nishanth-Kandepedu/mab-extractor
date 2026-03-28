@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AppState, ExtractionResult, Antibody } from './types';
+import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
-import { onAuthStateChanged, User, signInAnonymously, updateProfile } from 'firebase/auth';
-import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer } from 'firebase/firestore';
+import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
+import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
 import Papa from 'papaparse';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -60,8 +60,10 @@ function AppContent() {
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
   const [copied, setCopied] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [history, setHistory] = useState<ExtractionResult[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,45 +74,90 @@ function AppContent() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [timer, setTimer] = useState(0);
+  const [sessionLogged, setSessionLogged] = useState(false);
 
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setIsAuthLoading(true);
       if (u) {
-        // If it's a real Firebase user, we might need to fetch their role from Firestore
-        // For anonymous users, we handle role in handleGuestLogin
-        setUser(u);
-        
-        // Skip automatic creation for anonymous users as handleGuestLogin handles it
-        if (u.isAnonymous) return;
-
         try {
           const userRef = doc(db, 'users', u.uid);
           const userSnap = await getDocFromServer(userRef);
+          
           if (userSnap.exists()) {
             const userData = userSnap.data();
-            setUser(prev => prev ? { ...prev, ...userData } as any : null);
+            setUser({
+              uid: u.uid,
+              email: u.email,
+              displayName: u.displayName || userData.displayName || 'User',
+              photoURL: u.photoURL,
+              role: userData.role || 'user',
+              isAnonymous: u.isAnonymous,
+              createdAt: userData.createdAt
+            });
           } else {
-            await setDoc(userRef, {
+            // New user (likely Google sign-in)
+            const newUser: UserProfile = {
               uid: u.uid,
               email: u.email || '',
-              displayName: u.displayName || 'Guest Curator',
+              displayName: u.displayName || 'User',
               photoURL: u.photoURL || null,
-              role: 'user'
-            });
+              role: 'user',
+              isAnonymous: u.isAnonymous,
+              createdAt: Timestamp.now()
+            };
+            await setDoc(userRef, newUser);
+            setUser(newUser);
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${u.uid}`);
+          console.error('Error fetching user data:', error);
+          // Fallback to basic user info if Firestore fails
+          setUser({
+            uid: u.uid,
+            email: u.email,
+            displayName: u.displayName || 'User',
+            photoURL: u.photoURL,
+            role: 'user',
+            isAnonymous: u.isAnonymous
+          });
         }
       } else {
         setUser(null);
         setState({ isExtracting: false, result: null, error: null });
         setInputText('');
         setPageContext('');
+        setShowAdminDashboard(false);
+        setShowHistory(false);
       }
+      setIsAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  // Session Login Logger
+  useEffect(() => {
+    if (user && !sessionLogged) {
+      const logLogin = async () => {
+        try {
+          await addDoc(collection(db, 'activity_logs'), {
+            userId: user.uid,
+            userDisplayName: user.displayName || 'User',
+            action: 'login',
+            timestamp: Timestamp.now(),
+            metadata: { role: user.role, method: user.isAnonymous ? 'anonymous' : 'google' }
+          });
+          setSessionLogged(true);
+        } catch (err) {
+          console.error('Failed to log login:', err);
+        }
+      };
+      logLogin();
+    }
+    if (!user) {
+      setSessionLogged(false);
+    }
+  }, [user, sessionLogged]);
 
   // Timer Logic
   useEffect(() => {
@@ -126,6 +173,7 @@ function AppContent() {
 
   const handleGuestLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
     const { username, password } = loginForm;
     
     const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username) && password === 'Guest1@';
@@ -133,24 +181,38 @@ function AppContent() {
 
     if (isGuestUser || isAdminUser) {
       try {
+        // Set persistence to session for guest/admin logins to avoid "sticky" logins on public terminals
+        await setPersistence(auth, browserSessionPersistence);
+        
         const { user: anonUser } = await signInAnonymously(auth);
         const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
         
         const role = isAdminUser ? 'admin' : 'guest';
         
-        try {
-          await setDoc(doc(db, 'users', anonUser.uid), {
-            uid: anonUser.uid,
-            displayName,
-            role,
-            isAnonymous: true
-          });
-        } catch (dbErr) {
-          handleFirestoreError(dbErr, OperationType.WRITE, `users/${anonUser.uid}`);
-        }
+        const userRef = doc(db, 'users', anonUser.uid);
+        const newUser: UserProfile = {
+          uid: anonUser.uid,
+          email: null,
+          displayName,
+          photoURL: null,
+          role,
+          isAnonymous: true,
+          createdAt: Timestamp.now()
+        };
+        
+        await setDoc(userRef, newUser);
+        
+        // Log login activity
+        await addDoc(collection(db, 'activity_logs'), {
+          userId: anonUser.uid,
+          userDisplayName: displayName,
+          action: 'login',
+          timestamp: Timestamp.now(),
+          metadata: { role }
+        });
 
-        setUser({ ...anonUser, displayName, role } as any);
+        setUser(newUser);
         setLoginError('');
         
         // Force Gemini 3 Flash for guests to avoid quota issues
@@ -158,61 +220,83 @@ function AppContent() {
           setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
         }
       } catch (err: any) {
-        console.error('Anonymous login failed:', err);
-        const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
-        const mockUser: any = {
-          uid: `mock-${username}`,
-          displayName: `${displayName} (Offline Mode)`,
-          email: `${username}@example.com`,
-          isGuest: true,
-          role: isAdminUser ? 'admin' : 'guest'
-        };
-        setUser(mockUser);
-        setLoginError('');
-        
-        if (mockUser.role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-        }
+        console.error('Login failed:', err);
+        setLoginError(err.message || 'Login failed. Please check your internet connection.');
       }
     } else {
       setLoginError('Invalid credentials');
     }
   };
 
-  const handleLogout = () => {
-    setState({ isExtracting: false, result: null, error: null });
-    setInputText('');
-    setPageContext('');
-    if ((user as any)?.isGuest) {
+  const handleLogout = async () => {
+    try {
+      if (user) {
+        // Log logout activity
+        await addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          userDisplayName: user.displayName || 'User',
+          action: 'logout',
+          timestamp: Timestamp.now()
+        }).catch(err => console.error('Failed to log logout:', err));
+      }
+      
+      if (auth.currentUser) {
+        await logout();
+      }
+    } catch (err) {
+      console.error('Logout failed:', err);
+    } finally {
       setUser(null);
-    } else {
-      logout();
-      setUser(null);
+      setState({ isExtracting: false, result: null, error: null });
+      setInputText('');
+      setPageContext('');
+      setShowAdminDashboard(false);
+      setShowHistory(false);
+      setHistory([]);
+      setActivityLogs([]);
     }
   };
 
-  // History Listener
+  // History & Activity Listener
   useEffect(() => {
     if (!user) {
       setHistory([]);
+      setActivityLogs([]);
       return;
     }
 
-    const q = (user as any)?.role === 'admin'
-      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'))
+    const historyQuery = user.role === 'admin'
+      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as ExtractionResult[];
       setHistory(docs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'extractions');
+      console.error('History listener error:', error);
     });
 
-    return () => unsubscribe();
+    let unsubActivity = () => {};
+    if (user.role === 'admin') {
+      const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
+      unsubActivity = onSnapshot(activityQuery, (snapshot) => {
+        const logs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as ActivityLog[];
+        setActivityLogs(logs);
+      }, (error) => {
+        console.error('Activity listener error:', error);
+      });
+    }
+
+    return () => {
+      unsubHistory();
+      unsubActivity();
+    };
   }, [user]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
@@ -242,17 +326,30 @@ function AppContent() {
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
 
-          // Auto-save for admins
-          if ((user as any)?.role === 'admin') {
+          // Save extraction for all users (including guests)
+          if (user) {
             const docData = {
               ...result,
               userId: user.uid,
+              userDisplayName: user.displayName || 'Anonymous Guest',
+              userRole: user.role || 'guest',
               createdAt: Timestamp.now(),
-              status: 'pending',
+              status: user.role === 'admin' ? 'validated' : 'pending',
               autoSaved: true
             };
+            
+            // Log activity
+            addDoc(collection(db, 'activity_logs'), {
+              userId: user.uid,
+              userDisplayName: user.displayName || 'Anonymous Guest',
+              action: 'extraction_completed',
+              patentId: result.patentId,
+              patentTitle: result.patentTitle,
+              timestamp: Timestamp.now()
+            }).catch(err => console.error('Failed to log activity:', err));
+
             addDoc(collection(db, 'extractions'), docData).catch(err => {
-              console.error('Auto-save failed:', err);
+              console.error('Save failed:', err);
             });
           }
         } catch (err) {
@@ -281,17 +378,30 @@ function AppContent() {
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
 
-      // Auto-save for admins
-      if ((user as any)?.role === 'admin') {
+      // Save extraction for all users (including guests)
+      if (user) {
         const docData = {
           ...result,
           userId: user.uid,
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          userRole: user.role || 'guest',
           createdAt: Timestamp.now(),
-          status: 'pending',
+          status: user.role === 'admin' ? 'validated' : 'pending',
           autoSaved: true
         };
+        
+        // Log activity
+        addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          action: 'extraction_completed',
+          patentId: result.patentId,
+          patentTitle: result.patentTitle,
+          timestamp: Timestamp.now()
+        }).catch(err => console.error('Failed to log activity:', err));
+
         addDoc(collection(db, 'extractions'), docData).catch(err => {
-          console.error('Auto-save failed:', err);
+          console.error('Save failed:', err);
         });
       }
     } catch (err) {
@@ -354,6 +464,18 @@ function AppContent() {
     
     setIsExporting(true);
     try {
+      // Log download activity
+      if (user) {
+        addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          action: 'download_csv',
+          patentId: state.result.patentId,
+          patentTitle: state.result.patentTitle,
+          timestamp: Timestamp.now()
+        }).catch(err => console.error('Failed to log activity:', err));
+      }
+
       const rows: any[] = [];
       state.result.antibodies.forEach(mAb => {
         mAb.chains.forEach(chain => {
@@ -909,6 +1031,58 @@ function AppContent() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Activity Logs Table */}
+              <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                  <h3 className="font-bold text-sm">User Activity Logs</h3>
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">Audit Trail</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-100">
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">User</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Action</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Target</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {activityLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-zinc-600">
+                            {log.userDisplayName}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={cn(
+                              "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                              log.action === 'download_csv' ? "bg-blue-100 text-blue-700" :
+                              log.action === 'extraction_completed' ? "bg-emerald-100 text-emerald-700" :
+                              log.action === 'login' ? "bg-purple-100 text-purple-700" :
+                              log.action === 'logout' ? "bg-zinc-100 text-zinc-700" :
+                              "bg-zinc-100 text-zinc-700"
+                            )}>
+                              {log.action.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-zinc-500">
+                            {log.patentId || log.metadata?.role || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-zinc-400 font-mono text-xs">
+                            {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                      {activityLogs.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-10 text-center text-zinc-400 italic">No activity logs recorded yet.</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
