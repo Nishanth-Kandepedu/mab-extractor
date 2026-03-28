@@ -382,10 +382,14 @@ async function extractWithGemini(
     result.modelUsed = modelName;
     return result;
   } catch (e: any) {
-    if (e.message?.includes('429') || e.message?.includes('quota')) {
+    const errorMsg = e.message || String(e);
+    if (errorMsg.includes('429') || errorMsg.includes('quota')) {
       throw new Error("Gemini API Quota Exceeded (429). The current model (Gemini 3.1 Pro) has strict limits on the free tier. Please wait a few minutes or switch to 'Gemini 3 Flash' in the settings for higher throughput.");
     }
+    if (errorMsg.includes('503') || errorMsg.includes('high demand') || errorMsg.includes('UNAVAILABLE')) {
+      throw new Error("Gemini API Service Unavailable (503). This model is currently experiencing high demand. Please try again in a few minutes or switch to 'Gemini 3 Flash' which typically has better availability.");
+    }
     console.error("Failed to parse AI response:", e);
-    throw new Error(`Failed to parse extraction result: ${e.message}`);
+    throw new Error(`Failed to parse extraction result: ${errorMsg}`);
   }
 }

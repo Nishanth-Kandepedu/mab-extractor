@@ -87,7 +87,7 @@ function AppContent() {
           
           if (userSnap.exists()) {
             const userData = userSnap.data();
-            setUser({
+            const profile: UserProfile = {
               uid: u.uid,
               email: u.email,
               displayName: u.displayName || userData.displayName || 'User',
@@ -95,7 +95,13 @@ function AppContent() {
               role: userData.role || 'user',
               isAnonymous: u.isAnonymous,
               createdAt: userData.createdAt
-            });
+            };
+            setUser(profile);
+            
+            // Default guests to Pro
+            if (profile.role === 'guest') {
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+            }
           } else {
             // New user (likely Google sign-in)
             const newUser: UserProfile = {
@@ -109,6 +115,11 @@ function AppContent() {
             };
             await setDoc(userRef, newUser);
             setUser(newUser);
+            
+            // Default guests to Pro
+            if (newUser.role === 'guest') {
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+            }
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -215,9 +226,9 @@ function AppContent() {
         setUser(newUser);
         setLoginError('');
         
-        // Force Gemini 3 Flash for guests to avoid quota issues
+        // Default to Pro for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -785,7 +796,7 @@ function AppContent() {
                   {llmOptions.provider === 'gemini' && (
                     <>
                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                      <option value="gemini-3-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 3 Flash (Fast)</option>
+                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
                       <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                     </>
                   )}
@@ -923,6 +934,18 @@ function AppContent() {
                 <div>
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
+                  {(state.error.includes('503') || state.error.includes('429')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                    <button
+                      onClick={() => {
+                        setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                        setState(prev => ({ ...prev, error: null }));
+                      }}
+                      className="mt-3 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Switch to Gemini 3 Flash & Retry
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}
