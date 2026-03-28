@@ -214,8 +214,9 @@ function AppContent() {
     setLoginError('');
     const { username, password } = loginForm;
     
-    const isGuestUser = ['guest', 'guest2', 'guest3'].includes(username) && password === 'Guest1@';
-    const isAdminUser = username === 'Admin' && password === 'Admin1@';
+    const lowerUsername = username.toLowerCase();
+    const isGuestUser = ['guest1', 'guest2', 'guest3'].includes(lowerUsername) && password === 'Guest1@';
+    const isAdminUser = lowerUsername === 'admin' && password === 'Admin1@';
 
     if (isGuestUser || isAdminUser) {
       try {
