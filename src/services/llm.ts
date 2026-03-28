@@ -143,6 +143,7 @@ async function extractWithGemini(
   modelName: string,
   pageContext?: string
 ): Promise<ExtractionResult> {
+  console.log(`[LLM Service] Starting extraction with model: ${modelName}`);
   let parts: any[] = [];
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   
@@ -378,6 +379,7 @@ async function extractWithGemini(
         totalTokenCount: response.usageMetadata.totalTokenCount || 0,
       };
     }
+    result.modelUsed = modelName;
     return result;
   } catch (e: any) {
     if (e.message?.includes('429') || e.message?.includes('quota')) {

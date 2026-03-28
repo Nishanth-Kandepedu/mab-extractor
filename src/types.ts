@@ -66,6 +66,7 @@ export interface ExtractionResult {
   usageMetadata?: UsageMetadata;
   extractionTime?: number; // in milliseconds
   tier?: ExtractionTier;
+  modelUsed?: string;
 }
 
 export interface AppState {

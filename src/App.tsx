@@ -268,7 +268,7 @@ function AppContent() {
       console.error('File reading error:', err);
       setState({ isExtracting: false, result: null, error: 'Failed to initiate file reading' });
     }
-  }, [pageContext]);
+  }, [pageContext, llmOptions, user]);
 
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -297,7 +297,7 @@ function AppContent() {
     } catch (err) {
       setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
     }
-  }, [inputText, pageContext]);
+  }, [inputText, pageContext, llmOptions, user]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
@@ -625,7 +625,7 @@ function AppContent() {
               <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-zinc-600">High-Precision Neural Engine (v3.1)</span>
+                  <span className="text-xs font-medium text-zinc-600">High-Precision Neural Engine (Flash)</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
                   Using optimized sequence extraction parameters for maximum verbatim accuracy and CDR identification.
@@ -1047,6 +1047,14 @@ function AppContent() {
                           {state.result.usageMetadata && (
                             <span className="text-[10px] text-zinc-500 font-mono">
                               Tokens: {state.result.usageMetadata.totalTokenCount}
+                            </span>
+                          )}
+                          {state.result.modelUsed && (
+                            <span className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                              state.result.modelUsed.includes('flash') ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                            )}>
+                              {state.result.modelUsed.replace('gemini-', '').replace('-preview', '')}
                             </span>
                           )}
                         </div>
