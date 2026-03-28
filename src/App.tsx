@@ -500,6 +500,8 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
+            evidenceLocation: mAb.evidenceLocation || '',
+            evidenceStatement: mAb.evidenceStatement || '',
             summary: mAb.summary
           };
           rows.push(row);
@@ -1386,6 +1388,13 @@ function AppContent() {
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
                           {mAb.summary}
                         </div>
+
+                        {mAb.evidenceStatement && (
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700">
+                            <span className="font-bold text-indigo-900 mr-2 uppercase tracking-wider text-[10px]">Evidence:</span>
+                            {mAb.evidenceStatement}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

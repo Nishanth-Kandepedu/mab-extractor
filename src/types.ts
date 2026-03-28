@@ -28,7 +28,6 @@ export interface AntibodyProperties {
   admet?: string;
   pk?: string;
   physchem?: string;
-  functionalSAR?: string;
   otherProperties?: string;
   evidencePage?: string;
   bindingActivity?: 'Yes' | 'No';
@@ -46,6 +45,7 @@ export interface Antibody {
   needsReview?: boolean;
   reviewReason?: string;
   evidenceLocation?: string; // e.g., "Page 42", "Table 12"
+  evidenceStatement?: string; // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
 }
 
 export interface UsageMetadata {

@@ -55,8 +55,10 @@ Output Schema:
           ]
         }
       ],
-      "confidence": number,
+      "confidence": number, // A value between 0 and 100 representing the extraction confidence.
       "summary": "string",
+      "evidenceLocation": "string", // e.g., "Page 42", "Table 12"
+      "evidenceStatement": "string", // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
       "needsReview": boolean,
       "reviewReason": "string"
     }
@@ -276,6 +278,8 @@ async function extractWithGemini(
                   },
                   confidence: { type: Type.NUMBER },
                   summary: { type: Type.STRING },
+                  evidenceLocation: { type: Type.STRING },
+                  evidenceStatement: { type: Type.STRING },
                   needsReview: { type: Type.BOOLEAN },
                   reviewReason: { type: Type.STRING },
                 },
@@ -316,6 +320,15 @@ async function extractWithGemini(
     
     // Post-processing and Validation
     result.antibodies = result.antibodies.map(mAb => {
+      // Normalize confidence to 0-100 scale
+      if (mAb.confidence <= 1 && mAb.confidence > 0) {
+        mAb.confidence = Math.round(mAb.confidence * 100);
+      } else if (mAb.confidence < 0) {
+        mAb.confidence = 0;
+      } else if (mAb.confidence > 100) {
+        mAb.confidence = 100;
+      }
+
       let needsReview = mAb.needsReview || false;
       let reviewReason = mAb.reviewReason || "";
 
