@@ -647,7 +647,7 @@ function AppContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-white">
+      <div className="h-screen flex flex-col md:flex-row bg-white overflow-hidden">
         {/* Left Pane: Messaging & Atmosphere */}
         <div className="hidden md:flex md:w-[65%] bg-[#050505] relative overflow-hidden flex-col p-12 justify-between">
           {/* Background Glows */}
@@ -664,16 +664,16 @@ function AppContent() {
 
           {/* Main Content */}
           <div className="relative z-10 max-w-2xl">
-            <h1 className="text-6xl lg:text-7xl font-bold text-white leading-[0.9] mb-8 tracking-tighter">
+            <h1 className="text-6xl lg:text-7xl font-bold text-white leading-[0.9] mb-6 tracking-tighter">
               AbMiner<span className="text-indigo-500">.</span>
             </h1>
             
-            <p className="text-zinc-300 text-xl font-light leading-relaxed mb-12 max-w-xl">
+            <p className="text-zinc-300 text-lg font-light leading-relaxed mb-8 max-w-xl">
               High-quality antibody sequence mining from complex patent landscapes. 
               Automated, validated, and analysis-ready.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {[
                 { label: 'Sequence Integrity', desc: 'Validated recovery of VH/VL chains from fragmented patent data.' },
                 { label: 'Structural Mapping', desc: 'Precise identification of CDR regions using standardized numbering.' },
@@ -681,11 +681,11 @@ function AppContent() {
                 { label: 'Discovery Acceleration', desc: 'Accelerated identification of therapeutic candidates within complex patent landscapes.' }
               ].map((feature, i) => (
                 <div key={i} className="group">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-1">
                     <div className="w-1 h-3 bg-indigo-500/30 group-hover:bg-indigo-500 transition-colors" />
-                    <span className="text-white font-bold text-xs uppercase tracking-widest">{feature.label}</span>
+                    <span className="text-white font-bold text-[10px] uppercase tracking-widest">{feature.label}</span>
                   </div>
-                  <p className="text-zinc-500 text-xs leading-relaxed">{feature.desc}</p>
+                  <p className="text-zinc-500 text-[10px] leading-relaxed">{feature.desc}</p>
                 </div>
               ))}
             </div>
@@ -698,44 +698,44 @@ function AppContent() {
         </div>
 
         {/* Right Pane: Login Form */}
-        <div className="flex-1 flex flex-col p-8 md:p-16 lg:p-24 justify-center bg-white overflow-y-auto">
+        <div className="flex-1 flex flex-col p-8 md:p-12 lg:p-16 justify-center bg-white overflow-y-auto">
           <div className="max-w-sm w-full mx-auto">
-            <div className="mb-12">
+            <div className="mb-8">
               <h2 className="text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Sign In</h2>
               <p className="text-sm text-zinc-500">Access your research environment.</p>
             </div>
 
-            <form onSubmit={handleGuestLogin} className="space-y-6 mb-12">
+            <form onSubmit={handleGuestLogin} className="space-y-4 mb-8">
               <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Username</label>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Username</label>
                 <input
                   type="text"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
                   placeholder="Username"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Password</label>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Password</label>
                 <input
                   type="password"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
                   placeholder="••••••••"
                 />
               </div>
               {loginError && <p className="text-xs text-red-600 font-medium">{loginError}</p>}
               <button
                 type="submit"
-                className="w-full bg-[#050505] text-white py-4 rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
+                className="w-full bg-[#050505] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
               >
                 Sign In
               </button>
             </form>
 
-            <div className="relative mb-12">
+            <div className="relative mb-8">
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-zinc-100"></div>
               </div>
@@ -744,20 +744,20 @@ function AppContent() {
               </div>
             </div>
 
-            <form onSubmit={handleRequestAccess} className="space-y-6">
+            <form onSubmit={handleRequestAccess} className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 mb-1">Join the Waitlist</h3>
-                <p className="text-xs text-zinc-500">Apply for early access to the AbMiner research platform.</p>
+                <p className="text-[11px] text-zinc-500 leading-tight">Apply for early access to the AbMiner research platform.</p>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <input 
                   type="text" 
                   placeholder="Full Name" 
                   required
                   value={requestAccessForm.name}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors" 
                 />
                 <input 
                   type="email" 
@@ -765,7 +765,7 @@ function AppContent() {
                   required
                   value={requestAccessForm.email}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors" 
                 />
               </div>
               <textarea 
@@ -773,13 +773,13 @@ function AppContent() {
                 required
                 value={requestAccessForm.message}
                 onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none"
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors h-20 resize-none"
               />
               <button 
                 type="submit"
                 disabled={requestStatus === 'sending'}
                 className={cn(
-                  "w-full py-3 rounded-xl font-bold text-xs transition-all border",
+                  "w-full py-2.5 rounded-xl font-bold text-xs transition-all border",
                   requestStatus === 'success' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
                   requestStatus === 'error' ? "bg-red-50 text-red-700 border-red-100" :
                   "bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100"
@@ -797,7 +797,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="flex flex-col min-h-screen bg-[#F8F9FA] text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-[#050505] border-b border-white/10 px-8 py-4 flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-3">
@@ -876,7 +876,7 @@ function AppContent() {
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
           {/* Model Selection */}
@@ -1559,7 +1559,7 @@ function AppContent() {
       </main>
 
       {/* Footer */}
-      <footer className="max-w-[1600px] mx-auto px-8 py-12 border-t border-zinc-200 mt-12 flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-2 text-zinc-400">
           <Database className="w-4 h-4" />
           <span className="text-xs font-mono">SECURE BIOTECH EXTRACTION ENGINE</span>
