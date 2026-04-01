@@ -88,7 +88,8 @@ async function startServer() {
   console.log('ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
   console.log('-------------------------------');
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
   // Force HTTPS and security headers in production
   if (process.env.NODE_ENV === 'production') {
@@ -107,8 +108,16 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
-    console.log(`[API] POST /api/extract - Body size: ${JSON.stringify(req.body).length} bytes`);
+    console.log(`[API] POST /api/extract - Host: ${req.headers.host}, Origin: ${req.headers.origin}, Body size: ${JSON.stringify(req.body).length} bytes`);
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
+    
+    if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+      return res.status(400).json({ error: "Input text is required for extraction." });
+    }
+    const inputSize = typeof input === 'string' ? input.length : (input.data ? input.data.length : 0);
+    if (inputSize > 10000000) { // 10MB limit on server
+      return res.status(413).json({ error: "Payload too large. Please select a smaller portion of the document." });
+    }
     const jobId = Math.random().toString(36).substring(7);
 
     // Helper to find keys case-insensitively

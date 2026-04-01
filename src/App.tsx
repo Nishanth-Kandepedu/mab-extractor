@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -110,6 +110,27 @@ function AppContent() {
       }
     } catch (err) {
       console.error('Health check failed:', err);
+    }
+  };
+
+  const testApi = async () => {
+    try {
+      const start = Date.now();
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true, data: "a".repeat(1000) }) // Small 1KB test
+      });
+      const end = Date.now();
+      alert(`API Test: ${res.status} ${res.statusText} (${end - start}ms)`);
+      if (!res.ok) {
+        console.error('API Test Response Not OK:', res.status, res.statusText);
+      }
+    } catch (err: any) {
+      alert(`API Test Failed: ${err.message}. Check console for details.`);
+      console.error('API Test Failed - Full Error:', err);
+      console.error('Current Origin:', window.location.origin);
+      console.error('Current Protocol:', window.location.protocol);
     }
   };
 
@@ -1125,6 +1146,7 @@ function AppContent() {
               </div>
               <div className="mt-6 pt-4 border-t border-white/5 flex gap-4">
                 <button onClick={checkHealth} className="text-indigo-400 hover:underline">Refresh Health</button>
+                <button onClick={testApi} className="text-indigo-400 hover:underline">Test API Reachability</button>
               </div>
             </div>
           </motion.div>
@@ -1330,6 +1352,15 @@ function AppContent() {
                 <div>
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
+                  {window.location.hostname === 'abminer.bio' && (
+                    <button
+                      onClick={() => window.location.href = 'https://abminer.up.railway.app'}
+                      className="mt-3 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Try on Railway URL (More Stable)
+                    </button>
+                  )}
                   {(state.error.includes('503') || state.error.includes('429')) && llmOptions.model !== 'gemini-3-flash-preview' && (
                     <button
                       onClick={() => {

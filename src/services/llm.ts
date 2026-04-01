@@ -181,6 +181,18 @@ export async function extractWithLLM(
   options: LLMOptions,
   pageContext?: string
 ): Promise<ExtractionResult> {
+  if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+    throw new Error("Input text is required for extraction.");
+  }
+  if (typeof input !== 'string' && (!input.data || input.data.trim().length === 0)) {
+    throw new Error("Input data is required for extraction.");
+  }
+  if (typeof input === 'string' && input.length > 5000000) {
+    throw new Error("Input text is too large (max 5MB). Please select a smaller portion of the document.");
+  }
+  if (typeof input !== 'string' && input.data.length > 5000000) {
+    throw new Error("Input data is too large (max 5MB). Please select a smaller portion of the document.");
+  }
   try {
     const { provider, model } = options;
 
@@ -205,64 +217,71 @@ export async function extractWithLLM(
     ];
   }
 
+    const payload = JSON.stringify({
+      provider,
+      model,
+      input: formattedInput,
+      systemInstruction: SYSTEM_INSTRUCTION,
+      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          patentId: { type: "STRING" },
+          patentTitle: { type: "STRING" },
+          antibodies: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                mAbName: { type: "STRING" },
+                chains: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      type: { type: "STRING", enum: ["Heavy", "Light"] },
+                      fullSequence: { type: "STRING" },
+                      cdrs: {
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          properties: {
+                            type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
+                            sequence: { type: "STRING" },
+                            start: { type: "INTEGER" },
+                            end: { type: "INTEGER" },
+                          },
+                          required: ["type", "sequence", "start", "end"],
+                        },
+                      },
+                    },
+                    required: ["type", "fullSequence", "cdrs"],
+                  },
+                },
+                confidence: { type: "NUMBER" },
+                summary: { type: "STRING" },
+                evidenceLocation: { type: "STRING" },
+                evidenceStatement: { type: "STRING" },
+                needsReview: { type: "BOOLEAN" },
+                reviewReason: { type: "STRING" },
+              },
+              required: ["mAbName", "chains", "confidence", "summary"],
+            },
+          },
+        },
+        required: ["patentId", "patentTitle", "antibodies"],
+      },
+    });
+
+    console.log(`[Extraction] Initiating fetch. Payload size: ${payload.length} bytes`);
+    if (payload.length > 1000000) {
+      console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
+    }
+
     const startResponse = await fetch('/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider,
-        model,
-        input: formattedInput,
-        systemInstruction: SYSTEM_INSTRUCTION,
-        thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            patentId: { type: "STRING" },
-            patentTitle: { type: "STRING" },
-            antibodies: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  mAbName: { type: "STRING" },
-                  chains: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        type: { type: "STRING", enum: ["Heavy", "Light"] },
-                        fullSequence: { type: "STRING" },
-                        cdrs: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
-                              sequence: { type: "STRING" },
-                              start: { type: "INTEGER" },
-                              end: { type: "INTEGER" },
-                            },
-                            required: ["type", "sequence", "start", "end"],
-                          },
-                        },
-                      },
-                      required: ["type", "fullSequence", "cdrs"],
-                    },
-                  },
-                  confidence: { type: "NUMBER" },
-                  summary: { type: "STRING" },
-                  evidenceLocation: { type: "STRING" },
-                  evidenceStatement: { type: "STRING" },
-                  needsReview: { type: "BOOLEAN" },
-                  reviewReason: { type: "STRING" },
-                },
-                required: ["mAbName", "chains", "confidence", "summary"],
-              },
-            },
-          },
-          required: ["patentId", "patentTitle", "antibodies"],
-        },
-      }),
+      body: payload,
     });
 
     if (!startResponse.ok) {
@@ -379,8 +398,9 @@ export async function extractWithLLM(
   return result;
   } catch (e: any) {
     console.error("[Extraction] Fetch error details:", e);
-    if (e instanceof TypeError && e.message === 'Failed to fetch') {
-      throw new Error("The extraction request was blocked or timed out. This often happens on custom domains (like .bio) if the document is very large. Try using a smaller text selection or use the default Railway URL if this persists.");
+    const msg = e.message?.toLowerCase() || "";
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('aborted')) {
+      throw new Error("Network Error: The extraction request was blocked or timed out. This is common on custom domains (like .bio) due to proxy limits. Try using a smaller text selection or use the default Railway URL (abminer.up.railway.app) if this persists.");
     }
     throw e;
   }
