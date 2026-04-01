@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -98,6 +99,15 @@ function AppContent() {
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
+
+  // Initialize GA4
+  useEffect(() => {
+    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+    if (measurementId) {
+      ReactGA.initialize(measurementId);
+      ReactGA.send({ hitType: "pageview", page: window.location.pathname });
+    }
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -297,6 +307,13 @@ function AppContent() {
           metadata: { role }
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
 
+        // Track login event
+        ReactGA.event({
+          category: 'User',
+          action: 'Login',
+          label: role
+        });
+
         setUser(newUser);
         setLoginError('');
         
@@ -347,6 +364,11 @@ function AppContent() {
       }
       
       if (auth.currentUser) {
+        // Track logout event
+        ReactGA.event({
+          category: 'User',
+          action: 'Logout'
+        });
         await logout();
       }
     } catch (err) {
@@ -473,6 +495,13 @@ function AppContent() {
         timestamp: Timestamp.now(),
         metadata: { targetAccountId: targetAccount.id }
       });
+
+      // Track admin action
+      ReactGA.event({
+        category: 'Admin',
+        action: newStatus ? 'Disable Account' : 'Enable Account',
+        label: targetAccount.id
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `accounts/${targetAccount.id}`);
     }
@@ -527,6 +556,14 @@ function AppContent() {
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
 
+          // Track extraction event
+          ReactGA.event({
+            category: 'Extraction',
+            action: 'File Upload',
+            label: file!.type,
+            value: result.antibodies.length
+          });
+
           // Save extraction for all users (including guests)
           if (user) {
             const docData = {
@@ -578,6 +615,13 @@ function AppContent() {
       result.extractionTime = Date.now() - startTime;
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
+
+      // Track extraction event
+      ReactGA.event({
+        category: 'Extraction',
+        action: 'Text Input',
+        value: result.antibodies.length
+      });
 
       // Save extraction for all users (including guests)
       if (user) {
@@ -668,6 +712,12 @@ function AppContent() {
     
     setIsExporting(true);
     try {
+      // Track download event
+      ReactGA.event({
+        category: 'Export',
+        action: 'Download CSV',
+        label: state.result.patentId
+      });
       // Log download activity
       if (user) {
         addDoc(collection(db, 'activity_logs'), {
