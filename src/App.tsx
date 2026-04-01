@@ -73,8 +73,7 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview',
-    thinkingLevel: 'HIGH'
+    model: 'gemini-3.1-pro-preview'
   });
   const [inputText, setInputText] = useState('');
   const [pageContext, setPageContext] = useState('');
@@ -218,7 +217,7 @@ function AppContent() {
             
             // Default guests to Pro
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', thinkingLevel: 'HIGH' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           } else {
             // New user or anonymous session without doc
@@ -239,7 +238,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', thinkingLevel: 'HIGH' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           }
         } catch (error) {
@@ -382,7 +381,7 @@ function AppContent() {
         
         // Default to Pro for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', thinkingLevel: 'HIGH' });
+          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -1218,11 +1217,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => {
-                          const model = p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest';
-                          const thinkingLevel = (p === 'gemini' && model.includes('gemini-3')) ? 'HIGH' : undefined;
-                          setLlmOptions({ provider: p, model, thinkingLevel });
-                        }}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1238,11 +1233,7 @@ function AppContent() {
                 </div>
                 <select
                   value={llmOptions.model}
-                  onChange={(e) => {
-                    const model = e.target.value;
-                    const thinkingLevel = (llmOptions.provider === 'gemini' && model.includes('gemini-3')) ? 'HIGH' : undefined;
-                    setLlmOptions({ ...llmOptions, model, thinkingLevel });
-                  }}
+                  onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   disabled={(user as any)?.role === 'guest'}
                 >
