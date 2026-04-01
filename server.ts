@@ -12,6 +12,24 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// In-memory job store (Note: This will reset on server restart)
+const jobs = new Map<string, {
+  status: 'pending' | 'completed' | 'failed';
+  result?: any;
+  error?: string;
+  startTime: number;
+}>();
+
+// Cleanup old jobs every hour
+setInterval(() => {
+  const oneHourAgo = Date.now() - 3600000;
+  for (const [id, job] of jobs.entries()) {
+    if (job.startTime < oneHourAgo) {
+      jobs.delete(id);
+    }
+  }
+}, 3600000);
+
 /**
  * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
  */
@@ -86,6 +104,7 @@ async function startServer() {
   // API Routes
   app.post('/api/extract', async (req, res) => {
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
+    const jobId = Math.random().toString(36).substring(7);
 
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
@@ -93,97 +112,104 @@ async function startServer() {
       return key ? process.env[key] : null;
     };
 
-    try {
-      console.log(`[Extraction] Starting ${provider} extraction using model ${model}...`);
-      const startTime = Date.now();
+    // Initialize job
+    jobs.set(jobId, { status: 'pending', startTime: Date.now() });
 
-      if (provider === 'gemini') {
-        const apiKey = findKey('GEMINI_API_KEY');
-        console.log(`[Debug] Gemini Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
+    // Start extraction in background
+    (async () => {
+      try {
+        console.log(`[Job ${jobId}] Starting ${provider} extraction using model ${model}...`);
+        const startTime = Date.now();
 
-        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-          return res.status(400).json({
-            error: 'Missing Gemini API Key. Please add GEMINI_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.'
+        if (provider === 'gemini') {
+          const apiKey = findKey('GEMINI_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing Gemini API Key. Please add GEMINI_API_KEY to the Secrets/Settings menu in AI Studio.');
+          }
+
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: model || 'gemini-3.1-pro-preview',
+            contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
+            config: {
+              systemInstruction,
+              temperature: 0,
+              thinkingConfig: thinkingLevel ? { thinkingLevel } : undefined,
+              maxOutputTokens: 65536,
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+            },
           });
+
+          const text = response.text;
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`[Job ${jobId}] Gemini completed in ${duration}s. Text length: ${text?.length}`);
+
+          if (!text) {
+            throw new Error("Empty response from Gemini API");
+          }
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(text) });
+          return;
         }
 
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: model || 'gemini-3.1-pro-preview',
-          contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
-          config: {
-            systemInstruction,
+        if (provider === 'openai') {
+          const apiKey = findKey('OPENAI_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing OpenAI API Key.');
+          }
+          const openai = new OpenAI({ apiKey });
+          const response = await openai.chat.completions.create({
+            model: model || 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+            ],
+            response_format: { type: 'json_object' },
             temperature: 0,
-            thinkingConfig: thinkingLevel ? { thinkingLevel } : undefined,
-            maxOutputTokens: 65536,
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-          },
-        });
-
-        const text = response.text;
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[Extraction] Gemini completed in ${duration}s. Text length: ${text?.length}`);
-
-        if (!text) {
-          throw new Error("Empty response from Gemini API");
-        }
-        return res.json(extractJson(text));
-      }
-
-      if (provider === 'openai') {
-        const apiKey = findKey('OPENAI_API_KEY');
-        console.log(`[Debug] OpenAI Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
-        
-        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-          return res.status(400).json({ 
-            error: 'Missing OpenAI API Key. Please add OPENAI_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
+            max_tokens: 4096,
           });
+          const content = response.choices[0].message.content || '{}';
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content) });
+          return;
         }
-        const openai = new OpenAI({ apiKey });
-        const response = await openai.chat.completions.create({
-          model: model || 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0,
-          max_tokens: 4096, // Increased for large extractions
-        });
-        const content = response.choices[0].message.content || '{}';
-        return res.json(extractJson(content));
-      }
 
-      if (provider === 'anthropic') {
-        const apiKey = findKey('ANTHROPIC_API_KEY');
-        console.log(`[Debug] Anthropic Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
-
-        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-          return res.status(400).json({ 
-            error: 'Missing Anthropic API Key. Please add ANTHROPIC_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
+        if (provider === 'anthropic') {
+          const apiKey = findKey('ANTHROPIC_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing Anthropic API Key.');
+          }
+          const anthropic = new Anthropic({ apiKey });
+          const response = await anthropic.messages.create({
+            model: model || 'claude-3-5-sonnet-latest',
+            max_tokens: 4096,
+            system: systemInstruction,
+            messages: [
+              { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+            ],
+            temperature: 0,
           });
+          const content = response.content[0].type === 'text' ? response.content[0].text : '';
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content || '{}') });
+          return;
         }
-        const anthropic = new Anthropic({ apiKey });
-        const response = await anthropic.messages.create({
-          model: model || 'claude-3-5-sonnet-latest',
-          max_tokens: 4096,
-          system: systemInstruction,
-          messages: [
-            { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
-          ],
-          temperature: 0,
-        });
-        // Anthropic doesn't have a native JSON mode like OpenAI, so we parse the text
-        const content = response.content[0].type === 'text' ? response.content[0].text : '';
-        return res.json(extractJson(content || '{}'));
-      }
 
-      res.status(400).json({ error: 'Invalid provider' });
-    } catch (error: any) {
-      console.error('Extraction error:', error);
-      res.status(500).json({ error: error.message });
+        throw new Error('Invalid provider');
+      } catch (error: any) {
+        console.error(`[Job ${jobId}] Error:`, error);
+        jobs.set(jobId, { ...jobs.get(jobId)!, status: 'failed', error: error.message });
+      }
+    })();
+
+    // Return jobId immediately
+    res.json({ jobId });
+  });
+
+  app.get('/api/extract/status/:jobId', (req, res) => {
+    const job = jobs.get(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
     }
+    res.json(job);
   });
 
   // Vite middleware for development

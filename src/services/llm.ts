@@ -205,72 +205,102 @@ export async function extractWithLLM(
     ];
   }
 
-  const response = await fetch('/api/extract', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      provider,
-      model,
-      input: formattedInput,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
-      responseSchema: {
-        type: "OBJECT",
-        properties: {
-          patentId: { type: "STRING" },
-          patentTitle: { type: "STRING" },
-          antibodies: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                mAbName: { type: "STRING" },
-                chains: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      type: { type: "STRING", enum: ["Heavy", "Light"] },
-                      fullSequence: { type: "STRING" },
-                      cdrs: {
-                        type: "ARRAY",
-                        items: {
-                          type: "OBJECT",
-                          properties: {
-                            type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: "STRING" },
-                            start: { type: "INTEGER" },
-                            end: { type: "INTEGER" },
+    const startResponse = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        model,
+        input: formattedInput,
+        systemInstruction: SYSTEM_INSTRUCTION,
+        thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            patentId: { type: "STRING" },
+            patentTitle: { type: "STRING" },
+            antibodies: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  mAbName: { type: "STRING" },
+                  chains: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        type: { type: "STRING", enum: ["Heavy", "Light"] },
+                        fullSequence: { type: "STRING" },
+                        cdrs: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
+                              sequence: { type: "STRING" },
+                              start: { type: "INTEGER" },
+                              end: { type: "INTEGER" },
+                            },
+                            required: ["type", "sequence", "start", "end"],
                           },
-                          required: ["type", "sequence", "start", "end"],
                         },
                       },
+                      required: ["type", "fullSequence", "cdrs"],
                     },
-                    required: ["type", "fullSequence", "cdrs"],
                   },
+                  confidence: { type: "NUMBER" },
+                  summary: { type: "STRING" },
+                  evidenceLocation: { type: "STRING" },
+                  evidenceStatement: { type: "STRING" },
+                  needsReview: { type: "BOOLEAN" },
+                  reviewReason: { type: "STRING" },
                 },
-                confidence: { type: "NUMBER" },
-                summary: { type: "STRING" },
-                evidenceLocation: { type: "STRING" },
-                evidenceStatement: { type: "STRING" },
-                needsReview: { type: "BOOLEAN" },
-                reviewReason: { type: "STRING" },
+                required: ["mAbName", "chains", "confidence", "summary"],
               },
-              required: ["mAbName", "chains", "confidence", "summary"],
             },
           },
+          required: ["patentId", "patentTitle", "antibodies"],
         },
-        required: ["patentId", "patentTitle", "antibodies"],
-      },
-    }),
-  });
+      }),
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to extract with ' + provider);
-  }
+    if (!startResponse.ok) {
+      const errorData = await startResponse.json();
+      throw new Error(errorData.error || `Server error: ${startResponse.status}`);
+    }
 
-  const result: ExtractionResult = await response.json();
+    const { jobId } = await startResponse.json();
+    console.log(`[Extraction] Job started: ${jobId}`);
+
+    // 2. Poll for results
+    let result: ExtractionResult | null = null;
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes (5s intervals)
+
+    while (attempts < maxAttempts) {
+      const statusResponse = await fetch(`/api/extract/status/${jobId}`);
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to check job status: ${statusResponse.status}`);
+      }
+
+      const job = await statusResponse.json();
+
+      if (job.status === 'completed') {
+        result = job.result;
+        break;
+      } else if (job.status === 'failed') {
+        throw new Error(job.error || 'Extraction job failed');
+      }
+
+      // Wait 5 seconds before next poll
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      attempts++;
+    }
+
+    if (!result) {
+      throw new Error("Extraction timed out after 10 minutes.");
+    }
   
   // Post-processing and Validation
   result.antibodies = result.antibodies.map(mAb => {
