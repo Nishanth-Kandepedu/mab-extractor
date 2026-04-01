@@ -32,12 +32,14 @@ IMPORTANT EXTRACTION RULES:
 9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 11. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
-12. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+12. CRITICAL: Ensure the JSON is valid and complete. You MUST extract EVERY SINGLE antibody found in the document, regardless of how many there are. Do NOT skip any. Use as many tokens as necessary.
+13. If you find more than 30 antibodies, continue extracting all of them. Do not truncate the list.
 
 Output Schema:
 {
   "patentId": "string",
   "patentTitle": "string",
+  "totalAntibodiesFound": number,
   "antibodies": [
     {
       "mAbName": "string",
@@ -200,7 +202,7 @@ export async function extractWithLLM(
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `Extract EVERY SINGLE mAb sequence from the following text.${contextPrompt}\n\nNote: You MUST extract EVERY antibody found in the document, regardless of how many there are. Do NOT skip any. Ensure sequences are verbatim and 100% complete.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -213,7 +215,7 @@ export async function extractWithLLM(
           mimeType: input.mimeType,
         },
       },
-      { text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining for all 34+ antibodies.` }
+      { text: `Extract EVERY SINGLE mAb sequence from this document.${contextPrompt} Perform high-quality verbatim mining for all antibodies found, ensuring 100% coverage.` }
     ];
   }
 
@@ -222,12 +224,13 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+      thinkingLevel: (model?.includes('gemini-3') || model?.includes('3.1')) ? "HIGH" : undefined,
       responseSchema: {
         type: "OBJECT",
         properties: {
           patentId: { type: "STRING" },
           patentTitle: { type: "STRING" },
+          totalAntibodiesFound: { type: "NUMBER" },
           antibodies: {
             type: "ARRAY",
             items: {
