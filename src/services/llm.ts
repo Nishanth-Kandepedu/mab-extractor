@@ -278,15 +278,35 @@ export async function extractWithLLM(
       console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
     }
 
-    const startResponse = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-    });
+    let startResponse: Response | null = null;
+    let postAttempts = 0;
+    const maxPostAttempts = 3;
 
-    if (!startResponse.ok) {
-      const errorData = await startResponse.json();
-      throw new Error(errorData.error || `Server error: ${startResponse.status}`);
+    while (postAttempts < maxPostAttempts) {
+      try {
+        startResponse = await fetch('/api/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+        break; // Success
+      } catch (postError: any) {
+        postAttempts++;
+        const isNetworkError = postError.message?.toLowerCase().includes('fetch') || 
+                               postError.message?.toLowerCase().includes('network');
+        
+        if (isNetworkError && postAttempts < maxPostAttempts) {
+          console.warn(`[Extraction] POST network error (attempt ${postAttempts}): ${postError.message}. Retrying in 2s...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          throw postError;
+        }
+      }
+    }
+
+    if (!startResponse || !startResponse.ok) {
+      const errorData = await startResponse?.json().catch(() => ({ error: `Server error: ${startResponse?.status}` }));
+      throw new Error(errorData.error || `Server error: ${startResponse?.status}`);
     }
 
     const { jobId } = await startResponse.json();
@@ -298,18 +318,32 @@ export async function extractWithLLM(
     const maxAttempts = 120; // 10 minutes (5s intervals)
 
     while (attempts < maxAttempts) {
-      const statusResponse = await fetch(`/api/extract/status/${jobId}`);
-      if (!statusResponse.ok) {
-        throw new Error(`Failed to check job status: ${statusResponse.status}`);
-      }
+      console.log(`[Extraction] Polling attempt ${attempts + 1}/${maxAttempts} for job ${jobId}...`);
+      try {
+        const statusResponse = await fetch(`/api/extract/status/${jobId}`);
+        if (!statusResponse.ok) {
+          console.error(`[Extraction] Status check failed: ${statusResponse.status}`);
+          throw new Error(`Failed to check job status: ${statusResponse.status}`);
+        }
 
-      const job = await statusResponse.json();
+        const job = await statusResponse.json();
 
-      if (job.status === 'completed') {
-        result = job.result;
-        break;
-      } else if (job.status === 'failed') {
-        throw new Error(job.error || 'Extraction job failed');
+        if (job.status === 'completed') {
+          result = job.result;
+          break;
+        } else if (job.status === 'failed') {
+          throw new Error(job.error || 'Extraction job failed');
+        }
+      } catch (pollError: any) {
+        // If it's a network error, retry a few times before giving up
+        const isNetworkError = pollError.message?.toLowerCase().includes('fetch') || 
+                               pollError.message?.toLowerCase().includes('network');
+        
+        if (isNetworkError && attempts < maxAttempts - 1) {
+          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
+        } else {
+          throw pollError;
+        }
       }
 
       // Wait 5 seconds before next poll

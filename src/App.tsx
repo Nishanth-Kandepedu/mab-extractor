@@ -119,12 +119,18 @@ function AppContent() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true, data: "a".repeat(1000) }) // Small 1KB test
+        body: JSON.stringify({ 
+          provider: 'gemini',
+          input: "Test input for reachability check.",
+          systemInstruction: "Respond with 'ok'",
+          test: true 
+        })
       });
       const end = Date.now();
-      alert(`API Test: ${res.status} ${res.statusText} (${end - start}ms)`);
+      const data = await res.json();
+      alert(`API Test: ${res.status} ${res.statusText} (${end - start}ms)\nJob ID: ${data.jobId || 'none'}`);
       if (!res.ok) {
-        console.error('API Test Response Not OK:', res.status, res.statusText);
+        console.error('API Test Response Not OK:', res.status, res.statusText, data);
       }
     } catch (err: any) {
       alert(`API Test Failed: ${err.message}. Check console for details.`);

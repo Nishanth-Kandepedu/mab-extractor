@@ -109,7 +109,11 @@ async function startServer() {
   // API Routes
   app.post('/api/extract', async (req, res) => {
     console.log(`[API] POST /api/extract - Host: ${req.headers.host}, Origin: ${req.headers.origin}, Body size: ${JSON.stringify(req.body).length} bytes`);
-    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, test } = req.body;
+    if (test) {
+      console.log(`[API] Test request received from ${req.headers.origin}`);
+      return res.json({ jobId: 'test-job', status: 'completed', result: { status: 'ok' } });
+    }
     
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
       return res.status(400).json({ error: "Input text is required for extraction." });
@@ -224,10 +228,13 @@ async function startServer() {
   });
 
   app.get('/api/extract/status/:jobId', (req, res) => {
-    const job = jobs.get(req.params.jobId);
+    const { jobId } = req.params;
+    const job = jobs.get(jobId);
     if (!job) {
+      console.warn(`[API] Job status check failed - Job ${jobId} not found`);
       return res.status(404).json({ error: 'Job not found' });
     }
+    console.log(`[API] Job status check - Job ${jobId}: ${job.status}`);
     res.json(job);
   });
 
@@ -241,9 +248,14 @@ async function startServer() {
     res.json({
       status: 'ok',
       uptime: process.uptime(),
-      version: '1.2.0',
+      version: '1.2.1',
       hostname: req.headers.host,
       nodeEnv: process.env.NODE_ENV,
+      proxy: {
+        forwardedFor: req.headers['x-forwarded-for'],
+        forwardedProto: req.headers['x-forwarded-proto'],
+        realIp: req.headers['x-real-ip'],
+      },
       keys: {
         gemini: mask(process.env.GEMINI_API_KEY),
         openai: mask(process.env.OPENAI_API_KEY),
