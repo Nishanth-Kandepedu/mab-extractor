@@ -377,10 +377,10 @@ export async function extractWithLLM(
 
   result.modelUsed = model || 'gemini-3.1-pro-preview';
   return result;
-} catch (e: any) {
-  if (e instanceof TypeError && e.message === 'Failed to fetch') {
-    throw new Error("The extraction request timed out or was interrupted. This often happens with large documents or high-thinking models (like Gemini 3.1 Pro). Please try using 'Gemini 3 Flash' in the settings for a faster extraction.");
+  } catch (e: any) {
+    if (e instanceof TypeError && e.message === 'Failed to fetch') {
+      throw new Error("The extraction request was blocked or timed out. This often happens on custom domains (like .bio) if the document is very large. Try using a smaller text selection or use the default Railway URL if this persists.");
+    }
+    throw e;
   }
-  throw e;
-}
 }

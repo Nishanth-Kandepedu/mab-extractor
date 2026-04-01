@@ -99,6 +99,23 @@ function AppContent() {
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [healthInfo, setHealthInfo] = useState<any>(null);
+
+  const checkHealth = async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        setHealthInfo(await res.json());
+      }
+    } catch (err) {
+      console.error('Health check failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (showDebug) checkHealth();
+  }, [showDebug]);
 
   // Initialize GA4
   useEffect(() => {
@@ -1005,6 +1022,13 @@ function AppContent() {
         </div>
         
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+            title="Debug Info"
+          >
+            <AlertCircle className="w-5 h-5" />
+          </button>
           {(user as any)?.isGuest && !auth.currentUser && (
             <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-500 font-medium">
               <AlertCircle className="w-3 h-3" />
@@ -1069,6 +1093,43 @@ function AppContent() {
           )}
         </div>
       </header>
+
+      <AnimatePresence>
+        {showDebug && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-zinc-900 border-b border-white/10 overflow-hidden"
+          >
+            <div className="max-w-7xl mx-auto px-8 py-6 font-mono text-xs text-zinc-400">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  System Diagnostics
+                </h3>
+                <button onClick={() => setShowDebug(false)} className="hover:text-white">✕</button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <p><span className="text-zinc-600">Frontend Host:</span> {window.location.hostname}</p>
+                  <p><span className="text-zinc-600">Protocol:</span> {window.location.protocol}</p>
+                </div>
+                {healthInfo && (
+                  <div className="space-y-2">
+                    <p><span className="text-zinc-600">Server Host:</span> {healthInfo.hostname}</p>
+                    <p><span className="text-zinc-600">Server Env:</span> {healthInfo.nodeEnv}</p>
+                    <p><span className="text-zinc-600">Gemini Key:</span> {healthInfo.keys.gemini}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-6 pt-4 border-t border-white/5 flex gap-4">
+                <button onClick={checkHealth} className="text-indigo-400 hover:underline">Refresh Health</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}

@@ -109,7 +109,12 @@ async function startServer() {
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
       const key = Object.keys(process.env).find(k => k.toUpperCase().includes(pattern.toUpperCase()));
-      return key ? process.env[key] : null;
+      if (key) {
+        const val = process.env[key];
+        console.log(`[Debug] Found key ${key} (Length: ${val?.length})`);
+        return val;
+      }
+      return null;
     };
 
     // Initialize job
@@ -210,6 +215,27 @@ async function startServer() {
       return res.status(404).json({ error: 'Job not found' });
     }
     res.json(job);
+  });
+
+  app.get('/api/health', (req, res) => {
+    const mask = (key: string | undefined) => {
+      if (!key || key === 'undefined') return 'missing';
+      if (key.length < 8) return 'too short';
+      return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
+    };
+
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      version: '1.2.0',
+      hostname: req.headers.host,
+      nodeEnv: process.env.NODE_ENV,
+      keys: {
+        gemini: mask(process.env.GEMINI_API_KEY),
+        openai: mask(process.env.OPENAI_API_KEY),
+        anthropic: mask(process.env.ANTHROPIC_API_KEY),
+      }
+    });
   });
 
   // Vite middleware for development
