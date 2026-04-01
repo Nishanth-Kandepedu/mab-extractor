@@ -181,7 +181,8 @@ export async function extractWithLLM(
   options: LLMOptions,
   pageContext?: string
 ): Promise<ExtractionResult> {
-  const { provider, model } = options;
+  try {
+    const { provider, model } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   let formattedInput: any;
@@ -346,4 +347,10 @@ export async function extractWithLLM(
 
   result.modelUsed = model || 'gemini-3.1-pro-preview';
   return result;
+} catch (e: any) {
+  if (e instanceof TypeError && e.message === 'Failed to fetch') {
+    throw new Error("The extraction request timed out or was interrupted. This often happens with large documents or high-thinking models (like Gemini 3.1 Pro). Please try using 'Gemini 3 Flash' in the settings for a faster extraction.");
+  }
+  throw e;
+}
 }

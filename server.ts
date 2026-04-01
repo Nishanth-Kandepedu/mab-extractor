@@ -94,6 +94,9 @@ async function startServer() {
     };
 
     try {
+      console.log(`[Extraction] Starting ${provider} extraction using model ${model}...`);
+      const startTime = Date.now();
+
       if (provider === 'gemini') {
         const apiKey = findKey('GEMINI_API_KEY');
         console.log(`[Debug] Gemini Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
@@ -119,6 +122,9 @@ async function startServer() {
         });
 
         const text = response.text;
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Extraction] Gemini completed in ${duration}s. Text length: ${text?.length}`);
+
         if (!text) {
           throw new Error("Empty response from Gemini API");
         }
@@ -195,9 +201,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  // Increase timeouts for long-running LLM extractions (up to 10 minutes)
+  server.timeout = 600000;
+  server.keepAliveTimeout = 610000;
+  server.headersTimeout = 620000;
 }
 
 startServer();
