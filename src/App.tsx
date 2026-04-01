@@ -462,8 +462,8 @@ function AppContent() {
 
     const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        id: doc.id
       })) as ExtractionResult[];
       setHistory(docs);
     }, (error) => {
@@ -478,8 +478,8 @@ function AppContent() {
       const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
         const logs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+          ...doc.data(),
+          id: doc.id
         })) as ActivityLog[];
         setActivityLogs(logs);
       }, (error) => {
@@ -489,8 +489,8 @@ function AppContent() {
       const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
       unsubUsers = onSnapshot(usersQuery, (snapshot) => {
         const users = snapshot.docs.map(doc => ({
-          uid: doc.id,
-          ...doc.data()
+          ...doc.data(),
+          uid: doc.id
         })) as UserProfile[];
         setAllUsers(users);
       }, (error) => {
@@ -500,8 +500,8 @@ function AppContent() {
       const accountsQuery = query(collection(db, 'accounts'), orderBy('id', 'asc'));
       unsubAccounts = onSnapshot(accountsQuery, (snapshot) => {
         const accounts = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+          ...doc.data(),
+          id: doc.id
         })) as Account[];
         setAllAccounts(accounts);
       }, (error) => {
@@ -603,7 +603,7 @@ function AppContent() {
     if (!file) return;
     console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
     
     try {
       const reader = new FileReader();
@@ -618,6 +618,11 @@ function AppContent() {
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
 
+          // Clear file input so the same file can be uploaded again
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+
           // Track extraction event
           ReactGA.event({
             category: 'Extraction',
@@ -628,8 +633,10 @@ function AppContent() {
 
           // Save extraction for all users (including guests)
           if (user) {
+            // Strip any existing ID to avoid collisions
+            const { id: _id, ...resultData } = result as any;
             const docData = {
-              ...result,
+              ...resultData,
               userId: user.uid,
               userDisplayName: user.displayName || 'Anonymous Guest',
               userRole: user.role || 'guest',
@@ -648,13 +655,23 @@ function AppContent() {
               timestamp: Timestamp.now()
             }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
 
-            addDoc(collection(db, 'extractions'), docData).catch(err => {
+            addDoc(collection(db, 'extractions'), docData).then(docRef => {
+              setState(prev => {
+                if (prev.result && !prev.result.id) {
+                  return { ...prev, result: { ...prev.result, id: docRef.id } };
+                }
+                return prev;
+              });
+            }).catch(err => {
               handleFirestoreError(err, OperationType.WRITE, 'extractions');
             });
           }
         } catch (err) {
           console.error('Extraction error:', err);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
       };
       reader.onerror = () => {
@@ -670,7 +687,7 @@ function AppContent() {
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
     
-    setState(prev => ({ ...prev, isExtracting: true, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
     try {
       const startTime = Date.now();
       const result = await extractWithLLM(inputText, llmOptions, pageContext);
@@ -687,8 +704,10 @@ function AppContent() {
 
       // Save extraction for all users (including guests)
       if (user) {
+        // Strip any existing ID to avoid collisions
+        const { id: _id, ...resultData } = result as any;
         const docData = {
-          ...result,
+          ...resultData,
           userId: user.uid,
           accountId: user.accountId,
           userDisplayName: user.displayName || 'Anonymous Guest',
@@ -709,7 +728,14 @@ function AppContent() {
           timestamp: Timestamp.now()
         }).catch(err => console.error('Failed to log activity:', err));
 
-        addDoc(collection(db, 'extractions'), docData).catch(err => {
+        addDoc(collection(db, 'extractions'), docData).then(docRef => {
+          setState(prev => {
+            if (prev.result && !prev.result.id) {
+              return { ...prev, result: { ...prev.result, id: docRef.id } };
+            }
+            return prev;
+          });
+        }).catch(err => {
           console.error('Save failed:', err);
         });
       }
@@ -738,14 +764,22 @@ function AppContent() {
 
     setIsSaving(true);
     try {
+      // Strip any existing ID to avoid collisions
+      const { id: _id, ...resultData } = state.result as any;
       const docData = {
-        ...state.result,
+        ...resultData,
         userId: user.uid,
         accountId: user.accountId,
         createdAt: Timestamp.now(),
         status: 'pending'
       };
-      await addDoc(collection(db, 'extractions'), docData);
+      const docRef = await addDoc(collection(db, 'extractions'), docData);
+      setState(prev => {
+        if (prev.result) {
+          return { ...prev, result: { ...prev.result, id: docRef.id } };
+        }
+        return prev;
+      });
       setIsSaving(false);
     } catch (error) {
       setIsSaving(false);

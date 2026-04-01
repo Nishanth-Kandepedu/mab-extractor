@@ -369,6 +369,10 @@ export async function extractWithLLM(
     }
   
   // Post-processing and Validation
+  result.patentId = result.patentId || "Unknown";
+  result.patentTitle = result.patentTitle || "Untitled Patent";
+  result.antibodies = result.antibodies || [];
+  
   result.antibodies = result.antibodies.map(mAb => {
     // Normalize confidence to 0-100 scale
     if (mAb.confidence <= 1 && mAb.confidence > 0) {
@@ -385,14 +389,12 @@ export async function extractWithLLM(
     mAb.chains = mAb.chains.map(chain => {
       let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
       
-      // Systematic Fixes
+      // Systematic Fixes - Flag for review instead of forcing changes
       if (chain.type === 'Light') {
-        // Position 12 (0-indexed: 11) L -> V error
+        // Position 12 (0-indexed: 11) L -> V potential error
         if (seq.length > 11 && seq[11] === 'L') {
-          const newSeq = seq.split('');
-          newSeq[11] = 'V';
-          seq = newSeq.join('');
-          reviewReason += " [Systematic L->V fix at pos 12]";
+          needsReview = true;
+          reviewReason += " [Potential L->V error at pos 12]";
         }
         
         // VL Length Validation
@@ -403,12 +405,10 @@ export async function extractWithLLM(
       }
 
       if (chain.type === 'Heavy') {
-        // Position 75 (0-indexed: 74) T -> I error
+        // Position 75 (0-indexed: 74) T -> I potential error
         if (seq.length > 74 && seq[74] === 'I') {
-          const newSeq = seq.split('');
-          newSeq[74] = 'T';
-          seq = newSeq.join('');
-          reviewReason += " [Systematic T->I fix at pos 75]";
+          needsReview = true;
+          reviewReason += " [Potential T->I error at pos 75]";
         }
 
         // VH Length Validation
