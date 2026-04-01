@@ -107,6 +107,11 @@ async function startServer() {
   }
 
   // API Routes
+  app.use('/api', (req, res, next) => {
+    console.log(`[API Debug] ${req.method} ${req.url} - Host: ${req.headers.host}, Origin: ${req.headers.origin}, IP: ${req.ip}`);
+    next();
+  });
+
   app.post('/api/extract', async (req, res) => {
     console.log(`[API] POST /api/extract - Host: ${req.headers.host}, Origin: ${req.headers.origin}, Body size: ${JSON.stringify(req.body).length} bytes`);
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, test } = req.body;

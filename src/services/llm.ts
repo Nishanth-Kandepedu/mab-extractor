@@ -317,16 +317,23 @@ export async function extractWithLLM(
     let attempts = 0;
     const maxAttempts = 120; // 10 minutes (5s intervals)
 
+    const baseUrl = window.location.origin;
+
     while (attempts < maxAttempts) {
+      const timestamp = Date.now();
       console.log(`[Extraction] Polling attempt ${attempts + 1}/${maxAttempts} for job ${jobId}...`);
       try {
-        const statusResponse = await fetch(`/api/extract/status/${jobId}`);
+        const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${timestamp}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
         if (!statusResponse.ok) {
-          console.error(`[Extraction] Status check failed: ${statusResponse.status}`);
+          console.error(`[Extraction] Status check failed: ${statusResponse.status} ${statusResponse.statusText}`);
           throw new Error(`Failed to check job status: ${statusResponse.status}`);
         }
 
         const job = await statusResponse.json();
+        console.log(`[Extraction] Job ${jobId} status: ${job.status}`);
 
         if (job.status === 'completed') {
           result = job.result;
@@ -337,11 +344,17 @@ export async function extractWithLLM(
       } catch (pollError: any) {
         // If it's a network error, retry a few times before giving up
         const isNetworkError = pollError.message?.toLowerCase().includes('fetch') || 
-                               pollError.message?.toLowerCase().includes('network');
+                               pollError.message?.toLowerCase().includes('network') ||
+                               pollError.name === 'TypeError';
         
         if (isNetworkError && attempts < maxAttempts - 1) {
           console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
+          // Check if we are still online
+          if (!navigator.onLine) {
+            console.error("[Extraction] Browser is offline. Waiting for connection...");
+          }
         } else {
+          console.error("[Extraction] Non-recoverable polling error:", pollError);
           throw pollError;
         }
       }

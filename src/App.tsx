@@ -116,7 +116,8 @@ function AppContent() {
   const testApi = async () => {
     try {
       const start = Date.now();
-      const res = await fetch('/api/extract', {
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/extract?t=${start}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -137,6 +138,23 @@ function AppContent() {
       console.error('API Test Failed - Full Error:', err);
       console.error('Current Origin:', window.location.origin);
       console.error('Current Protocol:', window.location.protocol);
+      console.error('Browser Online:', navigator.onLine);
+    }
+  };
+
+  const pingServer = async () => {
+    try {
+      const start = Date.now();
+      const res = await fetch(`/api/health?t=${start}`);
+      const end = Date.now();
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Server Ping: OK (${end - start}ms)\nVersion: ${data.version}`);
+      } else {
+        alert(`Server Ping: Failed (${res.status})`);
+      }
+    } catch (err: any) {
+      alert(`Server Ping: Error - ${err.message}`);
     }
   };
 
@@ -1153,6 +1171,8 @@ function AppContent() {
               <div className="mt-6 pt-4 border-t border-white/5 flex gap-4">
                 <button onClick={checkHealth} className="text-indigo-400 hover:underline">Refresh Health</button>
                 <button onClick={testApi} className="text-indigo-400 hover:underline">Test API Reachability</button>
+                <span className="mx-2 text-gray-600">|</span>
+                <button onClick={pingServer} className="text-indigo-400 hover:underline">Ping Server</button>
               </div>
             </div>
           </motion.div>
