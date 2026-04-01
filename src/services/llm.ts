@@ -9,41 +9,30 @@ IMPORTANT EXTRACTION RULES:
    - Main antibodies: "2419", "3125", etc.
    - Variants: "2419-0105", "2419-1204", "4540-033", etc.
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
-   - Strip common suffixes like "P2", "mAb", "antibody" from the ID if they are not part of the unique identifier.
 
-2. Sequence Extraction (CRITICAL):
-   - Extract ONLY the Variable Regions (VH and VL).
-   - EXCLUDE Constant Regions (CH, CL, Fc, etc.).
-   - Typical VH length: 115-125 amino acids.
-   - Typical VL length: 110-120 amino acids.
-   - If a sequence is much longer (e.g., 400+ AA), it likely contains a constant region; extract only the variable part.
-   - Sequences MUST be verbatim. No spaces, no numbers, no dashes.
+2. VL Chain Special Handling:
+   - VL chains may appear in a DIFFERENT TABLE than VH chains.
+   - VL sequences are typically 110-120 amino acids long.
+   - If VL appears incomplete, check the next page or table.
 
-3. CDR Identification:
-   - Identify CDR1, CDR2, and CDR3 for each chain.
-   - Use standard numbering (Kabat, Chothia, or IMGT) as implied by the document.
-   - Provide the verbatim sequence and the 0-indexed start/end positions within the fullSequence.
+3. Validation:
+   - VH sequences: typically 115-125 amino acids.
+   - VL sequences: typically 110-120 amino acids.
+   - If sequence length is outside this range, mark as [NEEDS_REVIEW].
 
-4. Source Priority:
-   - Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-   - Cross-reference Table IDs with Sequence Listing IDs (SEQ ID NO: X).
+4. Table Structure:
+   - Some antibodies may have their sequences split across multiple rows.
+   - For antibodies like "2419-1204", ensure you capture the COMPLETE sequence.
+   - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
 
-5. Evidence:
-   - evidenceLocation: Specify the page number, table number, or section.
-   - evidenceStatement: Provide a brief quote or description of where the sequence was found.
-
-6. Confidence Score:
-   - 0-100 based on verbatim match quality and ID clarity.
-
-7. Bispecifics:
-   - For bispecific antibodies (e.g., bsAb, xAb), extract BOTH heavy chains and their respective light chains.
-   - Group them under the same mAbName but as separate chain entries.
-
-8. Formatting:
-   - Return ONLY the JSON object. No markdown, no explanation.
-   - Ensure the JSON is valid and complete.
-   - If the document is very large, prioritize the most important antibodies first.
-   - Keep "summary" and "evidenceStatement" concise to save tokens.
+5. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+6. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+7. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+8. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+11. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+12. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 Output Schema:
 {
