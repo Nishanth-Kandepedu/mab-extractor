@@ -67,6 +67,7 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
+  thinkingLevel?: "HIGH" | "LOW" | "MINIMAL";
 }
 
 /**
@@ -194,13 +195,15 @@ export async function extractWithLLM(
     throw new Error("Input data is too large (max 50MB). Please select a smaller portion of the document.");
   }
   try {
-    const { provider, model } = options;
+  const { provider, model, thinkingLevel: manualThinkingLevel } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   let formattedInput: any;
 
+  const extractionPrompt = `Extract ALL mAb sequences from the following document.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim. Perform high-quality verbatim mining for all 34+ antibodies.`;
+
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `${extractionPrompt}\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -213,16 +216,19 @@ export async function extractWithLLM(
           mimeType: input.mimeType,
         },
       },
-      { text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining for all 34+ antibodies.` }
+      { text: extractionPrompt }
     ];
   }
+
+  const thinkingLevel = manualThinkingLevel || ((model?.includes('gemini-3') || (provider === 'gemini' && !model)) ? "HIGH" : undefined);
+  console.log(`[Extraction] Provider: ${provider}, Model: ${model || 'default'}, Thinking Level: ${thinkingLevel || 'none'}`);
 
     const payload = JSON.stringify({
       provider,
       model,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+      thinkingLevel,
       responseSchema: {
         type: "OBJECT",
         properties: {
