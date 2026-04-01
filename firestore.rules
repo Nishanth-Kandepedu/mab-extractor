@@ -45,12 +45,15 @@ service cloud.firestore {
     }
 
     function isNotDisabled() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      let accountId = userDoc.exists() ? userDoc.data.accountId : null;
-      let accountDoc = accountId != null ? get(/databases/$(database)/documents/accounts/$(accountId)) : null;
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let userDoc = exists(userPath) ? get(userPath) : null;
       
-      return (!userDoc.exists() || !('disabled' in userDoc.data) || userDoc.data.disabled == false) &&
-             (accountDoc == null || !accountDoc.exists() || !('disabled' in accountDoc.data) || accountDoc.data.disabled == false);
+      let accountId = (userDoc != null && 'accountId' in userDoc.data) ? userDoc.data.accountId : null;
+      let accountPath = accountId != null ? /databases/$(database)/documents/accounts/$(accountId) : null;
+      let accountDoc = (accountPath != null && exists(accountPath)) ? get(accountPath) : null;
+      
+      return (userDoc == null || !('disabled' in userDoc.data) || userDoc.data.disabled == false) &&
+             (accountDoc == null || !('disabled' in accountDoc.data) || accountDoc.data.disabled == false);
     }
 
     function isAdmin() {

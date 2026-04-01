@@ -245,22 +245,23 @@ function AppContent() {
     if (isGuestUser || isAdminUser) {
       try {
         const role = isAdminUser ? 'admin' : 'guest';
-        
-        // Check account status first
-        const accountRef = doc(db, 'accounts', lowerUsername);
-        const accountSnap = await getDocFromServer(accountRef);
-        
-        if (accountSnap.exists() && accountSnap.data().disabled) {
-          setLoginError('This account has been disabled by an administrator.');
-          return;
-        }
-
         intendedRoleRef.current = role;
         
         // Set persistence to session for guest/admin logins to avoid "sticky" logins on public terminals
         await setPersistence(auth, browserSessionPersistence);
         
         const { user: anonUser } = await signInAnonymously(auth);
+        
+        // Check account status AFTER login so we are authenticated
+        const accountRef = doc(db, 'accounts', lowerUsername);
+        const accountSnap = await getDocFromServer(accountRef);
+        
+        if (accountSnap.exists() && accountSnap.data().disabled) {
+          await auth.signOut();
+          setLoginError('This account has been disabled by an administrator.');
+          return;
+        }
+
         const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
         
