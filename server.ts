@@ -53,6 +53,9 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // Trust proxy for Railway/Cloud Run
+  app.set('trust proxy', 1);
+
   // Log available environment variables (keys only for security)
   console.log('--- Environment Diagnostics ---');
   console.log('Available Keys:', Object.keys(process.env).filter(key => 
@@ -64,11 +67,15 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // Force HTTPS in production
+  // Force HTTPS and security headers in production
   if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
+      // Set HSTS header to force HTTPS for 1 year
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      
       // Railway and most proxies use x-forwarded-proto
-      if (req.headers['x-forwarded-proto'] !== 'https') {
+      const proto = req.headers['x-forwarded-proto'];
+      if (proto && proto !== 'https') {
         return res.redirect(301, `https://${req.headers.host}${req.url}`);
       }
       next();
