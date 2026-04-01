@@ -63,13 +63,15 @@ export interface UserProfile {
   role: 'admin' | 'guest' | 'user';
   isAnonymous?: boolean;
   createdAt?: any;
+  disabled?: boolean;
+  lastActive?: any;
 }
 
 export interface ActivityLog {
   id?: string;
   userId: string;
   userDisplayName: string;
-  action: 'extraction_started' | 'extraction_completed' | 'download_csv' | 'login' | 'logout';
+  action: 'extraction_started' | 'extraction_completed' | 'download_csv' | 'login' | 'logout' | 'user_disabled' | 'user_enabled';
   patentId?: string;
   patentTitle?: string;
   timestamp: any;

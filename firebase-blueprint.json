@@ -81,7 +81,9 @@
         "email": { "type": "string", "format": "email" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user", "guest"] }
+        "role": { "type": "string", "enum": ["admin", "user", "guest"] },
+        "disabled": { "type": "boolean" },
+        "lastActive": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "role"]
     },

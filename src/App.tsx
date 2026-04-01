@@ -82,6 +82,7 @@ function AppContent() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -108,6 +109,15 @@ function AppContent() {
           
           if (userSnap.exists()) {
             const userData = userSnap.data();
+            
+            if (userData.disabled && userData.role !== 'admin') {
+              await auth.signOut();
+              setLoginError('Your account has been disabled by an administrator.');
+              setIsAuthLoading(false);
+              setIsAuthReady(true);
+              return;
+            }
+
             const profile: UserProfile = {
               uid: u.uid,
               email: u.email,
@@ -323,6 +333,7 @@ function AppContent() {
     if (!user) {
       setHistory([]);
       setActivityLogs([]);
+      setAllUsers([]);
       return;
     }
 
@@ -341,6 +352,8 @@ function AppContent() {
     });
 
     let unsubActivity = () => {};
+    let unsubUsers = () => {};
+
     if (user.role === 'admin') {
       const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
@@ -352,13 +365,64 @@ function AppContent() {
       }, (error) => {
         handleFirestoreError(error, OperationType.GET, 'activity_logs');
       });
+
+      const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      unsubUsers = onSnapshot(usersQuery, (snapshot) => {
+        const users = snapshot.docs.map(doc => ({
+          uid: doc.id,
+          ...doc.data()
+        })) as UserProfile[];
+        setAllUsers(users);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'users');
+      });
     }
 
     return () => {
       unsubHistory();
       unsubActivity();
+      unsubUsers();
     };
   }, [user]);
+
+  // Update lastActive
+  useEffect(() => {
+    if (user && isAuthReady) {
+      const updateLastActive = async () => {
+        try {
+          await updateDoc(doc(db, 'users', user.uid), {
+            lastActive: Timestamp.now()
+          });
+        } catch (err) {
+          // Ignore errors for lastActive updates to avoid spamming logs
+        }
+      };
+      updateLastActive();
+      const interval = setInterval(updateLastActive, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.uid, isAuthReady]);
+
+  const toggleUserStatus = async (targetUser: UserProfile) => {
+    if (user?.role !== 'admin') return;
+    const newStatus = !targetUser.disabled;
+    try {
+      await updateDoc(doc(db, 'users', targetUser.uid), {
+        disabled: newStatus
+      });
+      
+      // Log the action
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: user.uid,
+        userDisplayName: user.displayName || 'Admin',
+        action: newStatus ? 'user_disabled' : 'user_enabled',
+        timestamp: Timestamp.now(),
+        metadata: { targetUserId: targetUser.uid, targetUserDisplayName: targetUser.displayName }
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.uid}`);
+    }
+  };
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
@@ -1229,13 +1293,15 @@ function AppContent() {
                               log.action === 'extraction_completed' ? "bg-emerald-100 text-emerald-700" :
                               log.action === 'login' ? "bg-purple-100 text-purple-700" :
                               log.action === 'logout' ? "bg-zinc-100 text-zinc-700" :
+                              log.action === 'user_disabled' ? "bg-red-100 text-red-700" :
+                              log.action === 'user_enabled' ? "bg-emerald-100 text-emerald-700" :
                               "bg-zinc-100 text-zinc-700"
                             )}>
                               {log.action.replace('_', ' ')}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-zinc-500">
-                            {log.patentId || log.metadata?.role || '-'}
+                            {log.patentId || log.metadata?.targetUserDisplayName || log.metadata?.role || '-'}
                           </td>
                           <td className="px-6 py-4 text-zinc-400 font-mono text-xs">
                             {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '-'}
@@ -1247,6 +1313,82 @@ function AppContent() {
                           <td colSpan={4} className="px-6 py-10 text-center text-zinc-400 italic">No activity logs recorded yet.</td>
                         </tr>
                       )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* User Management Table */}
+              <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                  <h3 className="font-bold text-sm">User Management</h3>
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">{allUsers.length} Users</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-100">
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">User</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Role</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Usage</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Last Active</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Status</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {allUsers.map((u) => {
+                        const userExtractions = history.filter(h => h.userId === u.uid);
+                        return (
+                          <tr key={u.uid} className="hover:bg-zinc-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold">{u.displayName}</p>
+                              <p className="text-[10px] text-zinc-400 font-mono">{u.email || u.uid}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn(
+                                "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                                u.role === 'admin' ? "bg-amber-100 text-amber-700" :
+                                u.role === 'guest' ? "bg-zinc-100 text-zinc-700" :
+                                "bg-blue-100 text-blue-700"
+                              )}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-zinc-700">{userExtractions.length} runs</p>
+                              <p className="text-[10px] text-zinc-400 font-mono">
+                                {userExtractions.reduce((acc, curr) => acc + (curr.usageMetadata?.totalTokenCount || 0), 0).toLocaleString()} tokens
+                              </p>
+                            </td>
+                            <td className="px-6 py-4 text-zinc-500 text-xs font-mono">
+                              {u.lastActive ? new Date(u.lastActive.seconds * 1000).toLocaleString() : 'Never'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn(
+                                "inline-flex items-center gap-1.5 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                                u.disabled ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                              )}>
+                                <span className={cn("w-1 h-1 rounded-full", u.disabled ? "bg-red-500" : "bg-emerald-500")}></span>
+                                {u.disabled ? 'Disabled' : 'Active'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              {u.uid !== user.uid && (
+                                <button
+                                  onClick={() => toggleUserStatus(u)}
+                                  className={cn(
+                                    "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                                    u.disabled ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                  )}
+                                >
+                                  {u.disabled ? 'Enable Access' : 'Disable Access'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
