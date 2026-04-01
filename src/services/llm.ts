@@ -343,8 +343,11 @@ export async function extractWithLLM(
         }
       } catch (pollError: any) {
         // If it's a network error, retry a few times before giving up
-        const isNetworkError = pollError.message?.toLowerCase().includes('fetch') || 
-                               pollError.message?.toLowerCase().includes('network') ||
+        const errorMsg = pollError.message?.toLowerCase() || "";
+        const isNetworkError = errorMsg.includes('fetch') || 
+                               errorMsg.includes('network') ||
+                               errorMsg.includes('aborted') ||
+                               errorMsg.includes('failed to fetch') ||
                                pollError.name === 'TypeError';
         
         if (isNetworkError && attempts < maxAttempts - 1) {
@@ -359,8 +362,9 @@ export async function extractWithLLM(
         }
       }
 
-      // Wait 5 seconds before next poll
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Wait 5 seconds before next poll with jitter
+      const jitter = Math.floor(Math.random() * 1000);
+      await new Promise(resolve => setTimeout(resolve, 5000 + jitter));
       attempts++;
     }
 

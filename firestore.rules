@@ -60,10 +60,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return isAuthenticated() &&
         (request.auth.token.email == "nishanth.kandepedu@gmail.com" || 
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+         (exists(userPath) && get(userPath).data.role == 'admin'));
     }
 
     function hasRequiredFields(fields) {

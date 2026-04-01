@@ -174,8 +174,8 @@ function AppContent() {
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setIsAuthLoading(true);
       if (u) {
+        setIsAuthLoading(true);
         try {
           const userRef = doc(db, 'users', u.uid);
           const userSnap = await getDocFromServer(userRef);
@@ -234,7 +234,10 @@ function AppContent() {
             
             // Only create doc if not anonymous or if we want to persist guest info
             // For now, let's create it to ensure isAdmin() works for anonymous admins
-            await setDoc(userRef, newUser);
+            await setDoc(userRef, newUser).catch(err => {
+              console.error('Failed to create user doc:', err);
+              // Don't throw here, just log. We'll fallback to basic info.
+            });
             setUser(newUser);
             
             if (role === 'guest') {
@@ -324,6 +327,9 @@ function AppContent() {
         
         const { user: anonUser } = await signInAnonymously(auth);
         
+        // Use the actual current UID to avoid mismatch issues
+        const currentUid = auth.currentUser?.uid || anonUser.uid;
+        
         // Check account status AFTER login so we are authenticated
         const accountRef = doc(db, 'accounts', lowerUsername);
         const accountSnap = await getDocFromServer(accountRef);
@@ -337,9 +343,9 @@ function AppContent() {
         const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
         
-        const userRef = doc(db, 'users', anonUser.uid);
+        const userRef = doc(db, 'users', currentUid);
         const newUser: UserProfile = {
-          uid: anonUser.uid,
+          uid: currentUid,
           accountId: lowerUsername,
           email: null,
           displayName,
@@ -349,19 +355,19 @@ function AppContent() {
           createdAt: Timestamp.now()
         };
         
-        await setDoc(userRef, newUser).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${anonUser.uid}`));
+        await setDoc(userRef, newUser).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${currentUid}`));
         
         // Update account record
         await setDoc(accountRef, {
           id: lowerUsername,
           role,
-          lastUid: anonUser.uid,
+          lastUid: currentUid,
           lastActive: Timestamp.now()
         }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `accounts/${lowerUsername}`));
         
         // Log login activity
         await addDoc(collection(db, 'activity_logs'), {
-          userId: anonUser.uid,
+          userId: currentUid,
           accountId: lowerUsername,
           userDisplayName: displayName,
           action: 'login',
@@ -456,7 +462,7 @@ function AppContent() {
       return;
     }
 
-    const historyQuery = user.role === 'admin'
+    const historyQuery = (user.role === 'admin' && !user.isAnonymous)
       ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
@@ -648,12 +654,15 @@ function AppContent() {
             // Log activity
             addDoc(collection(db, 'activity_logs'), {
               userId: user.uid,
+              accountId: user.accountId,
               userDisplayName: user.displayName || 'Anonymous Guest',
               action: 'extraction_completed',
               patentId: result.patentId,
               patentTitle: result.patentTitle,
               timestamp: Timestamp.now()
-            }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
+            }).catch(err => {
+              console.warn('Failed to log activity:', err);
+            });
 
             addDoc(collection(db, 'extractions'), docData).then(docRef => {
               setState(prev => {
@@ -663,7 +672,7 @@ function AppContent() {
                 return prev;
               });
             }).catch(err => {
-              handleFirestoreError(err, OperationType.WRITE, 'extractions');
+              console.warn('Failed to auto-save extraction:', err);
             });
           }
         } catch (err) {
@@ -726,7 +735,9 @@ function AppContent() {
           patentId: result.patentId,
           patentTitle: result.patentTitle,
           timestamp: Timestamp.now()
-        }).catch(err => console.error('Failed to log activity:', err));
+        }).catch(err => {
+          console.warn('Failed to log activity:', err);
+        });
 
         addDoc(collection(db, 'extractions'), docData).then(docRef => {
           setState(prev => {
@@ -736,7 +747,7 @@ function AppContent() {
             return prev;
           });
         }).catch(err => {
-          console.error('Save failed:', err);
+          console.warn('Failed to auto-save extraction:', err);
         });
       }
     } catch (err) {
@@ -1412,27 +1423,40 @@ function AppContent() {
                 <div>
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
-                  {window.location.hostname === 'abminer.bio' && (
-                    <button
-                      onClick={() => window.location.href = 'https://abminer.up.railway.app'}
-                      className="mt-3 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Try on Railway URL (More Stable)
-                    </button>
-                  )}
-                  {(state.error.includes('503') || state.error.includes('429')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <button
                       onClick={() => {
-                        setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-                        setState(prev => ({ ...prev, error: null }));
+                        if (inputText) handleTextExtraction();
+                        else if (fileInputRef.current?.files?.[0]) handleFileUpload();
+                        else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
                       }}
-                      className="mt-3 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      Switch to Gemini 3 Flash & Retry
+                      Retry Extraction
                     </button>
-                  )}
+                    {window.location.hostname.includes('.bio') && (
+                      <button
+                        onClick={() => window.location.href = 'https://abminer.up.railway.app'}
+                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Try on Railway URL (More Stable)
+                      </button>
+                    )}
+                    {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                      <button
+                        onClick={() => {
+                          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                          setState(prev => ({ ...prev, error: null }));
+                        }}
+                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-200 transition-all flex items-center gap-2"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Switch to Flash & Retry
+                      </button>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}
