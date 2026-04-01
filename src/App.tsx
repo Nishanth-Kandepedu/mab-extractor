@@ -277,7 +277,7 @@ function AppContent() {
           createdAt: Timestamp.now()
         };
         
-        await setDoc(userRef, newUser);
+        await setDoc(userRef, newUser).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${anonUser.uid}`));
         
         // Update account record
         await setDoc(accountRef, {
@@ -285,7 +285,7 @@ function AppContent() {
           role,
           lastUid: anonUser.uid,
           lastActive: Timestamp.now()
-        }, { merge: true });
+        }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `accounts/${lowerUsername}`));
         
         // Log login activity
         await addDoc(collection(db, 'activity_logs'), {
@@ -295,7 +295,7 @@ function AppContent() {
           action: 'login',
           timestamp: Timestamp.now(),
           metadata: { role }
-        });
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
 
         setUser(newUser);
         setLoginError('');
@@ -343,7 +343,7 @@ function AppContent() {
           userDisplayName: user.displayName || 'User',
           action: 'logout',
           timestamp: Timestamp.now()
-        }).catch(err => console.error('Failed to log logout:', err));
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
       }
       
       if (auth.currentUser) {
