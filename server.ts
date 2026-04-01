@@ -182,7 +182,7 @@ async function startServer() {
           if (result && typeof result === 'object') {
             result.extractionTime = duration;
             result.modelUsed = model || 'gemini-3.1-pro-preview';
-            result.usageMetadata = response.candidates?.[0]?.usageMetadata || response.usageMetadata;
+            result.usageMetadata = response.usageMetadata;
           }
 
           jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
