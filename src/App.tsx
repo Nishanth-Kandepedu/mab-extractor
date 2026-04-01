@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog } from './types';
+import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
@@ -83,6 +83,7 @@ function AppContent() {
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -120,6 +121,7 @@ function AppContent() {
 
             const profile: UserProfile = {
               uid: u.uid,
+              accountId: userData.accountId,
               email: u.email,
               displayName: u.displayName || userData.displayName || (u.isAnonymous ? 'Guest Researcher' : 'User'),
               photoURL: u.photoURL,
@@ -128,6 +130,18 @@ function AppContent() {
               createdAt: userData.createdAt
             };
             setUser(profile);
+            
+            // Check if account is disabled
+            if (profile.accountId) {
+              const accountSnap = await getDocFromServer(doc(db, 'accounts', profile.accountId));
+              if (accountSnap.exists() && accountSnap.data().disabled) {
+                await auth.signOut();
+                setLoginError('This account has been disabled by an administrator.');
+                setIsAuthLoading(false);
+                setIsAuthReady(true);
+                return;
+              }
+            }
             
             // Default guests to Pro
             if (profile.role === 'guest') {
@@ -231,6 +245,16 @@ function AppContent() {
     if (isGuestUser || isAdminUser) {
       try {
         const role = isAdminUser ? 'admin' : 'guest';
+        
+        // Check account status first
+        const accountRef = doc(db, 'accounts', lowerUsername);
+        const accountSnap = await getDocFromServer(accountRef);
+        
+        if (accountSnap.exists() && accountSnap.data().disabled) {
+          setLoginError('This account has been disabled by an administrator.');
+          return;
+        }
+
         intendedRoleRef.current = role;
         
         // Set persistence to session for guest/admin logins to avoid "sticky" logins on public terminals
@@ -243,6 +267,7 @@ function AppContent() {
         const userRef = doc(db, 'users', anonUser.uid);
         const newUser: UserProfile = {
           uid: anonUser.uid,
+          accountId: lowerUsername,
           email: null,
           displayName,
           photoURL: null,
@@ -253,9 +278,18 @@ function AppContent() {
         
         await setDoc(userRef, newUser);
         
+        // Update account record
+        await setDoc(accountRef, {
+          id: lowerUsername,
+          role,
+          lastUid: anonUser.uid,
+          lastActive: Timestamp.now()
+        }, { merge: true });
+        
         // Log login activity
         await addDoc(collection(db, 'activity_logs'), {
           userId: anonUser.uid,
+          accountId: lowerUsername,
           userDisplayName: displayName,
           action: 'login',
           timestamp: Timestamp.now(),
@@ -353,6 +387,7 @@ function AppContent() {
 
     let unsubActivity = () => {};
     let unsubUsers = () => {};
+    let unsubAccounts = () => {};
 
     if (user.role === 'admin') {
       const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
@@ -376,12 +411,24 @@ function AppContent() {
       }, (error) => {
         handleFirestoreError(error, OperationType.GET, 'users');
       });
+
+      const accountsQuery = query(collection(db, 'accounts'), orderBy('id', 'asc'));
+      unsubAccounts = onSnapshot(accountsQuery, (snapshot) => {
+        const accounts = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Account[];
+        setAllAccounts(accounts);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'accounts');
+      });
     }
 
     return () => {
       unsubHistory();
       unsubActivity();
       unsubUsers();
+      unsubAccounts();
     };
   }, [user]);
 
@@ -393,6 +440,11 @@ function AppContent() {
           await updateDoc(doc(db, 'users', user.uid), {
             lastActive: Timestamp.now()
           });
+          if (user.accountId) {
+            await updateDoc(doc(db, 'accounts', user.accountId), {
+              lastActive: Timestamp.now()
+            });
+          }
         } catch (err) {
           // Ignore errors for lastActive updates to avoid spamming logs
         }
@@ -401,7 +453,29 @@ function AppContent() {
       const interval = setInterval(updateLastActive, 5 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [user?.uid, isAuthReady]);
+  }, [user?.uid, user?.accountId, isAuthReady]);
+
+  const toggleAccountStatus = async (targetAccount: Account) => {
+    if (user?.role !== 'admin') return;
+    const newStatus = !targetAccount.disabled;
+    try {
+      await updateDoc(doc(db, 'accounts', targetAccount.id), {
+        disabled: newStatus
+      });
+      
+      // Log the action
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: user.uid,
+        accountId: user.accountId,
+        userDisplayName: user.displayName || 'Admin',
+        action: newStatus ? 'account_disabled' : 'account_enabled',
+        timestamp: Timestamp.now(),
+        metadata: { targetAccountId: targetAccount.id }
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `accounts/${targetAccount.id}`);
+    }
+  };
 
   const toggleUserStatus = async (targetUser: UserProfile) => {
     if (user?.role !== 'admin') return;
@@ -414,6 +488,7 @@ function AppContent() {
       // Log the action
       await addDoc(collection(db, 'activity_logs'), {
         userId: user.uid,
+        accountId: user.accountId,
         userDisplayName: user.displayName || 'Admin',
         action: newStatus ? 'user_disabled' : 'user_enabled',
         timestamp: Timestamp.now(),
@@ -508,6 +583,7 @@ function AppContent() {
         const docData = {
           ...result,
           userId: user.uid,
+          accountId: user.accountId,
           userDisplayName: user.displayName || 'Anonymous Guest',
           userRole: user.role || 'guest',
           createdAt: Timestamp.now(),
@@ -518,6 +594,7 @@ function AppContent() {
         // Log activity
         addDoc(collection(db, 'activity_logs'), {
           userId: user.uid,
+          accountId: user.accountId,
           userDisplayName: user.displayName || 'Anonymous Guest',
           action: 'extraction_completed',
           patentId: result.patentId,
@@ -557,6 +634,7 @@ function AppContent() {
       const docData = {
         ...state.result,
         userId: user.uid,
+        accountId: user.accountId,
         createdAt: Timestamp.now(),
         status: 'pending'
       };
@@ -593,6 +671,7 @@ function AppContent() {
       if (user) {
         addDoc(collection(db, 'activity_logs'), {
           userId: user.uid,
+          accountId: user.accountId,
           userDisplayName: user.displayName || 'Anonymous Guest',
           action: 'download_csv',
           patentId: state.result.patentId,
@@ -1168,11 +1247,15 @@ function AppContent() {
                     Admin Intelligence Dashboard
                   </h2>
                   <button 
-                    onClick={() => window.location.reload()}
+                    onClick={() => {
+                      // Instead of reload, just trigger a re-fetch by updating state or just relying on real-time listeners
+                      // But since we want to "refresh", we can just clear local state if needed
+                      // For now, let's just make it a no-op or a simple toast
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium hover:bg-zinc-200 transition-all"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    Refresh Data
+                    Data is Real-time
                   </button>
                 </div>
                 <button onClick={() => setShowAdminDashboard(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
@@ -1318,17 +1401,17 @@ function AppContent() {
                 </div>
               </div>
 
-              {/* User Management Table */}
+              {/* Account Management Table */}
               <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
-                  <h3 className="font-bold text-sm">User Management</h3>
-                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">{allUsers.length} Users</span>
+                  <h3 className="font-bold text-sm">Account Management</h3>
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">{allAccounts.length} Accounts</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="border-b border-zinc-100">
-                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">User</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Account</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Role</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Usage</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Last Active</th>
@@ -1337,58 +1420,108 @@ function AppContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                      {allUsers.map((u) => {
-                        const userExtractions = history.filter(h => h.userId === u.uid);
+                      {allAccounts.map((acc) => {
+                        const accountExtractions = history.filter(h => h.accountId === acc.id);
                         return (
-                          <tr key={u.uid} className="hover:bg-zinc-50 transition-colors">
+                          <tr key={acc.id} className="hover:bg-zinc-50 transition-colors">
                             <td className="px-6 py-4">
-                              <p className="font-bold">{u.displayName}</p>
-                              <p className="text-[10px] text-zinc-400 font-mono">{u.email || u.uid}</p>
+                              <p className="font-bold">{acc.id}</p>
                             </td>
                             <td className="px-6 py-4">
                               <span className={cn(
                                 "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                                u.role === 'admin' ? "bg-amber-100 text-amber-700" :
-                                u.role === 'guest' ? "bg-zinc-100 text-zinc-700" :
-                                "bg-blue-100 text-blue-700"
+                                acc.role === 'admin' ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-700"
                               )}>
-                                {u.role}
+                                {acc.role}
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="font-bold text-zinc-700">{userExtractions.length} runs</p>
+                              <p className="font-bold text-zinc-700">{accountExtractions.length} runs</p>
                               <p className="text-[10px] text-zinc-400 font-mono">
-                                {userExtractions.reduce((acc, curr) => acc + (curr.usageMetadata?.totalTokenCount || 0), 0).toLocaleString()} tokens
+                                {accountExtractions.reduce((acc, curr) => acc + (curr.usageMetadata?.totalTokenCount || 0), 0).toLocaleString()} tokens
                               </p>
                             </td>
                             <td className="px-6 py-4 text-zinc-500 text-xs font-mono">
-                              {u.lastActive ? new Date(u.lastActive.seconds * 1000).toLocaleString() : 'Never'}
+                              {acc.lastActive ? new Date(acc.lastActive.seconds * 1000).toLocaleString() : 'Never'}
                             </td>
                             <td className="px-6 py-4">
                               <span className={cn(
                                 "inline-flex items-center gap-1.5 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                                u.disabled ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                                acc.disabled ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
                               )}>
-                                <span className={cn("w-1 h-1 rounded-full", u.disabled ? "bg-red-500" : "bg-emerald-500")}></span>
-                                {u.disabled ? 'Disabled' : 'Active'}
+                                <span className={cn("w-1 h-1 rounded-full", acc.disabled ? "bg-red-500" : "bg-emerald-500")}></span>
+                                {acc.disabled ? 'Disabled' : 'Active'}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              {u.uid !== user.uid && (
+                              {acc.id !== user.accountId && (
                                 <button
-                                  onClick={() => toggleUserStatus(u)}
+                                  onClick={() => toggleAccountStatus(acc)}
                                   className={cn(
                                     "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
-                                    u.disabled ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                    acc.disabled ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
                                   )}
                                 >
-                                  {u.disabled ? 'Enable Access' : 'Disable Access'}
+                                  {acc.disabled ? 'Enable Access' : 'Disable Access'}
                                 </button>
                               )}
                             </td>
                           </tr>
                         );
                       })}
+                      {allAccounts.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-10 text-center text-zinc-400 italic">No accounts found. Log in once to initialize.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* User Sessions Table */}
+              <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                  <h3 className="font-bold text-sm">Active Sessions (UIDs)</h3>
+                  <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">{allUsers.length} Sessions</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-100">
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Session UID</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Account</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Last Active</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {allUsers.map((u) => (
+                        <tr key={u.uid} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-mono text-xs">{u.uid}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs font-bold text-zinc-600">{u.accountId || 'None'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-zinc-500 text-xs font-mono">
+                            {u.lastActive ? new Date(u.lastActive.seconds * 1000).toLocaleString() : 'Never'}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {u.uid !== user.uid && (
+                              <button
+                                onClick={() => toggleUserStatus(u)}
+                                className={cn(
+                                  "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                                  u.disabled ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                )}
+                              >
+                                {u.disabled ? 'Enable Session' : 'Disable Session'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

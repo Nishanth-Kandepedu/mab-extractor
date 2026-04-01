@@ -1,83 +1,25 @@
 {
   "entities": {
-    "User": {
-      "title": "User Profile",
-      "description": "Information about the user",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "displayName": { "type": "string" },
-        "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user"] }
-      },
-      "required": ["uid", "email"]
-    },
-    "Extraction": {
-      "title": "mAb Extraction Result",
-      "description": "A single extraction result from a patent",
+    "Account": {
+      "title": "System Account",
+      "description": "A persistent account (e.g., guest1, admin) that can be managed.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "patentId": { "type": "string" },
-        "patentTitle": { "type": "string" },
-        "antibodies": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "mAbName": { "type": "string" },
-              "targetName": { "type": "string" },
-              "chains": { "type": "array" },
-              "properties": {
-                "type": "object",
-                "properties": {
-                  "targetActivity": { "type": "string" },
-                  "cellLine": { "type": "string" },
-                  "admet": { "type": "string" },
-                  "pk": { "type": "string" },
-                  "physchem": { "type": "string" },
-                  "otherProperties": { "type": "string" },
-                  "evidencePage": { "type": "string" }
-                }
-              },
-              "confidence": { "type": "number" },
-              "summary": { "type": "string" }
-            }
-          }
-        },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["pending", "validated", "rejected"] }
+        "role": { "type": "string", "enum": ["admin", "guest"] },
+        "disabled": { "type": "boolean" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "lastUid": { "type": "string" }
       },
-      "required": ["userId", "patentId", "antibodies", "createdAt"]
-    }
-  },
-  "firestore": {
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "User profile documents"
+      "required": ["id", "role"]
     },
-    "/extractions/{extractionId}": {
-      "schema": "Extraction",
-      "description": "Stored extraction results"
-    },
-    "/activity_logs/{logId}": {
-      "schema": "ActivityLog",
-      "description": "Audit logs of user actions"
-    },
-    "/access_requests/{requestId}": {
-      "schema": "AccessRequest",
-      "description": "Beta access requests from new users"
-    }
-  },
-  "entities": {
     "User": {
       "title": "User Profile",
-      "description": "Information about the user",
+      "description": "Information about a specific session/UID",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
+        "accountId": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
@@ -93,6 +35,7 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
+        "accountId": { "type": "string" },
         "patentId": { "type": "string" },
         "patentTitle": { "type": "string" },
         "antibodies": { "type": "array" },
@@ -107,6 +50,7 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
+        "accountId": { "type": "string" },
         "userDisplayName": { "type": "string" },
         "action": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" }
@@ -125,6 +69,28 @@
         "status": { "type": "string", "enum": ["new", "processed"] }
       },
       "required": ["name", "email", "message", "timestamp", "status"]
+    }
+  },
+  "firestore": {
+    "/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "System accounts (guest1, admin, etc.)"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents (sessions)"
+    },
+    "/extractions/{extractionId}": {
+      "schema": "Extraction",
+      "description": "Stored extraction results"
+    },
+    "/activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Audit logs of user actions"
+    },
+    "/access_requests/{requestId}": {
+      "schema": "AccessRequest",
+      "description": "Beta access requests from new users"
     }
   }
 }

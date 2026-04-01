@@ -44,17 +44,20 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == resource.data.userId;
     }
 
+    function isNotDisabled() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let accountId = userDoc.exists() ? userDoc.data.accountId : null;
+      let accountDoc = accountId != null ? get(/databases/$(database)/documents/accounts/$(accountId)) : null;
+      
+      return (!userDoc.exists() || !('disabled' in userDoc.data) || userDoc.data.disabled == false) &&
+             (accountDoc == null || !accountDoc.exists() || !('disabled' in accountDoc.data) || accountDoc.data.disabled == false);
+    }
+
     function isAdmin() {
       return isAuthenticated() &&
         (request.auth.token.email == "nishanth.kandepedu@gmail.com" || 
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
-    }
-
-    function isNotDisabled() {
-      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || 
-             !('disabled' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false;
     }
 
     function hasRequiredFields(fields) {
@@ -103,6 +106,11 @@ service cloud.firestore {
     // ===============================================================
     // Match Rules
     // ===============================================================
+
+    match /accounts/{accountId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);

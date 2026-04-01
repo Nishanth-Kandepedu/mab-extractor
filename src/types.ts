@@ -55,8 +55,17 @@ export interface UsageMetadata {
   cost?: number;
 }
 
+export interface Account {
+  id: string;
+  role: 'admin' | 'guest';
+  disabled?: boolean;
+  lastActive?: any;
+  lastUid?: string;
+}
+
 export interface UserProfile {
   uid: string;
+  accountId?: string;
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
@@ -70,8 +79,9 @@ export interface UserProfile {
 export interface ActivityLog {
   id?: string;
   userId: string;
+  accountId?: string;
   userDisplayName: string;
-  action: 'extraction_started' | 'extraction_completed' | 'download_csv' | 'login' | 'logout' | 'user_disabled' | 'user_enabled';
+  action: 'extraction_started' | 'extraction_completed' | 'download_csv' | 'login' | 'logout' | 'user_disabled' | 'user_enabled' | 'account_disabled' | 'account_enabled';
   patentId?: string;
   patentTitle?: string;
   timestamp: any;
@@ -81,6 +91,7 @@ export interface ActivityLog {
 export interface ExtractionResult {
   id?: string;
   userId?: string;
+  accountId?: string;
   patentId: string;
   patentTitle: string;
   antibodies: Antibody[];
