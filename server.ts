@@ -124,8 +124,8 @@ async function startServer() {
       return res.status(400).json({ error: "Input text is required for extraction." });
     }
     const inputSize = typeof input === 'string' ? input.length : (input.data ? input.data.length : 0);
-    if (inputSize > 10000000) { // 10MB limit on server
-      return res.status(413).json({ error: "Payload too large. Please select a smaller portion of the document." });
+    if (inputSize > 50000000) { // 50MB limit on server
+      return res.status(413).json({ error: "Payload too large (max 50MB). Please select a smaller portion of the document." });
     }
     const jobId = Math.random().toString(36).substring(7);
 

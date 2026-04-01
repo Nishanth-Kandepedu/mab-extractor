@@ -187,11 +187,11 @@ export async function extractWithLLM(
   if (typeof input !== 'string' && (!input.data || input.data.trim().length === 0)) {
     throw new Error("Input data is required for extraction.");
   }
-  if (typeof input === 'string' && input.length > 5000000) {
-    throw new Error("Input text is too large (max 5MB). Please select a smaller portion of the document.");
+  if (typeof input === 'string' && input.length > 50000000) {
+    throw new Error("Input text is too large (max 50MB). Please select a smaller portion of the document.");
   }
-  if (typeof input !== 'string' && input.data.length > 5000000) {
-    throw new Error("Input data is too large (max 5MB). Please select a smaller portion of the document.");
+  if (typeof input !== 'string' && input.data.length > 50000000) {
+    throw new Error("Input data is too large (max 50MB). Please select a smaller portion of the document.");
   }
   try {
     const { provider, model } = options;
