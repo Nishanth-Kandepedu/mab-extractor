@@ -1819,26 +1819,45 @@ function AppContent() {
                           )}
                         </div>
                         <h2 className="text-xl font-bold">{state.result.patentTitle}</h2>
-                        <div className="flex items-center gap-4 mt-1">
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3">
                           <p className="text-sm text-zinc-400 font-mono">{state.result.patentId}</p>
-                          {state.result.extractionTime && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Time: {(state.result.extractionTime / 1000).toFixed(1)}s
-                            </span>
-                          )}
-                          {state.result.usageMetadata && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Tokens: {state.result.usageMetadata.totalTokenCount}
-                            </span>
-                          )}
-                          {state.result.modelUsed && (
-                            <span className={cn(
-                              "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                              state.result.modelUsed.includes('flash') ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                            )}>
-                              {state.result.modelUsed.replace('gemini-', '').replace('-preview', '')}
-                            </span>
-                          )}
+                          
+                          <div className="flex items-center gap-4">
+                            {state.result.extractionTime && (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Duration</span>
+                                <span className="text-xs text-indigo-400 font-mono">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
+                              </div>
+                            )}
+                            
+                            {state.result.usageMetadata && (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Tokens</span>
+                                <span className="text-xs text-emerald-400 font-mono">
+                                  {(state.result.usageMetadata.totalTokenCount || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Est. Cost</span>
+                              <span className="text-xs text-amber-400 font-mono">
+                                ${((state.result.usageMetadata?.promptTokenCount || 0) * 0.0000035 + (state.result.usageMetadata?.candidatesTokenCount || 0) * 0.0000105).toFixed(4)}
+                              </span>
+                            </div>
+
+                            {state.result.modelUsed && (
+                              <div className="flex flex-col">
+                                <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Model</span>
+                                <span className={cn(
+                                  "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mt-0.5",
+                                  state.result.modelUsed.includes('flash') ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                                )}>
+                                  {state.result.modelUsed.replace('gemini-', '').replace('-preview', '')}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
