@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -99,83 +98,12 @@ function AppContent() {
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const [healthInfo, setHealthInfo] = useState<any>(null);
-
-  const checkHealth = async () => {
-    try {
-      const res = await fetch('/api/health');
-      if (res.ok) {
-        setHealthInfo(await res.json());
-      }
-    } catch (err) {
-      console.error('Health check failed:', err);
-    }
-  };
-
-  const testApi = async () => {
-    try {
-      const start = Date.now();
-      const baseUrl = window.location.origin;
-      const res = await fetch(`${baseUrl}/api/extract?t=${start}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          provider: 'gemini',
-          input: "Test input for reachability check.",
-          systemInstruction: "Respond with 'ok'",
-          test: true 
-        })
-      });
-      const end = Date.now();
-      const data = await res.json();
-      alert(`API Test: ${res.status} ${res.statusText} (${end - start}ms)\nJob ID: ${data.jobId || 'none'}`);
-      if (!res.ok) {
-        console.error('API Test Response Not OK:', res.status, res.statusText, data);
-      }
-    } catch (err: any) {
-      alert(`API Test Failed: ${err.message}. Check console for details.`);
-      console.error('API Test Failed - Full Error:', err);
-      console.error('Current Origin:', window.location.origin);
-      console.error('Current Protocol:', window.location.protocol);
-      console.error('Browser Online:', navigator.onLine);
-    }
-  };
-
-  const pingServer = async () => {
-    try {
-      const start = Date.now();
-      const res = await fetch(`/api/health?t=${start}`);
-      const end = Date.now();
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Server Ping: OK (${end - start}ms)\nVersion: ${data.version}`);
-      } else {
-        alert(`Server Ping: Failed (${res.status})`);
-      }
-    } catch (err: any) {
-      alert(`Server Ping: Error - ${err.message}`);
-    }
-  };
-
-  useEffect(() => {
-    if (showDebug) checkHealth();
-  }, [showDebug]);
-
-  // Initialize GA4
-  useEffect(() => {
-    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
-    if (measurementId) {
-      ReactGA.initialize(measurementId);
-      ReactGA.send({ hitType: "pageview", page: window.location.pathname });
-    }
-  }, []);
 
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setIsAuthLoading(true);
       if (u) {
-        setIsAuthLoading(true);
         try {
           const userRef = doc(db, 'users', u.uid);
           const userSnap = await getDocFromServer(userRef);
@@ -234,10 +162,7 @@ function AppContent() {
             
             // Only create doc if not anonymous or if we want to persist guest info
             // For now, let's create it to ensure isAdmin() works for anonymous admins
-            await setDoc(userRef, newUser).catch(err => {
-              console.error('Failed to create user doc:', err);
-              // Don't throw here, just log. We'll fallback to basic info.
-            });
+            await setDoc(userRef, newUser);
             setUser(newUser);
             
             if (role === 'guest') {
@@ -327,9 +252,6 @@ function AppContent() {
         
         const { user: anonUser } = await signInAnonymously(auth);
         
-        // Use the actual current UID to avoid mismatch issues
-        const currentUid = auth.currentUser?.uid || anonUser.uid;
-        
         // Check account status AFTER login so we are authenticated
         const accountRef = doc(db, 'accounts', lowerUsername);
         const accountSnap = await getDocFromServer(accountRef);
@@ -343,9 +265,9 @@ function AppContent() {
         const displayName = isAdminUser ? 'Admin' : `Guest Curator (${username})`;
         await updateProfile(anonUser, { displayName });
         
-        const userRef = doc(db, 'users', currentUid);
+        const userRef = doc(db, 'users', anonUser.uid);
         const newUser: UserProfile = {
-          uid: currentUid,
+          uid: anonUser.uid,
           accountId: lowerUsername,
           email: null,
           displayName,
@@ -355,31 +277,24 @@ function AppContent() {
           createdAt: Timestamp.now()
         };
         
-        await setDoc(userRef, newUser).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${currentUid}`));
+        await setDoc(userRef, newUser);
         
         // Update account record
         await setDoc(accountRef, {
           id: lowerUsername,
           role,
-          lastUid: currentUid,
+          lastUid: anonUser.uid,
           lastActive: Timestamp.now()
-        }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `accounts/${lowerUsername}`));
+        }, { merge: true });
         
         // Log login activity
         await addDoc(collection(db, 'activity_logs'), {
-          userId: currentUid,
+          userId: anonUser.uid,
           accountId: lowerUsername,
           userDisplayName: displayName,
           action: 'login',
           timestamp: Timestamp.now(),
           metadata: { role }
-        }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
-
-        // Track login event
-        ReactGA.event({
-          category: 'User',
-          action: 'Login',
-          label: role
         });
 
         setUser(newUser);
@@ -428,15 +343,10 @@ function AppContent() {
           userDisplayName: user.displayName || 'User',
           action: 'logout',
           timestamp: Timestamp.now()
-        }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
+        }).catch(err => console.error('Failed to log logout:', err));
       }
       
       if (auth.currentUser) {
-        // Track logout event
-        ReactGA.event({
-          category: 'User',
-          action: 'Logout'
-        });
         await logout();
       }
     } catch (err) {
@@ -462,14 +372,14 @@ function AppContent() {
       return;
     }
 
-    const historyQuery = (user.role === 'admin' && !user.isAnonymous)
+    const historyQuery = user.role === 'admin'
       ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
     const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
+        id: doc.id,
+        ...doc.data()
       })) as ExtractionResult[];
       setHistory(docs);
     }, (error) => {
@@ -484,8 +394,8 @@ function AppContent() {
       const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
         const logs = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
+          id: doc.id,
+          ...doc.data()
         })) as ActivityLog[];
         setActivityLogs(logs);
       }, (error) => {
@@ -495,8 +405,8 @@ function AppContent() {
       const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
       unsubUsers = onSnapshot(usersQuery, (snapshot) => {
         const users = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          uid: doc.id
+          uid: doc.id,
+          ...doc.data()
         })) as UserProfile[];
         setAllUsers(users);
       }, (error) => {
@@ -506,8 +416,8 @@ function AppContent() {
       const accountsQuery = query(collection(db, 'accounts'), orderBy('id', 'asc'));
       unsubAccounts = onSnapshot(accountsQuery, (snapshot) => {
         const accounts = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
+          id: doc.id,
+          ...doc.data()
         })) as Account[];
         setAllAccounts(accounts);
       }, (error) => {
@@ -563,13 +473,6 @@ function AppContent() {
         timestamp: Timestamp.now(),
         metadata: { targetAccountId: targetAccount.id }
       });
-
-      // Track admin action
-      ReactGA.event({
-        category: 'Admin',
-        action: newStatus ? 'Disable Account' : 'Enable Account',
-        label: targetAccount.id
-      });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `accounts/${targetAccount.id}`);
     }
@@ -609,7 +512,7 @@ function AppContent() {
     if (!file) return;
     console.log('File selected for extraction:', file.name, 'with page context:', pageContext);
 
-    setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, error: null }));
     
     try {
       const reader = new FileReader();
@@ -624,25 +527,10 @@ function AppContent() {
           setState({ isExtracting: false, result, error: null });
           setShowHistory(false);
 
-          // Clear file input so the same file can be uploaded again
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-
-          // Track extraction event
-          ReactGA.event({
-            category: 'Extraction',
-            action: 'File Upload',
-            label: file!.type,
-            value: result.antibodies.length
-          });
-
           // Save extraction for all users (including guests)
           if (user) {
-            // Strip any existing ID to avoid collisions
-            const { id: _id, ...resultData } = result as any;
             const docData = {
-              ...resultData,
+              ...result,
               userId: user.uid,
               userDisplayName: user.displayName || 'Anonymous Guest',
               userRole: user.role || 'guest',
@@ -654,33 +542,20 @@ function AppContent() {
             // Log activity
             addDoc(collection(db, 'activity_logs'), {
               userId: user.uid,
-              accountId: user.accountId,
               userDisplayName: user.displayName || 'Anonymous Guest',
               action: 'extraction_completed',
               patentId: result.patentId,
               patentTitle: result.patentTitle,
               timestamp: Timestamp.now()
-            }).catch(err => {
-              console.warn('Failed to log activity:', err);
-            });
+            }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'activity_logs'));
 
-            addDoc(collection(db, 'extractions'), docData).then(docRef => {
-              setState(prev => {
-                if (prev.result && !prev.result.id) {
-                  return { ...prev, result: { ...prev.result, id: docRef.id } };
-                }
-                return prev;
-              });
-            }).catch(err => {
-              console.warn('Failed to auto-save extraction:', err);
+            addDoc(collection(db, 'extractions'), docData).catch(err => {
+              handleFirestoreError(err, OperationType.WRITE, 'extractions');
             });
           }
         } catch (err) {
           console.error('Extraction error:', err);
           setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
         }
       };
       reader.onerror = () => {
@@ -696,7 +571,7 @@ function AppContent() {
   const handleTextExtraction = useCallback(async () => {
     if (!inputText.trim()) return;
     
-    setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, error: null }));
     try {
       const startTime = Date.now();
       const result = await extractWithLLM(inputText, llmOptions, pageContext);
@@ -704,19 +579,10 @@ function AppContent() {
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
 
-      // Track extraction event
-      ReactGA.event({
-        category: 'Extraction',
-        action: 'Text Input',
-        value: result.antibodies.length
-      });
-
       // Save extraction for all users (including guests)
       if (user) {
-        // Strip any existing ID to avoid collisions
-        const { id: _id, ...resultData } = result as any;
         const docData = {
-          ...resultData,
+          ...result,
           userId: user.uid,
           accountId: user.accountId,
           userDisplayName: user.displayName || 'Anonymous Guest',
@@ -735,19 +601,10 @@ function AppContent() {
           patentId: result.patentId,
           patentTitle: result.patentTitle,
           timestamp: Timestamp.now()
-        }).catch(err => {
-          console.warn('Failed to log activity:', err);
-        });
+        }).catch(err => console.error('Failed to log activity:', err));
 
-        addDoc(collection(db, 'extractions'), docData).then(docRef => {
-          setState(prev => {
-            if (prev.result && !prev.result.id) {
-              return { ...prev, result: { ...prev.result, id: docRef.id } };
-            }
-            return prev;
-          });
-        }).catch(err => {
-          console.warn('Failed to auto-save extraction:', err);
+        addDoc(collection(db, 'extractions'), docData).catch(err => {
+          console.error('Save failed:', err);
         });
       }
     } catch (err) {
@@ -775,22 +632,14 @@ function AppContent() {
 
     setIsSaving(true);
     try {
-      // Strip any existing ID to avoid collisions
-      const { id: _id, ...resultData } = state.result as any;
       const docData = {
-        ...resultData,
+        ...state.result,
         userId: user.uid,
         accountId: user.accountId,
         createdAt: Timestamp.now(),
         status: 'pending'
       };
-      const docRef = await addDoc(collection(db, 'extractions'), docData);
-      setState(prev => {
-        if (prev.result) {
-          return { ...prev, result: { ...prev.result, id: docRef.id } };
-        }
-        return prev;
-      });
+      await addDoc(collection(db, 'extractions'), docData);
       setIsSaving(false);
     } catch (error) {
       setIsSaving(false);
@@ -819,12 +668,6 @@ function AppContent() {
     
     setIsExporting(true);
     try {
-      // Track download event
-      ReactGA.event({
-        category: 'Export',
-        action: 'Download CSV',
-        label: state.result.patentId
-      });
       // Log download activity
       if (user) {
         addDoc(collection(db, 'activity_logs'), {
@@ -1112,13 +955,6 @@ function AppContent() {
         </div>
         
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowDebug(!showDebug)}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg transition-all"
-            title="Debug Info"
-          >
-            <AlertCircle className="w-5 h-5" />
-          </button>
           {(user as any)?.isGuest && !auth.currentUser && (
             <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-500 font-medium">
               <AlertCircle className="w-3 h-3" />
@@ -1183,46 +1019,6 @@ function AppContent() {
           )}
         </div>
       </header>
-
-      <AnimatePresence>
-        {showDebug && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-zinc-900 border-b border-white/10 overflow-hidden"
-          >
-            <div className="max-w-7xl mx-auto px-8 py-6 font-mono text-xs text-zinc-400">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  System Diagnostics
-                </h3>
-                <button onClick={() => setShowDebug(false)} className="hover:text-white">✕</button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <p><span className="text-zinc-600">Frontend Host:</span> {window.location.hostname}</p>
-                  <p><span className="text-zinc-600">Protocol:</span> {window.location.protocol}</p>
-                </div>
-                {healthInfo && (
-                  <div className="space-y-2">
-                    <p><span className="text-zinc-600">Server Host:</span> {healthInfo.hostname}</p>
-                    <p><span className="text-zinc-600">Server Env:</span> {healthInfo.nodeEnv}</p>
-                    <p><span className="text-zinc-600">Gemini Key:</span> {healthInfo.keys.gemini}</p>
-                  </div>
-                )}
-              </div>
-              <div className="mt-6 pt-4 border-t border-white/5 flex gap-4">
-                <button onClick={checkHealth} className="text-indigo-400 hover:underline">Refresh Health</button>
-                <button onClick={testApi} className="text-indigo-400 hover:underline">Test API Reachability</button>
-                <span className="mx-2 text-gray-600">|</span>
-                <button onClick={pingServer} className="text-indigo-400 hover:underline">Ping Server</button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
@@ -1423,40 +1219,18 @@ function AppContent() {
                 <div>
                   <p className="text-sm font-semibold text-red-900">Extraction Error</p>
                   <p className="text-xs text-red-700 mt-1">{state.error}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
+                  {(state.error.includes('503') || state.error.includes('429')) && llmOptions.model !== 'gemini-3-flash-preview' && (
                     <button
                       onClick={() => {
-                        if (inputText) handleTextExtraction();
-                        else if (fileInputRef.current?.files?.[0]) handleFileUpload();
-                        else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
+                        setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                        setState(prev => ({ ...prev, error: null }));
                       }}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
+                      className="mt-3 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      Retry Extraction
+                      Switch to Gemini 3 Flash & Retry
                     </button>
-                    {window.location.hostname.includes('.bio') && (
-                      <button
-                        onClick={() => window.location.href = 'https://abminer.up.railway.app'}
-                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Try on Railway URL (More Stable)
-                      </button>
-                    )}
-                    {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
-                      <button
-                        onClick={() => {
-                          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-                          setState(prev => ({ ...prev, error: null }));
-                        }}
-                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-200 transition-all flex items-center gap-2"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Switch to Flash & Retry
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </motion.div>
             )}
