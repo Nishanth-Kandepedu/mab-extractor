@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -74,6 +75,9 @@ async function startServer() {
 
   // Trust proxy for Railway/Cloud Run
   app.set('trust proxy', 1);
+  
+  // Enable CORS for all origins
+  app.use(cors());
 
   // Log available environment variables (keys only for security)
   console.log('--- Environment Diagnostics ---');
@@ -103,6 +107,7 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
+    console.log(`[API] POST /api/extract - Body size: ${JSON.stringify(req.body).length} bytes`);
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
     const jobId = Math.random().toString(36).substring(7);
 
