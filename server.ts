@@ -170,22 +170,13 @@ async function startServer() {
           });
 
           const text = response.text;
-          const duration = Date.now() - startTime;
-          console.log(`[Job ${jobId}] Gemini completed in ${(duration / 1000).toFixed(1)}s. Text length: ${text?.length}`);
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`[Job ${jobId}] Gemini completed in ${duration}s. Text length: ${text?.length}`);
 
           if (!text) {
             throw new Error("Empty response from Gemini API");
           }
-          
-          const result = extractJson(text);
-          // Add metadata to result
-          if (result && typeof result === 'object') {
-            result.extractionTime = duration;
-            result.modelUsed = model || 'gemini-3.1-pro-preview';
-            result.usageMetadata = response.usageMetadata;
-          }
-
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(text) });
           return;
         }
 
@@ -206,18 +197,7 @@ async function startServer() {
             max_tokens: 4096,
           });
           const content = response.choices[0].message.content || '{}';
-          const duration = Date.now() - startTime;
-          const result = extractJson(content);
-          if (result && typeof result === 'object') {
-            result.extractionTime = duration;
-            result.modelUsed = model || 'gpt-4o';
-            result.usageMetadata = {
-              totalTokenCount: response.usage?.total_tokens,
-              promptTokenCount: response.usage?.prompt_tokens,
-              candidatesTokenCount: response.usage?.completion_tokens
-            };
-          }
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content) });
           return;
         }
 
@@ -237,18 +217,7 @@ async function startServer() {
             temperature: 0,
           });
           const content = response.content[0].type === 'text' ? response.content[0].text : '';
-          const duration = Date.now() - startTime;
-          const result = extractJson(content || '{}');
-          if (result && typeof result === 'object') {
-            result.extractionTime = duration;
-            result.modelUsed = model || 'claude-3-5-sonnet-latest';
-            result.usageMetadata = {
-              totalTokenCount: response.usage.input_tokens + response.usage.output_tokens,
-              promptTokenCount: response.usage.input_tokens,
-              candidatesTokenCount: response.usage.output_tokens
-            };
-          }
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content || '{}') });
           return;
         }
 
