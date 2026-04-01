@@ -64,6 +64,17 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
+  // Force HTTPS in production
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+      // Railway and most proxies use x-forwarded-proto
+      if (req.headers['x-forwarded-proto'] !== 'https') {
+        return res.redirect(301, `https://${req.headers.host}${req.url}`);
+      }
+      next();
+    });
+  }
+
   // API Routes
   app.post('/api/extract', async (req, res) => {
     const { provider, model, input, systemInstruction, responseSchema } = req.body;
