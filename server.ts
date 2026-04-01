@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -84,7 +85,7 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
-    const { provider, model, input, systemInstruction, responseSchema } = req.body;
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
 
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
@@ -93,6 +94,37 @@ async function startServer() {
     };
 
     try {
+      if (provider === 'gemini') {
+        const apiKey = findKey('GEMINI_API_KEY');
+        console.log(`[Debug] Gemini Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
+
+        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+          return res.status(400).json({
+            error: 'Missing Gemini API Key. Please add GEMINI_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.'
+          });
+        }
+
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: model || 'gemini-3.1-pro-preview',
+          contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
+          config: {
+            systemInstruction,
+            temperature: 0,
+            thinkingConfig: thinkingLevel ? { thinkingLevel } : undefined,
+            maxOutputTokens: 65536,
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+          },
+        });
+
+        const text = response.text;
+        if (!text) {
+          throw new Error("Empty response from Gemini API");
+        }
+        return res.json(extractJson(text));
+      }
+
       if (provider === 'openai') {
         const apiKey = findKey('OPENAI_API_KEY');
         console.log(`[Debug] OpenAI Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
