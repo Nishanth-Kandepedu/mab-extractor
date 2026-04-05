@@ -418,6 +418,30 @@ export async function extractWithLLM(
     mAb.chains = mAb.chains.map(chain => {
       let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
       
+      // Re-calculate CDR indices to ensure they sync with the full sequence
+      // This is more robust than relying on LLM-generated indices which are often off-by-one or hallucinated.
+      let lastCdrEnd = 0;
+      chain.cdrs = chain.cdrs.map(cdr => {
+        const cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
+        // Search for the CDR sequence within the full sequence, starting from the end of the last CDR
+        let foundIndex = seq.indexOf(cleanCdrSeq, lastCdrEnd);
+        
+        // If not found after last CDR, try searching from the beginning (in case of out-of-order extraction)
+        if (foundIndex === -1) {
+          foundIndex = seq.indexOf(cleanCdrSeq);
+        }
+
+        if (foundIndex !== -1) {
+          const newStart = foundIndex;
+          const newEnd = foundIndex + cleanCdrSeq.length;
+          lastCdrEnd = newEnd;
+          return { ...cdr, sequence: cleanCdrSeq, start: newStart, end: newEnd };
+        }
+        
+        // Fallback: if sequence not found verbatim, keep original but warn
+        return { ...cdr, sequence: cleanCdrSeq };
+      });
+
       // Non-standard amino acid detection
       const nonStandard: string[] = [];
       for (const char of seq) {
