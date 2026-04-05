@@ -464,7 +464,7 @@ function AppContent() {
     }
 
     const historyQuery = (user.role === 'admin')
-      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
+      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(1000))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
     const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
@@ -482,7 +482,7 @@ function AppContent() {
     let unsubAccounts = () => {};
 
     if (user.role === 'admin') {
-      const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
+      const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(200));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
         const logs = snapshot.docs.map(doc => ({
           ...doc.data(),
