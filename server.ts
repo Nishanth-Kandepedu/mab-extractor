@@ -170,13 +170,24 @@ async function startServer() {
           });
 
           const text = response.text;
+          const usage = response.usageMetadata;
           const duration = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(`[Job ${jobId}] Gemini completed in ${duration}s. Text length: ${text?.length}`);
 
           if (!text) {
             throw new Error("Empty response from Gemini API");
           }
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(text) });
+          
+          const result = extractJson(text);
+          if (usage) {
+            result.usageMetadata = {
+              promptTokenCount: usage.promptTokenCount,
+              candidatesTokenCount: usage.candidatesTokenCount,
+              totalTokenCount: usage.totalTokenCount
+            };
+          }
+          
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
           return;
         }
 
@@ -197,7 +208,18 @@ async function startServer() {
             max_tokens: 4096,
           });
           const content = response.choices[0].message.content || '{}';
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content) });
+          const usage = response.usage;
+          const result = extractJson(content);
+          
+          if (usage) {
+            result.usageMetadata = {
+              promptTokenCount: usage.prompt_tokens,
+              candidatesTokenCount: usage.completion_tokens,
+              totalTokenCount: usage.total_tokens
+            };
+          }
+          
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
           return;
         }
 
@@ -217,7 +239,18 @@ async function startServer() {
             temperature: 0,
           });
           const content = response.content[0].type === 'text' ? response.content[0].text : '';
-          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content || '{}') });
+          const usage = response.usage;
+          const result = extractJson(content || '{}');
+          
+          if (usage) {
+            result.usageMetadata = {
+              promptTokenCount: usage.input_tokens,
+              candidatesTokenCount: usage.output_tokens,
+              totalTokenCount: usage.input_tokens + usage.output_tokens
+            };
+          }
+          
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result });
           return;
         }
 

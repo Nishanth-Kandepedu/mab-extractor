@@ -1920,14 +1920,14 @@ function AppContent() {
                           <span className="text-[10px] font-bold bg-indigo-500 text-white px-2 py-0.5 rounded uppercase tracking-wider inline-block">
                             Patent Source
                           </span>
-                          {state.result.id && (
+                          {state.result.status && (
                             <span className={cn(
                               "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                              state.result.status === 'validated' ? "bg-emerald-500" :
-                              state.result.status === 'rejected' ? "bg-red-500" :
-                              "bg-amber-500"
+                              state.result.status === 'validated' ? "bg-emerald-500 text-white" :
+                              state.result.status === 'rejected' ? "bg-red-500 text-white" :
+                              "bg-amber-500 text-white"
                             )}>
-                              {state.result.status}
+                              Status: {state.result.status}
                             </span>
                           )}
                         </div>
@@ -2033,40 +2033,38 @@ function AppContent() {
                         </div>
                       )}
 
-                      {state.result.usageMetadata && (
-                        <>
-                          <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <ArrowUpRight className="w-3 h-3 text-blue-400" />
-                              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Input Tokens</span>
-                            </div>
-                            <span className="text-lg font-bold text-white">
-                              {state.result.usageMetadata.promptTokenCount.toLocaleString()}
-                            </span>
-                          </div>
-                          
-                          <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
-                              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Output Tokens</span>
-                            </div>
-                            <span className="text-lg font-bold text-white">
-                              {state.result.usageMetadata.candidatesTokenCount.toLocaleString()}
-                            </span>
-                          </div>
+                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <ArrowUpRight className="w-3 h-3 text-blue-400" />
+                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Input Tokens</span>
+                        </div>
+                        <span className="text-lg font-bold text-white">
+                          {state.result.usageMetadata ? state.result.usageMetadata.promptTokenCount.toLocaleString() : '---'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
+                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Output Tokens</span>
+                        </div>
+                        <span className="text-lg font-bold text-white">
+                          {state.result.usageMetadata ? state.result.usageMetadata.candidatesTokenCount.toLocaleString() : '---'}
+                        </span>
+                      </div>
 
-                          <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Coins className="w-3 h-3 text-indigo-400" />
-                              <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
-                            </div>
-                            <span className="text-lg font-bold text-indigo-100">
-                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
-                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 10.50).toFixed(4)}
-                            </span>
-                          </div>
-                        </>
-                      )}
+                      <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Coins className="w-3 h-3 text-indigo-400" />
+                          <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
+                        </div>
+                        <span className="text-lg font-bold text-indigo-100">
+                          {state.result.usageMetadata ? 
+                            `$${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
+                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 10.50).toFixed(4)}` 
+                            : '---'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
