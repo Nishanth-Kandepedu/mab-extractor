@@ -1015,66 +1015,66 @@ function AppContent() {
         </div>
 
         {/* Right Pane: Login Form */}
-        <div className="flex-1 flex flex-col p-8 md:p-12 lg:p-16 justify-center bg-white overflow-y-auto">
-          <div className="max-w-sm w-full mx-auto">
-            <div className="mb-10">
-              <h2 className="text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Sign In</h2>
-              <p className="text-sm text-zinc-500">Access your research environment.</p>
+        <div className="flex-1 flex flex-col p-8 md:p-12 lg:p-20 xl:p-28 justify-center bg-white overflow-y-auto">
+          <div className="max-w-lg w-full mx-auto">
+            <div className="mb-14">
+              <h2 className="text-5xl lg:text-6xl font-bold text-zinc-900 mb-4 tracking-tighter">Sign In</h2>
+              <p className="text-lg lg:text-xl text-zinc-500 font-light leading-relaxed">Access your research environment.</p>
             </div>
 
-            <form onSubmit={handleGuestLogin} className="space-y-5 mb-10">
+            <form onSubmit={handleGuestLogin} className="space-y-8 mb-16">
               <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Username</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-[0.25em] mb-4 block">Username</label>
                 <input
                   type="text"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-5 text-lg focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none placeholder:text-zinc-300"
                   placeholder="Username"
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Password</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-[0.25em] mb-4 block">Password</label>
                 <input
                   type="password"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-5 text-lg focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none placeholder:text-zinc-300"
                   placeholder="••••••••"
                 />
               </div>
-              {loginError && <p className="text-xs text-red-600 font-medium">{loginError}</p>}
+              {loginError && <p className="text-sm text-red-600 font-medium">{loginError}</p>}
               <button
                 type="submit"
-                className="w-full bg-[#050505] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
+                className="w-full bg-[#050505] text-white py-5 rounded-2xl font-bold text-lg hover:bg-zinc-800 transition-all shadow-2xl shadow-zinc-200 active:scale-[0.99]"
               >
                 Sign In
               </button>
             </form>
 
-            <div className="relative mb-10">
+            <div className="relative mb-16">
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-zinc-100"></div>
               </div>
-              <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                <span className="bg-white px-4 text-zinc-300 font-bold">Waitlist</span>
+              <div className="relative flex justify-center text-xs uppercase tracking-[0.4em]">
+                <span className="bg-white px-8 text-zinc-300 font-black">Waitlist</span>
               </div>
             </div>
 
-            <form onSubmit={handleRequestAccess} className="space-y-4">
+            <form onSubmit={handleRequestAccess} className="space-y-6">
               <div>
-                <h3 className="text-sm font-bold text-zinc-900 mb-1">Join the Waitlist</h3>
-                <p className="text-xs text-zinc-500 leading-tight">Apply for early access to the AbMiner research platform.</p>
+                <h3 className="text-2xl lg:text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Join the Waitlist</h3>
+                <p className="text-base lg:text-lg text-zinc-500 font-light leading-relaxed">Apply for early access to the AbMiner research platform.</p>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <input 
                   type="text" 
                   placeholder="Full Name" 
                   required
                   value={requestAccessForm.name}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-base outline-none focus:border-indigo-500 transition-colors placeholder:text-zinc-300" 
                 />
                 <input 
                   type="email" 
@@ -1082,21 +1082,21 @@ function AppContent() {
                   required
                   value={requestAccessForm.email}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-4 text-base outline-none focus:border-indigo-500 transition-colors placeholder:text-zinc-300" 
                 />
               </div>
               <textarea 
                 placeholder="Briefly describe your research focus..." 
                 required
                 value={requestAccessForm.message}
-                onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none"
+                onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: (e as any).target.value }))}
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-6 py-5 text-base outline-none focus:border-indigo-500 transition-colors h-40 resize-none placeholder:text-zinc-300"
               />
               <button 
                 type="submit"
                 disabled={requestStatus === 'sending'}
                 className={cn(
-                  "w-full py-3 rounded-xl font-bold text-xs transition-all border",
+                  "w-full py-5 rounded-2xl font-bold text-base transition-all border shadow-md",
                   requestStatus === 'success' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
                   requestStatus === 'error' ? "bg-red-50 text-red-700 border-red-100" :
                   "bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100"
