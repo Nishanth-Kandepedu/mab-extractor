@@ -966,10 +966,10 @@ function AppContent() {
     return (
       <div className="h-screen flex flex-col md:flex-row bg-white overflow-hidden">
         {/* Left Pane: Messaging & Atmosphere */}
-        <div className="hidden md:flex md:w-[65%] bg-[#050505] relative overflow-hidden flex-col p-12 justify-between">
+        <div className="hidden md:flex md:w-[65%] bg-[#050505] relative overflow-hidden flex-col p-12 lg:p-16 justify-between">
           {/* Background Glows */}
-          <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/20 rounded-full blur-[120px]" />
-          <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[100px]" />
+          <div className="absolute top-[-15%] right-[-15%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[140px]" />
+          <div className="absolute bottom-[-15%] left-[-15%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[120px]" />
           
           {/* Logo */}
           <div className="relative z-10 flex items-center gap-3">
@@ -980,17 +980,17 @@ function AppContent() {
           </div>
 
           {/* Main Content */}
-          <div className="relative z-10 max-w-2xl">
+          <div className="relative z-10 max-w-4xl">
             <h1 className="text-6xl lg:text-7xl font-bold text-white leading-[0.9] mb-6 tracking-tighter">
               AbMiner<span className="text-indigo-500">.</span>
             </h1>
             
-            <p className="text-zinc-300 text-lg font-light leading-relaxed mb-8 max-w-xl">
+            <p className="text-zinc-300 text-xl font-light leading-relaxed mb-10 max-w-3xl">
               High-quality antibody sequence mining from complex patent landscapes. 
               Automated, validated, and analysis-ready.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10 mb-12">
               {[
                 { label: 'Sequence Integrity', desc: 'Validated recovery of VH/VL chains from fragmented patent data.' },
                 { label: 'Structural Mapping', desc: 'Precise identification of CDR regions using standardized numbering.' },
@@ -999,17 +999,17 @@ function AppContent() {
               ].map((feature, i) => (
                 <div key={i} className="group">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-4 bg-indigo-500/30 group-hover:bg-indigo-500 transition-colors" />
+                    <div className="w-1 h-3.5 bg-indigo-500/40 group-hover:bg-indigo-500 transition-colors" />
                     <span className="text-white font-bold text-xs uppercase tracking-widest">{feature.label}</span>
                   </div>
-                  <p className="text-zinc-400 text-sm leading-relaxed font-light">{feature.desc}</p>
+                  <p className="text-zinc-500 text-sm leading-relaxed font-light">{feature.desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Footer Info */}
-          <div className="relative z-10 flex items-center gap-6 text-xs font-mono text-zinc-500 uppercase tracking-widest">
+          <div className="relative z-10 flex items-center gap-6 text-xs font-mono text-zinc-600 uppercase tracking-widest">
             <span>abminer.bio</span>
           </div>
         </div>
@@ -1017,29 +1017,29 @@ function AppContent() {
         {/* Right Pane: Login Form */}
         <div className="flex-1 flex flex-col p-8 md:p-12 lg:p-16 justify-center bg-white overflow-y-auto">
           <div className="max-w-sm w-full mx-auto">
-            <div className="mb-8">
+            <div className="mb-10">
               <h2 className="text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Sign In</h2>
               <p className="text-sm text-zinc-500">Access your research environment.</p>
             </div>
 
-            <form onSubmit={handleGuestLogin} className="space-y-4 mb-8">
+            <form onSubmit={handleGuestLogin} className="space-y-5 mb-10">
               <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Username</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Username</label>
                 <input
                   type="text"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
                   placeholder="Username"
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Password</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Password</label>
                 <input
                   type="password"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
                   placeholder="••••••••"
                 />
               </div>
@@ -1052,7 +1052,7 @@ function AppContent() {
               </button>
             </form>
 
-            <div className="relative mb-8">
+            <div className="relative mb-10">
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-zinc-100"></div>
               </div>
@@ -1074,7 +1074,7 @@ function AppContent() {
                   required
                   value={requestAccessForm.name}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
                 />
                 <input 
                   type="email" 
@@ -1082,7 +1082,7 @@ function AppContent() {
                   required
                   value={requestAccessForm.email}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
                 />
               </div>
               <textarea 
@@ -1090,13 +1090,13 @@ function AppContent() {
                 required
                 value={requestAccessForm.message}
                 onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2 text-xs outline-none focus:border-indigo-500 transition-colors h-20 resize-none"
+                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none"
               />
               <button 
                 type="submit"
                 disabled={requestStatus === 'sending'}
                 className={cn(
-                  "w-full py-2.5 rounded-xl font-bold text-xs transition-all border",
+                  "w-full py-3 rounded-xl font-bold text-xs transition-all border",
                   requestStatus === 'success' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
                   requestStatus === 'error' ? "bg-red-50 text-red-700 border-red-100" :
                   "bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100"
