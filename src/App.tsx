@@ -1944,9 +1944,9 @@ function AppContent() {
                               <span className="text-[10px] text-zinc-500 font-mono">
                                 Total Tokens: {state.result.usageMetadata.totalTokenCount.toLocaleString()}
                               </span>
-                              {state.result.usageMetadata.thinkingTokenCount && (
+                              {state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > state.result.usageMetadata.candidatesTokenCount && (
                                 <span className="text-[10px] text-amber-500 font-mono">
-                                  (incl. {state.result.usageMetadata.thinkingTokenCount.toLocaleString()} thinking)
+                                  (incl. {(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - state.result.usageMetadata.candidatesTokenCount).toLocaleString()} thinking)
                                 </span>
                               )}
                             </div>
@@ -2057,12 +2057,12 @@ function AppContent() {
                         </div>
                         <span className="text-lg font-bold text-white">
                           {state.result.usageMetadata ? 
-                            (state.result.usageMetadata.candidatesTokenCount + (state.result.usageMetadata.thinkingTokenCount || 0)).toLocaleString() 
+                            (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount).toLocaleString() 
                             : '---'}
                         </span>
-                        {state.result.usageMetadata?.thinkingTokenCount && (
+                        {state.result.usageMetadata && (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > state.result.usageMetadata.candidatesTokenCount) && (
                           <span className="text-[9px] text-amber-500/70 mt-1">
-                            {state.result.usageMetadata.candidatesTokenCount.toLocaleString()} response + {state.result.usageMetadata.thinkingTokenCount.toLocaleString()} thinking
+                            {state.result.usageMetadata.candidatesTokenCount.toLocaleString()} response + {(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - state.result.usageMetadata.candidatesTokenCount).toLocaleString()} thinking
                           </span>
                         )}
                       </div>
@@ -2075,7 +2075,7 @@ function AppContent() {
                         <span className="text-lg font-bold text-indigo-100">
                           {state.result.usageMetadata ? 
                             `$${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
-                                ((state.result.usageMetadata.candidatesTokenCount + (state.result.usageMetadata.thinkingTokenCount || 0)) / 1000000) * 10.50).toFixed(4)}` 
+                                ((state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount) / 1000000) * 10.50).toFixed(4)}` 
                             : '---'}
                         </span>
                       </div>

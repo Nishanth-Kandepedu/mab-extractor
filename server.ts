@@ -173,6 +173,7 @@ async function startServer() {
           const usage = response.usageMetadata;
           const duration = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(`[Job ${jobId}] Gemini completed in ${duration}s. Text length: ${text?.length}`);
+          console.log(`[Job ${jobId}] Raw Usage Metadata:`, JSON.stringify(usage, null, 2));
 
           if (!text) {
             throw new Error("Empty response from Gemini API");
