@@ -990,7 +990,7 @@ function AppContent() {
               Automated, validated, and analysis-ready.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
               {[
                 { label: 'Sequence Integrity', desc: 'Validated recovery of VH/VL chains from fragmented patent data.' },
                 { label: 'Structural Mapping', desc: 'Precise identification of CDR regions using standardized numbering.' },
@@ -998,18 +998,18 @@ function AppContent() {
                 { label: 'Discovery Acceleration', desc: 'Accelerated identification of therapeutic candidates within complex patent landscapes.' }
               ].map((feature, i) => (
                 <div key={i} className="group">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-1 h-3 bg-indigo-500/30 group-hover:bg-indigo-500 transition-colors" />
-                    <span className="text-white font-bold text-[10px] uppercase tracking-widest">{feature.label}</span>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1 h-4 bg-indigo-500/30 group-hover:bg-indigo-500 transition-colors" />
+                    <span className="text-white font-bold text-xs uppercase tracking-widest">{feature.label}</span>
                   </div>
-                  <p className="text-zinc-500 text-[10px] leading-relaxed">{feature.desc}</p>
+                  <p className="text-zinc-400 text-sm leading-relaxed font-light">{feature.desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Footer Info */}
-          <div className="relative z-10 flex items-center gap-6 text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+          <div className="relative z-10 flex items-center gap-6 text-xs font-mono text-zinc-500 uppercase tracking-widest">
             <span>abminer.bio</span>
           </div>
         </div>
@@ -1024,7 +1024,7 @@ function AppContent() {
 
             <form onSubmit={handleGuestLogin} className="space-y-4 mb-8">
               <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Username</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Username</label>
                 <input
                   type="text"
                   value={loginForm.username}
@@ -1034,7 +1034,7 @@ function AppContent() {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Password</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 block">Password</label>
                 <input
                   type="password"
                   value={loginForm.password}
@@ -1056,7 +1056,7 @@ function AppContent() {
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-zinc-100"></div>
               </div>
-              <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
+              <div className="relative flex justify-center text-xs uppercase tracking-widest">
                 <span className="bg-white px-4 text-zinc-300 font-bold">Waitlist</span>
               </div>
             </div>
@@ -1064,7 +1064,7 @@ function AppContent() {
             <form onSubmit={handleRequestAccess} className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 mb-1">Join the Waitlist</h3>
-                <p className="text-[11px] text-zinc-500 leading-tight">Apply for early access to the AbMiner research platform.</p>
+                <p className="text-xs text-zinc-500 leading-tight">Apply for early access to the AbMiner research platform.</p>
               </div>
               
               <div className="grid grid-cols-2 gap-3">
