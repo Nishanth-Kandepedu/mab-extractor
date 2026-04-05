@@ -52,15 +52,18 @@ service cloud.firestore {
       let accountPath = accountId != null ? /databases/$(database)/documents/accounts/$(accountId) : null;
       let accountDoc = (accountPath != null && exists(accountPath)) ? get(accountPath) : null;
       
-      return (userDoc == null || !('disabled' in userDoc.data) || userDoc.data.disabled == false) &&
-             (accountDoc == null || !('disabled' in accountDoc.data) || accountDoc.data.disabled == false);
+      // If doc doesn't exist, it's not disabled
+      let userDisabled = userDoc != null && 'disabled' in userDoc.data && userDoc.data.disabled == true;
+      let accountDisabled = accountDoc != null && 'disabled' in accountDoc.data && accountDoc.data.disabled == true;
+      
+      return !userDisabled && !accountDisabled;
     }
 
     function isAdmin() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return isAuthenticated() &&
         (request.auth.token.email == "nishanth.kandepedu@gmail.com" || 
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+         (exists(userPath) && get(userPath).data.role == 'admin'));
     }
 
     function hasRequiredFields(fields) {
@@ -112,7 +115,14 @@ service cloud.firestore {
 
     match /accounts/{accountId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      // Allow users to update their own account record during login
+      allow write: if isAdmin() || (isAuthenticated() && (
+        // Either the user already has this accountId
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountId == accountId) ||
+        // Or they are just setting it for the first time (create/update user doc happens first in App.tsx)
+        (request.resource.data.id == accountId)
+      ));
     }
 
     match /users/{userId} {

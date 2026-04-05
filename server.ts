@@ -4,12 +4,32 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// In-memory job store (Note: This will reset on server restart)
+const jobs = new Map<string, {
+  status: 'pending' | 'completed' | 'failed';
+  result?: any;
+  error?: string;
+  startTime: number;
+}>();
+
+// Cleanup old jobs every hour
+setInterval(() => {
+  const oneHourAgo = Date.now() - 3600000;
+  for (const [id, job] of jobs.entries()) {
+    if (job.startTime < oneHourAgo) {
+      jobs.delete(id);
+    }
+  }
+}, 3600000);
 
 /**
  * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
@@ -53,6 +73,12 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // Trust proxy for Railway/Cloud Run
+  app.set('trust proxy', 1);
+  
+  // Enable CORS for all origins
+  app.use(cors());
+
   // Log available environment variables (keys only for security)
   console.log('--- Environment Diagnostics ---');
   console.log('Available Keys:', Object.keys(process.env).filter(key => 
@@ -62,72 +88,185 @@ async function startServer() {
   console.log('ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
   console.log('-------------------------------');
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+  // Force HTTPS and security headers in production
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+      // Set HSTS header to force HTTPS for 1 year
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+      
+      // Railway and most proxies use x-forwarded-proto
+      const proto = req.headers['x-forwarded-proto'];
+      if (proto && proto !== 'https') {
+        return res.redirect(301, `https://${req.headers.host}${req.url}`);
+      }
+      next();
+    });
+  }
 
   // API Routes
+  app.use('/api', (req, res, next) => {
+    console.log(`[API Debug] ${req.method} ${req.url} - Host: ${req.headers.host}, Origin: ${req.headers.origin}, IP: ${req.ip}`);
+    next();
+  });
+
   app.post('/api/extract', async (req, res) => {
-    const { provider, model, input, systemInstruction, responseSchema } = req.body;
+    console.log(`[API] POST /api/extract - Host: ${req.headers.host}, Origin: ${req.headers.origin}, Body size: ${JSON.stringify(req.body).length} bytes`);
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, test } = req.body;
+    if (test) {
+      console.log(`[API] Test request received from ${req.headers.origin}`);
+      return res.json({ jobId: 'test-job', status: 'completed', result: { status: 'ok' } });
+    }
+    
+    if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+      return res.status(400).json({ error: "Input text is required for extraction." });
+    }
+    const inputSize = typeof input === 'string' ? input.length : (input.data ? input.data.length : 0);
+    if (inputSize > 50000000) { // 50MB limit on server
+      return res.status(413).json({ error: "Payload too large (max 50MB). Please select a smaller portion of the document." });
+    }
+    const jobId = Math.random().toString(36).substring(7);
 
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
       const key = Object.keys(process.env).find(k => k.toUpperCase().includes(pattern.toUpperCase()));
-      return key ? process.env[key] : null;
+      if (key) {
+        const val = process.env[key];
+        console.log(`[Debug] Found key ${key} (Length: ${val?.length})`);
+        return val;
+      }
+      return null;
     };
 
-    try {
-      if (provider === 'openai') {
-        const apiKey = findKey('OPENAI_API_KEY');
-        console.log(`[Debug] OpenAI Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
-        
-        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-          return res.status(400).json({ 
-            error: 'Missing OpenAI API Key. Please add OPENAI_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
+    // Initialize job
+    jobs.set(jobId, { status: 'pending', startTime: Date.now() });
+
+    // Start extraction in background
+    (async () => {
+      try {
+        console.log(`[Job ${jobId}] Starting ${provider} extraction using model ${model}...`);
+        const startTime = Date.now();
+
+        if (provider === 'gemini') {
+          const apiKey = findKey('GEMINI_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing Gemini API Key. Please add GEMINI_API_KEY to the Secrets/Settings menu in AI Studio.');
+          }
+
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: model || 'gemini-3.1-pro-preview',
+            contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
+            config: {
+              systemInstruction,
+              temperature: 0,
+              thinkingConfig: thinkingLevel ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
+              maxOutputTokens: 65536,
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+            },
           });
+
+          const text = response.text;
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`[Job ${jobId}] Gemini completed in ${duration}s. Text length: ${text?.length}`);
+
+          if (!text) {
+            throw new Error("Empty response from Gemini API");
+          }
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(text) });
+          return;
         }
-        const openai = new OpenAI({ apiKey });
-        const response = await openai.chat.completions.create({
-          model: model || 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0,
-          max_tokens: 4096, // Increased for large extractions
-        });
-        const content = response.choices[0].message.content || '{}';
-        return res.json(extractJson(content));
-      }
 
-      if (provider === 'anthropic') {
-        const apiKey = findKey('ANTHROPIC_API_KEY');
-        console.log(`[Debug] Anthropic Key Found: ${!!apiKey} (Starts with: ${apiKey?.substring(0, 4)}...)`);
-
-        if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-          return res.status(400).json({ 
-            error: 'Missing Anthropic API Key. Please add ANTHROPIC_API_KEY to the Secrets/Settings menu in AI Studio and click RESTART in the preview bar.' 
+        if (provider === 'openai') {
+          const apiKey = findKey('OPENAI_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing OpenAI API Key.');
+          }
+          const openai = new OpenAI({ apiKey });
+          const response = await openai.chat.completions.create({
+            model: model || 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0,
+            max_tokens: 4096,
           });
+          const content = response.choices[0].message.content || '{}';
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content) });
+          return;
         }
-        const anthropic = new Anthropic({ apiKey });
-        const response = await anthropic.messages.create({
-          model: model || 'claude-3-5-sonnet-latest',
-          max_tokens: 4096,
-          system: systemInstruction,
-          messages: [
-            { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
-          ],
-          temperature: 0,
-        });
-        // Anthropic doesn't have a native JSON mode like OpenAI, so we parse the text
-        const content = response.content[0].type === 'text' ? response.content[0].text : '';
-        return res.json(extractJson(content || '{}'));
-      }
 
-      res.status(400).json({ error: 'Invalid provider' });
-    } catch (error: any) {
-      console.error('Extraction error:', error);
-      res.status(500).json({ error: error.message });
+        if (provider === 'anthropic') {
+          const apiKey = findKey('ANTHROPIC_API_KEY');
+          if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+            throw new Error('Missing Anthropic API Key.');
+          }
+          const anthropic = new Anthropic({ apiKey });
+          const response = await anthropic.messages.create({
+            model: model || 'claude-3-5-sonnet-latest',
+            max_tokens: 4096,
+            system: systemInstruction,
+            messages: [
+              { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+            ],
+            temperature: 0,
+          });
+          const content = response.content[0].type === 'text' ? response.content[0].text : '';
+          jobs.set(jobId, { ...jobs.get(jobId)!, status: 'completed', result: extractJson(content || '{}') });
+          return;
+        }
+
+        throw new Error('Invalid provider');
+      } catch (error: any) {
+        console.error(`[Job ${jobId}] Error:`, error);
+        jobs.set(jobId, { ...jobs.get(jobId)!, status: 'failed', error: error.message });
+      }
+    })();
+
+    // Return jobId immediately
+    res.json({ jobId });
+  });
+
+  app.get('/api/extract/status/:jobId', (req, res) => {
+    const { jobId } = req.params;
+    const job = jobs.get(jobId);
+    if (!job) {
+      console.warn(`[API] Job status check failed - Job ${jobId} not found`);
+      return res.status(404).json({ error: 'Job not found' });
     }
+    console.log(`[API] Job status check - Job ${jobId}: ${job.status}`);
+    res.json(job);
+  });
+
+  app.get('/api/health', (req, res) => {
+    const mask = (key: string | undefined) => {
+      if (!key || key === 'undefined') return 'missing';
+      if (key.length < 8) return 'too short';
+      return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
+    };
+
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      version: '1.2.1',
+      hostname: req.headers.host,
+      nodeEnv: process.env.NODE_ENV,
+      proxy: {
+        forwardedFor: req.headers['x-forwarded-for'],
+        forwardedProto: req.headers['x-forwarded-proto'],
+        realIp: req.headers['x-real-ip'],
+      },
+      keys: {
+        gemini: mask(process.env.GEMINI_API_KEY),
+        openai: mask(process.env.OPENAI_API_KEY),
+        anthropic: mask(process.env.ANTHROPIC_API_KEY),
+      }
+    });
   });
 
   // Vite middleware for development
@@ -145,9 +284,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  // Increase timeouts for long-running LLM extractions (up to 10 minutes)
+  server.timeout = 600000;
+  server.keepAliveTimeout = 610000;
+  server.headersTimeout = 620000;
 }
 
 startServer();

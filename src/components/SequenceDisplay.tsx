@@ -15,10 +15,12 @@ interface SequenceDisplayProps {
 }
 
 export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEditable, onUpdate }) => {
-  const { fullSequence, cdrs, type } = chain;
+  const { fullSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids } = chain;
   const [isEditing, setIsEditing] = React.useState(false);
   const [tempSequence, setTempSequence] = React.useState(fullSequence);
   const [copied, setCopied] = React.useState(false);
+
+  const STANDARD_AMINO_ACIDS = new Set("ACDEFGHIKLMNPQRSTVWY");
 
   // Sync tempSequence if fullSequence changes externally
   React.useEffect(() => {
@@ -48,47 +50,36 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
 
   const renderSequence = () => {
     const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-
-    sortedCdrs.forEach((cdr, idx) => {
-      // Add non-CDR part
-      if (cdr.start > lastIndex) {
-        parts.push(
-          <span key={`non-cdr-${idx}`} className="text-zinc-400">
-            {fullSequence.slice(lastIndex, cdr.start)}
-          </span>
-        );
-      }
-
-      // Add CDR part
-      const cdrColor = 
+    
+    for (let i = 0; i < fullSequence.length; i++) {
+      const char = fullSequence[i];
+      const isNonStandard = !STANDARD_AMINO_ACIDS.has(char.toUpperCase());
+      
+      // Check if this index is part of a CDR
+      const cdr = sortedCdrs.find(c => i >= c.start && i < c.end);
+      
+      const cdrColor = cdr ? (
         cdr.type === 'CDR1' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
         cdr.type === 'CDR2' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-        'bg-amber-50 text-amber-700 border-amber-100';
+        'bg-amber-50 text-amber-700 border-amber-100'
+      ) : '';
 
       parts.push(
         <span 
-          key={`cdr-${idx}`} 
+          key={i} 
           className={cn(
-            "px-0.5 rounded border font-bold relative group cursor-default transition-all hover:scale-105",
-            cdrColor
+            "inline-block transition-all",
+            isNonStandard && "bg-red-500 text-white font-bold px-0.5 rounded animate-pulse",
+            cdr && !isNonStandard && cn("px-0.5 rounded border font-bold relative group cursor-default", cdrColor),
+            !cdr && !isNonStandard && "text-zinc-400"
           )}
         >
-          {cdr.sequence}
-          <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg">
-            {cdr.type}
-          </span>
-        </span>
-      );
-
-      lastIndex = cdr.end;
-    });
-
-    // Add remaining part
-    if (lastIndex < fullSequence.length) {
-      parts.push(
-        <span key="final-part" className="text-zinc-400">
-          {fullSequence.slice(lastIndex)}
+          {char}
+          {cdr && i === cdr.start && (
+            <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg">
+              {cdr.type}
+            </span>
+          )}
         </span>
       );
     }
@@ -99,7 +90,7 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
   return (
     <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       <div className="bg-zinc-50 border-b border-zinc-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className={cn(
             "w-2 h-2 rounded-full",
             type === 'Heavy' ? "bg-indigo-500" : "bg-emerald-500"
@@ -107,8 +98,28 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
           <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
             {type} Chain Variable Region
           </h3>
+          {seqId && (
+            <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">
+              {seqId}
+            </span>
+          )}
+          {pageNumber && (
+            <span className="text-[9px] font-mono bg-zinc-200 text-zinc-600 px-2 py-0.5 rounded">
+              Page {pageNumber}
+            </span>
+          )}
+          {tableId && (
+            <span className="text-[9px] font-mono bg-zinc-200 text-zinc-600 px-2 py-0.5 rounded">
+              {tableId}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {hasNonStandardAminoAcids && (
+            <span className="text-[9px] font-bold text-red-600 uppercase tracking-wider animate-pulse">
+              Non-Standard Codes Detected
+            </span>
+          )}
           {isEditable && !isEditing && (
             <button 
               onClick={() => setIsEditing(true)}

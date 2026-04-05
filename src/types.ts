@@ -9,6 +9,11 @@ export interface Chain {
   type: 'Heavy' | 'Light';
   fullSequence: string;
   cdrs: CDR[];
+  seqId?: string;
+  pageNumber?: number;
+  tableId?: string;
+  hasNonStandardAminoAcids?: boolean;
+  nonStandardAminoAcids?: string[];
 }
 
 export type ExtractionTier = 'fast' | 'balanced' | 'extended';
@@ -46,6 +51,9 @@ export interface Antibody {
   reviewReason?: string;
   evidenceLocation?: string; // e.g., "Page 42", "Table 12"
   evidenceStatement?: string; // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
+  seqId?: string; // Overall SEQ ID if applicable
+  pageNumber?: number;
+  tableId?: string;
 }
 
 export interface UsageMetadata {

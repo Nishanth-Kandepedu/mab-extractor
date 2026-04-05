@@ -1,7 +1,4 @@
-import { GoogleGenAI, Type, GenerateContentResponse, ThinkingLevel } from "@google/genai";
 import { ExtractionResult } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -23,19 +20,26 @@ IMPORTANT EXTRACTION RULES:
    - VL sequences: typically 110-120 amino acids.
    - If sequence length is outside this range, mark as [NEEDS_REVIEW].
 
-4. Table Structure:
-   - Some antibodies may have their sequences split across multiple rows.
+4. Table Structure & Coverage:
+   - Some antibodies may have their sequences split across multiple rows or pages.
    - For antibodies like "2419-1204", ensure you capture the COMPLETE sequence.
    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
+   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
-5. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-6. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-7. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
-8. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
-9. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-10. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-11. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
-12. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+5. Mandatory SEQ ID & Evidence:
+   - You MUST extract the "SEQ ID NO" for every sequence found.
+   - Capture the exact page number and table ID (if applicable) for every sequence.
+   - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
+
+6. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+7. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+8. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+9. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+10. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+11. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+12. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
+13. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+14. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 Output Schema:
 {
@@ -48,6 +52,9 @@ Output Schema:
         {
           "type": "Heavy" | "Light",
           "fullSequence": "string",
+          "seqId": "string", // Mandatory: e.g., "SEQ ID NO: 45"
+          "pageNumber": number, // Mandatory
+          "tableId": "string", // Optional: e.g., "Table 2"
           "cdrs": [
             { "type": "CDR1", "sequence": "string", "start": number, "end": number },
             { "type": "CDR2", "sequence": "string", "start": number, "end": number },
@@ -182,313 +189,310 @@ function repairAndParseJson(jsonStr: string): any {
 export async function extractWithLLM(
   input: string | { data: string; mimeType: string },
   options: LLMOptions,
-  pageContext?: string
+  pageContext?: string,
+  sequenceListing?: { data: string; mimeType: string }
 ): Promise<ExtractionResult> {
-  const { provider, model } = options;
+  if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+    throw new Error("Input text is required for extraction.");
+  }
+  if (typeof input !== 'string' && (!input.data || input.data.trim().length === 0)) {
+    throw new Error("Input data is required for extraction.");
+  }
+  
+  try {
+    const { provider, model } = options;
 
-  if (provider === 'gemini') {
-    return extractWithGemini(input, model || 'gemini-3.1-pro-preview', pageContext);
+  const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+  let formattedInput: any;
+
+  if (typeof input === "string") {
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+  } else {
+    // For non-Gemini providers, we currently only support text
+    if (provider !== 'gemini') {
+      throw new Error(`File upload is currently only supported for Gemini. Please switch to Gemini or paste the text directly.`);
+    }
+    
+    const parts: any[] = [
+      {
+        inlineData: {
+          data: input.data,
+          mimeType: input.mimeType,
+        },
+      }
+    ];
+
+    if (sequenceListing) {
+      parts.push({
+        inlineData: {
+          data: sequenceListing.data,
+          mimeType: sequenceListing.mimeType,
+        },
+      });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
+    } else {
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining.` });
+    }
+
+    formattedInput = parts;
   }
 
-  // For OpenAI and Anthropic, we call our backend API
-  const response = await fetch('/api/extract', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    const payload = JSON.stringify({
       provider,
       model,
-      input: typeof input === 'string' ? input : undefined, // Currently only supporting text for non-Gemini
+      input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to extract with ' + provider);
-  }
-
-  return await response.json();
-}
-
-async function extractWithGemini(
-  input: string | { data: string; mimeType: string },
-  modelName: string,
-  pageContext?: string
-): Promise<ExtractionResult> {
-  console.log(`[LLM Service] Starting extraction with model: ${modelName}`);
-  let parts: any[] = [];
-  const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
-  
-  if (typeof input === "string") {
-    parts.push({ text: `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}` });
-  } else {
-    parts.push({
-      inlineData: {
-        data: input.data,
-        mimeType: input.mimeType,
-      },
-    });
-    parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining for all 34+ antibodies.` });
-  }
-
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: modelName,
-      contents: { parts },
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0,
-        thinkingConfig: modelName.includes('3.1') ? { thinkingLevel: ThinkingLevel.HIGH } : undefined,
-        maxOutputTokens: 65536,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            patentId: { type: Type.STRING },
-            patentTitle: { type: Type.STRING },
-            antibodies: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  mAbName: { type: Type.STRING },
-                  chains: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        type: { type: Type.STRING, enum: ["Heavy", "Light"] },
-                        fullSequence: { type: Type.STRING },
-                        cdrs: {
-                          type: Type.ARRAY,
-                          items: {
-                            type: Type.OBJECT,
-                            properties: {
-                              type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
-                              sequence: { type: Type.STRING },
-                              start: { type: Type.INTEGER },
-                              end: { type: Type.INTEGER },
-                            },
-                            required: ["type", "sequence", "start", "end"],
+      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          patentId: { type: "STRING" },
+          patentTitle: { type: "STRING" },
+          antibodies: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                mAbName: { type: "STRING" },
+                chains: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      type: { type: "STRING", enum: ["Heavy", "Light"] },
+                      fullSequence: { type: "STRING" },
+                      seqId: { type: "STRING" },
+                      pageNumber: { type: "INTEGER" },
+                      tableId: { type: "STRING" },
+                      cdrs: {
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          properties: {
+                            type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
+                            sequence: { type: "STRING" },
+                            start: { type: "INTEGER" },
+                            end: { type: "INTEGER" },
                           },
+                          required: ["type", "sequence", "start", "end"],
                         },
                       },
-                      required: ["type", "fullSequence", "cdrs"],
                     },
+                    required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber"],
                   },
-                  confidence: { type: Type.NUMBER },
-                  summary: { type: Type.STRING },
-                  evidenceLocation: { type: Type.STRING },
-                  evidenceStatement: { type: Type.STRING },
-                  needsReview: { type: Type.BOOLEAN },
-                  reviewReason: { type: Type.STRING },
                 },
-                required: ["mAbName", "chains", "confidence", "summary"],
+                confidence: { type: "NUMBER" },
+                summary: { type: "STRING" },
+                evidenceLocation: { type: "STRING" },
+                evidenceStatement: { type: "STRING" },
+                needsReview: { type: "BOOLEAN" },
+                reviewReason: { type: "STRING" },
               },
+              required: ["mAbName", "chains", "confidence", "summary"],
             },
           },
-          required: ["patentId", "patentTitle", "antibodies"],
         },
+        required: ["patentId", "patentTitle", "antibodies"],
       },
     });
 
-    const candidate = response.candidates?.[0];
-    const finishReason = candidate?.finishReason;
-    const text = response.text;
-    
-    if (!text) {
-      if (finishReason === 'SAFETY') {
-        throw new Error("Gemini API blocked the response due to safety filters. This sometimes happens with complex sequence data.");
-      }
-      throw new Error(`Empty response from Gemini API (Finish Reason: ${finishReason || 'UNKNOWN'})`);
-    }
-    
-    // Check if the response is actually an error JSON (sometimes happens if the SDK doesn't throw)
-    if (text.includes('"error"') && text.includes('"code": 429')) {
-      throw new Error("Gemini API Quota Exceeded (429). Please try again in a few minutes or switch to a different model (e.g., Gemini 3 Flash).");
+    console.log(`[Extraction] Initiating fetch. Payload size: ${payload.length} bytes`);
+    if (payload.length > 1000000) {
+      console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
     }
 
-    let result: ExtractionResult;
-    try {
-      result = extractJson(text) as ExtractionResult;
-    } catch (parseError: any) {
-      if (finishReason === 'MAX_TOKENS') {
-        throw new Error("The extraction was too large and was truncated by the AI. Please try extracting a smaller section of the document or fewer antibodies at once.");
-      }
-      throw parseError;
-    }
-    
-    // Post-processing and Validation
-    result.antibodies = result.antibodies.map(mAb => {
-      // Normalize confidence to 0-100 scale
-      if (mAb.confidence <= 1 && mAb.confidence > 0) {
-        mAb.confidence = Math.round(mAb.confidence * 100);
-      } else if (mAb.confidence < 0) {
-        mAb.confidence = 0;
-      } else if (mAb.confidence > 100) {
-        mAb.confidence = 100;
-      }
+    let startResponse: Response | null = null;
+    let postAttempts = 0;
+    const maxPostAttempts = 3;
 
-      let needsReview = mAb.needsReview || false;
-      let reviewReason = mAb.reviewReason || "";
-
-      mAb.chains = mAb.chains.map(chain => {
-        let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+    while (postAttempts < maxPostAttempts) {
+      try {
+        startResponse = await fetch('/api/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+        break; // Success
+      } catch (postError: any) {
+        postAttempts++;
+        const isNetworkError = postError.message?.toLowerCase().includes('fetch') || 
+                               postError.message?.toLowerCase().includes('network');
         
-        // Systematic Fixes
-        if (chain.type === 'Light') {
-          // Position 12 (0-indexed: 11) L -> V error
-          if (seq.length > 11 && seq[11] === 'L') {
-            const newSeq = seq.split('');
-            newSeq[11] = 'V';
-            seq = newSeq.join('');
-            reviewReason += " [Systematic L->V fix at pos 12]";
-          }
-          
-          // VL Length Validation
-          if (seq.length < 100 || seq.length > 130) {
-            needsReview = true;
-            reviewReason += ` [VL length anomaly: ${seq.length}]`;
-          }
+        if (isNetworkError && postAttempts < maxPostAttempts) {
+          console.warn(`[Extraction] POST network error (attempt ${postAttempts}): ${postError.message}. Retrying in 2s...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          throw postError;
+        }
+      }
+    }
+
+    if (!startResponse || !startResponse.ok) {
+      const errorData = await startResponse?.json().catch(() => ({ error: `Server error: ${startResponse?.status}` }));
+      throw new Error(errorData.error || `Server error: ${startResponse?.status}`);
+    }
+
+    const { jobId } = await startResponse.json();
+    console.log(`[Extraction] Job started: ${jobId}`);
+
+    // 2. Poll for results
+    let result: ExtractionResult | null = null;
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes (5s intervals)
+
+    const baseUrl = window.location.origin;
+
+    while (attempts < maxAttempts) {
+      const timestamp = Date.now();
+      console.log(`[Extraction] Polling attempt ${attempts + 1}/${maxAttempts} for job ${jobId}...`);
+      try {
+        const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${timestamp}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
+        if (!statusResponse.ok) {
+          console.error(`[Extraction] Status check failed: ${statusResponse.status} ${statusResponse.statusText}`);
+          throw new Error(`Failed to check job status: ${statusResponse.status}`);
         }
 
-        if (chain.type === 'Heavy') {
-          // Position 75 (0-indexed: 74) T -> I error
-          if (seq.length > 74 && seq[74] === 'I') {
-            const newSeq = seq.split('');
-            newSeq[74] = 'T';
-            seq = newSeq.join('');
-            reviewReason += " [Systematic T->I fix at pos 75]";
-          }
+        const job = await statusResponse.json();
+        console.log(`[Extraction] Job ${jobId} status: ${job.status}`);
 
-          // VH Length Validation
-          if (seq.length < 105 || seq.length > 140) {
-            needsReview = true;
-            reviewReason += ` [VH length anomaly: ${seq.length}]`;
-          }
+        if (job.status === 'completed') {
+          result = job.result;
+          break;
+        } else if (job.status === 'failed') {
+          throw new Error(job.error || 'Extraction job failed');
         }
-
-        return { ...chain, fullSequence: seq };
-      });
-
-      // Problematic Variant Check
-      if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
-        needsReview = true;
-        reviewReason += ` [Known problematic VH variant: ${mAb.mAbName}. VH chain often split or misread in tables.]`;
+      } catch (pollError: any) {
+        // If it's a network error, retry a few times before giving up
+        const errorMsg = pollError.message?.toLowerCase() || "";
+        const isNetworkError = errorMsg.includes('fetch') || 
+                               errorMsg.includes('network') ||
+                               errorMsg.includes('aborted') ||
+                               errorMsg.includes('failed to fetch') ||
+                               pollError.name === 'TypeError';
+        
+        if (isNetworkError && attempts < maxAttempts - 1) {
+          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
+          // Check if we are still online
+          if (!navigator.onLine) {
+            console.error("[Extraction] Browser is offline. Waiting for connection...");
+          }
+        } else {
+          console.error("[Extraction] Non-recoverable polling error:", pollError);
+          throw pollError;
+        }
       }
 
-      if (mAb.mAbName === "2218") {
-        needsReview = true;
-        reviewReason += " [Known problematic VL variant: 2218. VL chain often incomplete or missing in tables.]";
+      // Wait 5 seconds before next poll with jitter
+      const jitter = Math.floor(Math.random() * 1000);
+      await new Promise(resolve => setTimeout(resolve, 5000 + jitter));
+      attempts++;
+    }
+
+    if (!result) {
+      throw new Error("Extraction timed out after 10 minutes.");
+    }
+  
+  // Post-processing and Validation
+  result.patentId = result.patentId || "Unknown";
+  result.patentTitle = result.patentTitle || "Untitled Patent";
+  result.antibodies = result.antibodies || [];
+  
+  const STANDARD_AMINO_ACIDS = new Set("ACDEFGHIKLMNPQRSTVWY");
+
+  result.antibodies = result.antibodies.map(mAb => {
+    // Normalize confidence to 0-100 scale
+    if (mAb.confidence <= 1 && mAb.confidence > 0) {
+      mAb.confidence = Math.round(mAb.confidence * 100);
+    } else if (mAb.confidence < 0) {
+      mAb.confidence = 0;
+    } else if (mAb.confidence > 100) {
+      mAb.confidence = 100;
+    }
+
+    let needsReview = mAb.needsReview || false;
+    let reviewReason = mAb.reviewReason || "";
+
+    mAb.chains = mAb.chains.map(chain => {
+      let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+      
+      // Non-standard amino acid detection
+      const nonStandard: string[] = [];
+      for (const char of seq) {
+        if (!STANDARD_AMINO_ACIDS.has(char.toUpperCase())) {
+          nonStandard.push(char);
+        }
       }
 
-      // Confidence-based flagging
-      if (mAb.confidence < 0.7) {
+      if (nonStandard.length > 0) {
+        chain.hasNonStandardAminoAcids = true;
+        chain.nonStandardAminoAcids = Array.from(new Set(nonStandard));
         needsReview = true;
-        reviewReason += ` [Low confidence: ${mAb.confidence}]`;
+        reviewReason += ` [Non-standard amino acids detected: ${chain.nonStandardAminoAcids.join(', ')}]`;
       }
 
-      // Accuracy proxy: Length-based validation
-      mAb.chains.forEach(chain => {
-        const len = chain.fullSequence.length;
-        if (chain.type === 'Light' && (len < 90 || len > 140)) {
+      // Systematic Fixes - Flag for review instead of forcing changes
+      if (chain.type === 'Light') {
+        // Position 12 (0-indexed: 11) L -> V potential error
+        if (seq.length > 11 && seq[11] === 'L') {
           needsReview = true;
-          reviewReason += ` [VL length critical anomaly: ${len}]`;
+          reviewReason += " [Potential L->V error at pos 12]";
         }
-        if (chain.type === 'Heavy' && (len < 95 || len > 150)) {
+        
+        // VL Length Validation
+        if (seq.length < 100 || seq.length > 130) {
           needsReview = true;
-          reviewReason += ` [VH length critical anomaly: ${len}]`;
+          reviewReason += ` [VL length anomaly: ${seq.length}]`;
         }
-      });
+      }
 
-      return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
+      if (chain.type === 'Heavy') {
+        // Position 75 (0-indexed: 74) T -> I potential error
+        if (seq.length > 74 && seq[74] === 'I') {
+          needsReview = true;
+          reviewReason += " [Potential T->I error at pos 75]";
+        }
+
+        // VH Length Validation
+        if (seq.length < 105 || seq.length > 140) {
+          needsReview = true;
+          reviewReason += ` [VH length anomaly: ${seq.length}]`;
+        }
+      }
+
+      return { ...chain, fullSequence: seq };
     });
 
-    // Pass 2: Targeted Re-extraction for problematic antibodies
-    const problematicMabs = result.antibodies.filter(m => m.needsReview);
-    if (problematicMabs.length > 0) {
-      console.log(`Performing targeted re-extraction for ${problematicMabs.length} antibodies...`);
-      
-      for (const mAb of problematicMabs) {
-        const targetedPrompt = `
-          RE-EXTRACTION TASK:
-          The previous extraction for antibody "${mAb.mAbName}" was flagged for review.
-          Reason: ${mAb.reviewReason}
-          
-          Please re-examine the document specifically for "${mAb.mAbName}".
-          
-          SPECIAL INSTRUCTIONS FOR THIS ID:
-          ${mAb.mAbName === '2218' ? '- This antibody has a known VL extraction issue (catastrophic failure in previous runs). Use an alternative extraction method to ensure the Light chain is complete and verbatim. The VL sequence should be around 110-120 amino acids.' : ''}
-          ${mAb.mAbName === '4439' ? '- This antibody has a known VH extraction issue (catastrophic failure in previous runs). Check if the table structure is different or if the sequence is split across rows. The VH sequence should be around 115-125 amino acids.' : ''}
-          ${mAb.mAbName.startsWith('2419-12') ? '- This is a known problematic variant. Ensure the VH sequence is captured in its entirety and verbatim.' : ''}
-          ${mAb.mAbName === '3631' ? '- This antibody has a known minor VH extraction issue. Please re-verify every amino acid in the VH chain.' : ''}
-
-          Pay close attention to:
-          1. Table structure (is it split across rows?)
-          2. VL chain location (is it in a separate table?)
-          3. Sequence completeness (ensure no truncation).
-          
-          Return ONLY the data for this specific antibody in the same JSON format.
-        `;
-
-        try {
-          const targetedResponse = await ai.models.generateContent({
-            model: modelName,
-            contents: [
-              typeof input === 'string' 
-                ? { text: input } 
-                : { inlineData: { data: input.data, mimeType: input.mimeType } },
-              { text: targetedPrompt }
-            ],
-            config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-              responseMimeType: "application/json",
-            }
-          });
-
-          if (targetedResponse.text) {
-            try {
-              const targetedResult = extractJson(targetedResponse.text) as ExtractionResult;
-              const updatedMab = targetedResult.antibodies.find(m => m.mAbName === mAb.mAbName);
-              if (updatedMab) {
-                // Replace the old one with the new one if it looks better
-                const index = result.antibodies.findIndex(m => m.mAbName === mAb.mAbName);
-                if (index !== -1) {
-                  result.antibodies[index] = {
-                    ...updatedMab,
-                    reviewReason: `[RE-EXTRACTED] ${updatedMab.reviewReason || ""}`.trim()
-                  };
-                }
-              }
-            } catch (e) {
-              console.error("Failed to parse targeted re-extraction", e);
-            }
-          }
-        } catch (targetedError: any) {
-          console.error("Targeted re-extraction failed (likely quota):", targetedError.message);
-          // Don't throw here, just continue with what we have
-        }
-      }
+    // Problematic Variant Check
+    if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
+      needsReview = true;
+      reviewReason += ` [Known problematic VH variant: ${mAb.mAbName}. VH chain often split or misread in tables.]`;
     }
 
-    if (response.usageMetadata) {
-      result.usageMetadata = {
-        promptTokenCount: response.usageMetadata.promptTokenCount || 0,
-        candidatesTokenCount: response.usageMetadata.candidatesTokenCount || 0,
-        totalTokenCount: response.usageMetadata.totalTokenCount || 0,
-      };
+    if (mAb.mAbName === "2218") {
+      needsReview = true;
+      reviewReason += " [Known problematic VL variant: 2218. VL chain often incomplete or missing in tables.]";
     }
-    result.modelUsed = modelName;
-    return result;
+
+    // Confidence-based flagging
+    if (mAb.confidence < 70) {
+      needsReview = true;
+      reviewReason += ` [Low confidence: ${mAb.confidence}]`;
+    }
+
+    return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
+  });
+
+  result.modelUsed = model || 'gemini-3.1-pro-preview';
+  return result;
   } catch (e: any) {
-    const errorMsg = e.message || String(e);
-    if (errorMsg.includes('429') || errorMsg.includes('quota')) {
-      throw new Error("Gemini API Quota Exceeded (429). The current model (Gemini 3.1 Pro) has strict limits on the free tier. Please wait a few minutes or switch to 'Gemini 3 Flash' in the settings for higher throughput.");
+    console.error("[Extraction] Fetch error details:", e);
+    const msg = e.message?.toLowerCase() || "";
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('aborted')) {
+      throw new Error("Network Error: The extraction request was blocked or timed out. This is common on custom domains (like .bio) due to proxy limits. Try using a smaller text selection or use the default Railway URL (abminer.up.railway.app) if this persists.");
     }
-    if (errorMsg.includes('503') || errorMsg.includes('high demand') || errorMsg.includes('UNAVAILABLE')) {
-      throw new Error("Gemini API Service Unavailable (503). This model is currently experiencing high demand. Please try again in a few minutes or switch to 'Gemini 3 Flash' which typically has better availability.");
-    }
-    console.error("Failed to parse AI response:", e);
-    throw new Error(`Failed to parse extraction result: ${errorMsg}`);
+    throw e;
   }
 }
