@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -2014,24 +2014,55 @@ function AppContent() {
                         </button>
                       </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-white/10 flex gap-6">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-zinc-500 uppercase font-bold">Total mAbs</span>
-                        <span className="text-lg font-bold">{state.result.antibodies.length}</span>
+                    <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <AntibodyIcon className="w-3 h-3 text-indigo-400" />
+                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Total mAbs</span>
+                        </div>
+                        <span className="text-lg font-bold text-white">{state.result.antibodies.length}</span>
                       </div>
+
+                      {state.result.extractionTime && (
+                        <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Time Elapsed</span>
+                          </div>
+                          <span className="text-lg font-bold text-white">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
+                        </div>
+                      )}
+
                       {state.result.usageMetadata && (
                         <>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-zinc-500 uppercase font-bold">Tokens Used</span>
-                            <span className="text-lg font-bold">
-                              {state.result.usageMetadata.totalTokenCount.toLocaleString()}
+                          <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <ArrowUpRight className="w-3 h-3 text-blue-400" />
+                              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Input Tokens</span>
+                            </div>
+                            <span className="text-lg font-bold text-white">
+                              {state.result.usageMetadata.promptTokenCount.toLocaleString()}
                             </span>
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-zinc-500 uppercase font-bold">Est. Cost (USD)</span>
-                            <span className="text-lg font-bold text-emerald-400">
-                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 1.25 + 
-                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 5.00).toFixed(4)}
+                          
+                          <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
+                              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Output Tokens</span>
+                            </div>
+                            <span className="text-lg font-bold text-white">
+                              {state.result.usageMetadata.candidatesTokenCount.toLocaleString()}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Coins className="w-3 h-3 text-indigo-400" />
+                              <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
+                            </div>
+                            <span className="text-lg font-bold text-indigo-100">
+                              ${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
+                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 10.50).toFixed(4)}
                             </span>
                           </div>
                         </>
