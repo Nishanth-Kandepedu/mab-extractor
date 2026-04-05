@@ -59,6 +59,8 @@ export interface Antibody {
 export interface UsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount: number;
+  thinkingTokenCount?: number;
+  cachedContentTokenCount?: number;
   totalTokenCount: number;
   cost?: number;
 }

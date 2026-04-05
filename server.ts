@@ -183,6 +183,8 @@ async function startServer() {
             result.usageMetadata = {
               promptTokenCount: usage.promptTokenCount,
               candidatesTokenCount: usage.candidatesTokenCount,
+              thinkingTokenCount: (usage as any).thinkingTokenCount,
+              cachedContentTokenCount: (usage as any).cachedContentTokenCount,
               totalTokenCount: usage.totalTokenCount
             };
           }

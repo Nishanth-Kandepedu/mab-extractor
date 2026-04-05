@@ -1940,9 +1940,16 @@ function AppContent() {
                             </span>
                           )}
                           {state.result.usageMetadata && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Tokens: {state.result.usageMetadata.totalTokenCount}
-                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                Total Tokens: {state.result.usageMetadata.totalTokenCount.toLocaleString()}
+                              </span>
+                              {state.result.usageMetadata.thinkingTokenCount && (
+                                <span className="text-[10px] text-amber-500 font-mono">
+                                  (incl. {state.result.usageMetadata.thinkingTokenCount.toLocaleString()} thinking)
+                                </span>
+                              )}
+                            </div>
                           )}
                           {state.result.modelUsed && (
                             <span className={cn(
@@ -2049,8 +2056,15 @@ function AppContent() {
                           <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Output Tokens</span>
                         </div>
                         <span className="text-lg font-bold text-white">
-                          {state.result.usageMetadata ? state.result.usageMetadata.candidatesTokenCount.toLocaleString() : '---'}
+                          {state.result.usageMetadata ? 
+                            (state.result.usageMetadata.candidatesTokenCount + (state.result.usageMetadata.thinkingTokenCount || 0)).toLocaleString() 
+                            : '---'}
                         </span>
+                        {state.result.usageMetadata?.thinkingTokenCount && (
+                          <span className="text-[9px] text-amber-500/70 mt-1">
+                            {state.result.usageMetadata.candidatesTokenCount.toLocaleString()} response + {state.result.usageMetadata.thinkingTokenCount.toLocaleString()} thinking
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
@@ -2061,7 +2075,7 @@ function AppContent() {
                         <span className="text-lg font-bold text-indigo-100">
                           {state.result.usageMetadata ? 
                             `$${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
-                                (state.result.usageMetadata.candidatesTokenCount / 1000000) * 10.50).toFixed(4)}` 
+                                ((state.result.usageMetadata.candidatesTokenCount + (state.result.usageMetadata.thinkingTokenCount || 0)) / 1000000) * 10.50).toFixed(4)}` 
                             : '---'}
                         </span>
                       </div>
