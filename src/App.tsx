@@ -463,7 +463,7 @@ function AppContent() {
       return;
     }
 
-    const historyQuery = (user.role === 'admin' && !user.isAnonymous)
+    const historyQuery = (user.role === 'admin')
       ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
       : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
 
