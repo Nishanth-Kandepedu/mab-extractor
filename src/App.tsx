@@ -1566,7 +1566,8 @@ function AppContent() {
                   { label: 'Avg Extraction Time', value: `${(history.reduce((acc, curr) => acc + (curr.extractionTime || 0), 0) / (history.length || 1) / 1000).toFixed(1)}s`, icon: Loader2, color: 'text-amber-600', bg: 'bg-amber-50' },
                   { label: 'Est. Total Cost', value: `$${(history.reduce((acc, curr) => {
                     const input = curr.usageMetadata?.promptTokenCount || 0;
-                    const output = curr.usageMetadata?.candidatesTokenCount || 0;
+                    const total = curr.usageMetadata?.totalTokenCount || 0;
+                    const output = total - input; // Correctly includes thinking tokens
                     // Rough estimate: $3.50/1M input, $10.50/1M output
                     return acc + (input * 0.0000035) + (output * 0.0000105);
                   }, 0)).toFixed(2)}`, icon: Save, color: 'text-emerald-600', bg: 'bg-emerald-50' }
@@ -1610,7 +1611,16 @@ function AppContent() {
                             <p className="text-[10px] text-zinc-400 font-mono">{item.patentId}</p>
                           </td>
                           <td className="px-6 py-4 text-zinc-500 font-mono">{item.antibodies.length}</td>
-                          <td className="px-6 py-4 text-zinc-500 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-zinc-600 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</span>
+                              {item.usageMetadata && (item.usageMetadata.totalTokenCount - item.usageMetadata.promptTokenCount > item.usageMetadata.candidatesTokenCount) && (
+                                <span className="text-[9px] text-amber-500 font-mono">
+                                  incl. {(item.usageMetadata.totalTokenCount - item.usageMetadata.promptTokenCount - item.usageMetadata.candidatesTokenCount).toLocaleString()} thinking
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-6 py-4 text-zinc-500 font-mono">{((item.extractionTime || 0) / 1000).toFixed(1)}s</td>
                           <td className="px-6 py-4">
                             <span className={cn(
