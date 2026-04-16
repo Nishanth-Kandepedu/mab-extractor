@@ -70,9 +70,11 @@ Output Schema:
         "company": "string",
         "indication": "string",
         "targets": "string", // e.g., "PD-1", "HER2"
-        "bioactivities": "string", // e.g., "IC50 = 1.2 nM", "Binding affinity Kd = 0.5 nM"
+        "potency": "string", // e.g., "IC50 = 1.2 nM", "EC50 = 0.5 nM"
+        "bioactivities": "string", // e.g., "Binding affinity Kd = 0.5 nM", "Functional assay results"
         "physchem": "string", // Physicochemical properties (pI, solubility, etc.)
-        "admet": "string", // ADMET / PK properties
+        "admet": "string", // ADMET properties
+        "dmpk": "string", // Drug Metabolism and Pharmacokinetics (DMPK) details
         "epitopeMapping": "string", // Epitope mapping details
         "biologicalSources": "string", // Cell lines, species, etc.
         "mabType": "string",
@@ -304,9 +306,11 @@ export async function extractWithLLM(
                     company: { type: "STRING" },
                     indication: { type: "STRING" },
                     targets: { type: "STRING" },
+                    potency: { type: "STRING" },
                     bioactivities: { type: "STRING" },
                     physchem: { type: "STRING" },
                     admet: { type: "STRING" },
+                    dmpk: { type: "STRING" },
                     epitopeMapping: { type: "STRING" },
                     biologicalSources: { type: "STRING" },
                     mabType: { type: "STRING" },

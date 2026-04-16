@@ -29,11 +29,13 @@ export interface AntibodyProperties {
   targets?: string;
   targetSpecies?: string;
   sequenceReference?: string;
+  potency?: string;
   bioactivities?: string;
   targetActivity?: string;
   cellLine?: string;
   biologicalSources?: string;
   admet?: string;
+  dmpk?: string;
   pk?: string;
   physchem?: string;
   epitopeMapping?: string;
