@@ -859,6 +859,8 @@ function AppContent() {
         mAb.chains.forEach(chain => {
           const row = {
             mAbName: mAb.mAbName,
+            target: mAb.target || '',
+            biologicalSource: mAb.biologicalSource || '',
             patentId: state.result?.patentId,
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
@@ -908,6 +910,8 @@ function AppContent() {
           mAb.chains.forEach(chain => {
             rows.push({
               mAbName: mAb.mAbName,
+              target: mAb.target || '',
+              biologicalSource: mAb.biologicalSource || '',
               chainType: chain.type,
               fullSequence: chain.fullSequence
             });
@@ -2103,6 +2107,16 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
+                              {mAb.target && (
+                                <span className="text-[9px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-tight">
+                                  Target: {mAb.target}
+                                </span>
+                              )}
+                              {mAb.biologicalSource && (
+                                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight">
+                                  Source: {mAb.biologicalSource}
+                                </span>
+                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}

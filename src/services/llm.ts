@@ -41,6 +41,10 @@ IMPORTANT EXTRACTION RULES:
 12. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
 13. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
 14. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+15. Additional Metadata:
+    - For every antibody, identify the "target" (the antigen it binds to, e.g., "PD-1", "TNF-alpha", "EGFR").
+    - Identify the "biologicalSource" (the species or origin of the antibody, e.g., "Human", "Mouse", "Humanized", "Chimeric").
+    - Include these in the JSON output for each antibody.
 
 Output Schema:
 {
@@ -49,6 +53,8 @@ Output Schema:
   "antibodies": [
     {
       "mAbName": "string",
+      "target": "string", // e.g., "PD-1"
+      "biologicalSource": "string", // e.g., "Humanized"
       "chains": [
         {
           "type": "Heavy" | "Light",
@@ -255,6 +261,8 @@ export async function extractWithLLM(
               type: "OBJECT",
               properties: {
                 mAbName: { type: "STRING" },
+                target: { type: "STRING" },
+                biologicalSource: { type: "STRING" },
                 chains: {
                   type: "ARRAY",
                   items: {
