@@ -15,14 +15,15 @@ IMPORTANT EXTRACTION RULES:
    - VL sequences are typically 110-120 amino acids long.
    - If VL appears incomplete, check the next page or table.
 
-3. Validation:
-   - VH sequences: typically 115-125 amino acids.
-   - VL sequences: typically 110-120 amino acids.
-   - If sequence length is outside this range, mark as [NEEDS_REVIEW].
+3. Validation & Domain Boundary:
+   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
+   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
+   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
+   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
 
 4. Table Structure & Coverage:
    - Some antibodies may have their sequences split across multiple rows or pages.
-   - For antibodies like "2419-1204", ensure you capture the COMPLETE sequence.
+   - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
    - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
@@ -33,7 +34,7 @@ IMPORTANT EXTRACTION RULES:
 
 6. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
 7. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-8. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+8. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
 9. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 10. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 11. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
@@ -469,6 +470,9 @@ export async function extractWithLLM(
         if (seq.length < 100 || seq.length > 130) {
           needsReview = true;
           reviewReason += ` [VL length anomaly: ${seq.length}]`;
+          if (seq.length > 150) {
+            reviewReason += " [Likely constant region included]";
+          }
         }
       }
 
@@ -483,6 +487,9 @@ export async function extractWithLLM(
         if (seq.length < 105 || seq.length > 140) {
           needsReview = true;
           reviewReason += ` [VH length anomaly: ${seq.length}]`;
+          if (seq.length > 160) {
+            reviewReason += " [Likely constant region included]";
+          }
         }
       }
 
