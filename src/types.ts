@@ -26,13 +26,17 @@ export interface AntibodyProperties {
   mabType?: string;
   mabSpecies?: string;
   mabFormat?: string;
+  targets?: string;
   targetSpecies?: string;
   sequenceReference?: string;
+  bioactivities?: string;
   targetActivity?: string;
   cellLine?: string;
+  biologicalSources?: string;
   admet?: string;
   pk?: string;
   physchem?: string;
+  epitopeMapping?: string;
   otherProperties?: string;
   evidencePage?: string;
   bindingActivity?: 'Yes' | 'No';
