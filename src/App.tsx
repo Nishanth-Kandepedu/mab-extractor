@@ -862,6 +862,7 @@ function AppContent() {
             patentId: state.result?.patentId,
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
+            target: chain.target || '',
             fullSequence: chain.fullSequence,
             CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
@@ -927,7 +928,7 @@ function AppContent() {
     
     const fasta = state.result.antibodies.flatMap(mAb => 
       mAb.chains.map(chain => 
-        `>${mAb.mAbName} | ${chain.type} Chain | ${state.result?.patentId}\n${chain.fullSequence}`
+        `>${mAb.mAbName} | ${chain.type} Chain | ${chain.target || 'N/A'} | ${state.result?.patentId}\n${chain.fullSequence}`
       )
     ).join('\n');
     
@@ -1465,55 +1466,85 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Status/Error */}
+          {/* Global Error Overlays */}
           <AnimatePresence>
             {state.error && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-900">Extraction Error</p>
-                  <p className="text-xs text-red-700 mt-1">{state.error}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <button
-                      onClick={() => {
-                        if (inputText) handleTextExtraction();
-                        else if (fileInputRef.current?.files?.[0]) handleFileUpload();
-                        else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
-                      }}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      Retry Extraction
-                    </button>
-                    {window.location.hostname.includes('.bio') && (
-                      <button
-                        onClick={() => window.location.href = 'https://abminer.up.railway.app'}
-                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Try on Railway URL (More Stable)
-                      </button>
-                    )}
-                    {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-md">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  className="bg-white border border-zinc-200 rounded-[32px] p-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] max-w-lg w-full relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500" />
+                  
+                  <button 
+                    onClick={() => setState(prev => ({ ...prev, error: null }))}
+                    className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-20 h-20 bg-red-50 rounded-[28px] flex items-center justify-center mb-8">
+                      <AlertCircle className="w-10 h-10 text-red-600" />
+                    </div>
+                    
+                    <h2 className="text-2xl font-bold text-zinc-900 mb-3 tracking-tight">Extraction Failed</h2>
+                    <p className="text-zinc-500 text-sm mb-10 leading-relaxed max-w-sm">
+                      {state.error}
+                    </p>
+
+                    <div className="w-full flex flex-col gap-3">
                       <button
                         onClick={() => {
-                          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-                          setState(prev => ({ ...prev, error: null }));
+                          if (inputText) handleTextExtraction();
+                          else if (fileInputRef.current?.files?.[0]) handleFileUpload();
+                          else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
                         }}
-                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-200 transition-all flex items-center gap-2"
+                        className="w-full bg-[#050505] text-white py-4 rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 flex items-center justify-center gap-3"
                       >
-                        <RotateCcw className="w-3 h-3" />
-                        Switch to Flash & Retry
+                        <RotateCcw className="w-4 h-4" />
+                        Retry Extraction
                       </button>
-                    )}
+
+                      <div className="grid grid-cols-2 gap-3 mt-2">
+                        {window.location.hostname.includes('.bio') && (
+                          <button
+                            onClick={() => window.location.href = 'https://abminer.up.railway.app'}
+                            className="bg-zinc-100 text-zinc-700 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Use Mirror
+                          </button>
+                        )}
+                        {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                          <button
+                            onClick={() => {
+                              setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                              setState(prev => ({ ...prev, error: null }));
+                            }}
+                            className={cn(
+                              "bg-amber-100 text-amber-800 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-amber-200 transition-all flex items-center justify-center gap-2",
+                              !window.location.hostname.includes('.bio') && "col-span-2"
+                            )}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Switch to Flash
+                          </button>
+                        )}
+                      </div>
+                      
+                      <button 
+                        onClick={() => setState(prev => ({ ...prev, error: null }))}
+                        className="text-zinc-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-2 hover:text-zinc-600 transition-colors"
+                      >
+                        Dismiss Error
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
         </div>
