@@ -157,7 +157,7 @@ async function startServer() {
 
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: model || 'gemini-2.0-pro-exp-02-05',
+            model: model || 'gemini-2.0-flash',
             contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
             config: {
               systemInstruction,
@@ -180,7 +180,7 @@ async function startServer() {
           }
           
           const result = extractJson(text);
-          result.modelUsed = model || 'gemini-2.0-pro-exp-02-05';
+          result.modelUsed = model || 'gemini-2.0-flash';
           
           if (usage) {
             result.usageMetadata = {
@@ -236,7 +236,7 @@ async function startServer() {
           }
           const anthropic = new Anthropic({ apiKey });
           const response = await anthropic.messages.create({
-            model: model || 'claude-3-7-sonnet-20250219',
+            model: model || 'claude-3-7-sonnet-latest',
             max_tokens: 4096,
             system: systemInstruction,
             messages: [
@@ -247,7 +247,7 @@ async function startServer() {
           const content = response.content[0].type === 'text' ? response.content[0].text : '';
           const usage = response.usage;
           const result = extractJson(content || '{}');
-          result.modelUsed = model || 'claude-3-7-sonnet-20250219';
+          result.modelUsed = model || 'claude-3-7-sonnet-latest';
           
           if (usage) {
             result.usageMetadata = {

@@ -73,7 +73,7 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-2.0-pro-exp-02-05'
+    model: 'gemini-2.0-flash'
   });
   const [inputText, setInputText] = useState('');
   const [pageRange, setPageRange] = useState('');
@@ -1282,7 +1282,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-2.0-pro-exp-02-05' : p === 'openai' ? 'o1' : 'claude-3-7-sonnet-20250219' })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-2.0-flash' : p === 'openai' ? 'o1' : 'claude-3-7-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1304,22 +1304,22 @@ function AppContent() {
                 >
                   {llmOptions.provider === 'gemini' && (
                     <>
-                      <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro (Frontier)</option>
                       <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast & Clever)</option>
-                      <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (Stable Legacy)</option>
+                      <option value="gemini-2.0-pro-exp">Gemini 2.0 Pro (Experimental Frontier)</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Reliable Legacy)</option>
                     </>
                   )}
                   {llmOptions.provider === 'openai' && (
                     <>
                       <option value="o1">OpenAI o1 (Full Reasoning)</option>
                       <option value="o1-mini">o1 Mini (Fast Reasoning)</option>
-                      <option value="gpt-4o">GPT-4o (Standard Flagship)</option>
+                      <option value="gpt-4o">GPT-4o (Legacy Standard)</option>
                     </>
                   )}
                   {llmOptions.provider === 'anthropic' && (
                     <>
-                      <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Hybrid Reasoning)</option>
-                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (Legacy Stable)</option>
+                      <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet (Latest)</option>
+                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (Legacy)</option>
                       <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku (Fast)</option>
                     </>
                   )}
