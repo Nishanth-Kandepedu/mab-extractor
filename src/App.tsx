@@ -860,7 +860,7 @@ function AppContent() {
           const row = {
             mAbName: mAb.mAbName,
             antigenTarget: mAb.target || '',
-            speciesOrigin: mAb.biologicalSource || '',
+            antibodySourceOrigin: mAb.biologicalSource || '',
             patentId: state.result?.patentId,
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
@@ -911,7 +911,7 @@ function AppContent() {
             rows.push({
               mAbName: mAb.mAbName,
               antigenTarget: mAb.target || '',
-              speciesOrigin: mAb.biologicalSource || '',
+              antibodySourceOrigin: mAb.biologicalSource || '',
               chainType: chain.type,
               fullSequence: chain.fullSequence
             });
@@ -2114,7 +2114,7 @@ function AppContent() {
                               )}
                               {mAb.biologicalSource && (
                                 <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight">
-                                  Species/Origin: {mAb.biologicalSource}
+                                  Antibody Source/Origin: {mAb.biologicalSource}
                                 </span>
                               )}
                               {mAb.seqId && (
