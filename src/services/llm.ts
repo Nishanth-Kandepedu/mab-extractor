@@ -66,19 +66,6 @@ Output Schema:
       "summary": "string",
       "evidenceLocation": "string", // e.g., "Page 42", "Table 12"
       "evidenceStatement": "string", // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
-      "properties": { // Extract any available metadata
-        "company": "string",
-        "indication": "string",
-        "targets": "string", // e.g., "PD-1", "HER2"
-        "bioactivities": "string", // e.g., "IC50 = 1.2 nM", "Binding affinity Kd = 0.5 nM"
-        "physchem": "string", // Physicochemical properties (pI, solubility, etc.)
-        "admet": "string", // ADMET / PK properties
-        "epitopeMapping": "string", // Epitope mapping details
-        "biologicalSources": "string", // Cell lines, species, etc.
-        "mabType": "string",
-        "mabSpecies": "string",
-        "mabFormat": "string"
-      },
       "needsReview": boolean,
       "reviewReason": "string"
     }
@@ -298,22 +285,6 @@ export async function extractWithLLM(
                 summary: { type: "STRING" },
                 evidenceLocation: { type: "STRING" },
                 evidenceStatement: { type: "STRING" },
-                properties: {
-                  type: "OBJECT",
-                  properties: {
-                    company: { type: "STRING" },
-                    indication: { type: "STRING" },
-                    targets: { type: "STRING" },
-                    bioactivities: { type: "STRING" },
-                    physchem: { type: "STRING" },
-                    admet: { type: "STRING" },
-                    epitopeMapping: { type: "STRING" },
-                    biologicalSources: { type: "STRING" },
-                    mabType: { type: "STRING" },
-                    mabSpecies: { type: "STRING" },
-                    mabFormat: { type: "STRING" },
-                  }
-                },
                 needsReview: { type: "BOOLEAN" },
                 reviewReason: { type: "STRING" },
               },

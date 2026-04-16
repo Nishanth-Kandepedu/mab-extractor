@@ -867,17 +867,6 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
-            targets: mAb.properties?.targets || '',
-            bioactivities: mAb.properties?.bioactivities || '',
-            physchem: mAb.properties?.physchem || '',
-            admet: mAb.properties?.admet || '',
-            epitopeMapping: mAb.properties?.epitopeMapping || '',
-            biologicalSources: mAb.properties?.biologicalSources || '',
-            company: mAb.properties?.company || '',
-            indication: mAb.properties?.indication || '',
-            mabType: mAb.properties?.mabType || '',
-            mabSpecies: mAb.properties?.mabSpecies || '',
-            mabFormat: mAb.properties?.mabFormat || '',
             evidenceLocation: mAb.evidenceLocation || '',
             evidenceStatement: mAb.evidenceStatement || '',
             summary: mAb.summary
@@ -2174,36 +2163,6 @@ function AppContent() {
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
                           {mAb.summary}
                         </div>
-
-                        {/* Curation Table */}
-                        {mAb.properties && Object.keys(mAb.properties).length > 0 && (
-                          <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-sm">
-                            <div className="px-4 py-2 bg-zinc-50 border-b border-zinc-200 flex items-center gap-2">
-                              <Database className="w-3.5 h-3.5 text-indigo-600" />
-                              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Curated Properties</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-zinc-100">
-                              {[
-                                { label: 'Targets', value: mAb.properties.targets },
-                                { label: 'Bioactivities', value: mAb.properties.bioactivities },
-                                { label: 'Physicochemical', value: mAb.properties.physchem },
-                                { label: 'ADMET / PK', value: mAb.properties.admet },
-                                { label: 'Epitope Mapping', value: mAb.properties.epitopeMapping },
-                                { label: 'Biological Sources', value: mAb.properties.biologicalSources },
-                                { label: 'Company', value: mAb.properties.company },
-                                { label: 'Indication', value: mAb.properties.indication },
-                                { label: 'mAb Type', value: mAb.properties.mabType },
-                                { label: 'mAb Species', value: mAb.properties.mabSpecies },
-                                { label: 'mAb Format', value: mAb.properties.mabFormat },
-                              ].filter(p => p.value).map((prop, i) => (
-                                <div key={i} className="p-3 flex flex-col gap-1">
-                                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tight">{prop.label}</span>
-                                  <span className="text-xs text-zinc-700 font-medium">{prop.value}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
 
                         {mAb.evidenceStatement && (
                           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700 flex items-start gap-3">
