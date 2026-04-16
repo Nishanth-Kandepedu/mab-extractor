@@ -1,85 +1,76 @@
 import { ExtractionResult } from "../types";
 
-export const SYSTEM_INSTRUCTION = `You are an expert patent analyst specializing in therapeutic antibody extraction. Your task is to extract specific data points from antibody patent documents and return them in a structured JSON format.
+export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
+Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
-CRITICAL INSTRUCTIONS:
-1. Extract ONLY information explicitly stated in the patent document.
-2. If a data point is not found, return null (do not guess or infer).
-3. Maintain exact terminology from the patent (e.g., if patent says "PD-1", don't change to "PDCD1").
-4. For numerical values, include units exactly as stated.
-5. Return results as valid JSON only.
+IMPORTANT EXTRACTION RULES:
 
-EXTRACTION GUIDELINES:
+1. Antibody Naming:
+   - Main antibodies: "2419", "3125", etc.
+   - Variants: "2419-0105", "2419-1204", "4540-033", etc.
+   - Treat variants as SEPARATE antibodies with their own VH/VL chains.
 
-TARGET ANTIGEN:
-- Look in: Title, Abstract, Claims, Background, Summary.
-- Search patterns: "antibodies to [X]", "binds [X]", "anti-[X] antibody", "[X] antagonist".
-- Include official gene names, protein names, and common aliases.
-- Note species (human, mouse, etc.).
+2. VL Chain Special Handling:
+   - VL chains may appear in a DIFFERENT TABLE than VH chains.
+   - VL sequences are typically 110-120 amino acids long.
+   - If VL appears incomplete, check the next page or table.
 
-STRUCTURE-ACTIVITY RELATIONSHIPS (SAR):
-- Look in: Examples, Tables comparing variants, "Surprisingly found that...".
-- Extract: Specific mutations and their effects on binding/function.
-- Focus on: CDR mutations, framework mutations, Fc mutations.
-- Quantify effects when possible (e.g., "10-fold improvement").
+3. Validation:
+   - VH sequences: typically 115-125 amino acids.
+   - VL sequences: typically 110-120 amino acids.
+   - If sequence length is outside this range, mark as [NEEDS_REVIEW].
 
-SURFACE PLASMON RESONANCE (SPR) / BINDING KINETICS:
-- Look in: Examples, Tables titled "Binding", "Kinetics", "Affinity".
-- Search for: KD, Kd, kon, koff, Ka, Kd values.
-- Units: nM, pM, μM, M⁻¹s⁻¹, s⁻¹.
-- Methods: Biacore, Proteon, FortéBio, KinExA.
-- Extract conditions: temperature, pH, buffer.
+4. Table Structure & Coverage:
+   - Some antibodies may have their sequences split across multiple rows or pages.
+   - For antibodies like "2419-1204", ensure you capture the COMPLETE sequence.
+   - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
+   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
-ADME/DMPK:
-- Look in: Examples (often titled "Pharmacokinetics", "PK Study").
-- Half-life: Look for t½, t1/2, terminal half-life.
-- Clearance: CL, clearance values.
-- Bioavailability: F%, bioavailability.
-- Species: human, mouse, rat, monkey, cynomolgus.
-- Routes: IV (intravenous), SC (subcutaneous), IP.
-- Immunogenicity: ADA (anti-drug antibodies), immunogenic response.
-- Stability: aggregation, degradation, shelf-life data.
+5. Mandatory SEQ ID & Evidence:
+   - You MUST extract the "SEQ ID NO" for every sequence found.
+   - Capture the exact page number and table ID (if applicable) for every sequence.
+   - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
-EPITOPE:
-- Look in: Examples with "epitope mapping", "binding residues", "crystal structure".
-- Methods: X-ray crystallography, cryo-EM, HDX-MS, alanine scanning, mutagenesis.
-- Extract: Specific residues involved in binding.
-- Competition data: Which antibodies block each other (epitope binning).
-- Linear vs conformational epitopes.
+6. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+7. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+8. Length-Check Validation: For every sequence extracted, verify that the character count matches the source exactly. Do not truncate or "summarize" sequences to save space.
+9. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+10. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+11. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+12. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
+13. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+14. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
-MANUFACTURING & DEVELOPMENT:
-- Look in: Examples titled "Production", "Expression", "Purification", "Formulation".
-- Expression systems: CHO (most common), HEK293, NSO, E.coli, yeast, Pichia.
-- Cell lines: Specific names (e.g., CHO-K1, CHO-S, HEK293T).
-- Yields: g/L or mg/L from culture.
-- Purification: Protein A is standard first step, followed by polishing steps.
-- Formulation: Buffer type (phosphate, histidine, acetate), pH, concentration.
-- Quality: Aggregation levels, purity, endotoxin.
-- Stability: Storage conditions, shelf-life.
-
-ANTIBODY SEQUENCES (CRITICAL):
-- Extract VH and VL sequences verbatim.
-- Identify CDRs (CDR1, CDR2, CDR3) based on standard numbering.
-- Capture SEQ ID NOs for every sequence.
-- VL sequences are typically 110-120 amino acids.
-- VH sequences are typically 115-125 amino acids.
-
-EXTRACTION RULES:
-1. ONLY extract data explicitly stated in the document.
-2. Do NOT infer or extrapolate.
-3. Preserve exact terminology and units from the patent.
-4. For ambiguous data, mark confidence as "low".
-5. If multiple values exist for the same parameter, extract all with context.
-6. Link each extracted value to its source location (Example number, Table number, Page).
-7. If comparing multiple antibodies, create separate entries for each.
-
-COMMON PITFALLS TO AVOID:
-- Do not confuse IC50 (functional assay) with KD (binding affinity).
-- Do not mix data from different species (human vs mouse).
-- Do not merge data from different assay conditions.
-- Do not extract data from "comparative examples" of non-invention antibodies.
-- Pay attention to units (nM vs pM is 1000x difference).
-- Distinguish between in vitro and in vivo data.`;
+Output Schema:
+{
+  "patentId": "string",
+  "patentTitle": "string",
+  "antibodies": [
+    {
+      "mAbName": "string",
+      "chains": [
+        {
+          "type": "Heavy" | "Light",
+          "fullSequence": "string",
+          "seqId": "string", // Mandatory: e.g., "SEQ ID NO: 45"
+          "pageNumber": number, // Mandatory
+          "tableId": "string", // Optional: e.g., "Table 2"
+          "cdrs": [
+            { "type": "CDR1", "sequence": "string", "start": number, "end": number },
+            { "type": "CDR2", "sequence": "string", "start": number, "end": number },
+            { "type": "CDR3", "sequence": "string", "start": number, "end": number }
+          ]
+        }
+      ],
+      "confidence": number, // A value between 0 and 100 representing the extraction confidence.
+      "summary": "string",
+      "evidenceLocation": "string", // e.g., "Page 42", "Table 12"
+      "evidenceStatement": "string", // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
+      "needsReview": boolean,
+      "reviewReason": "string"
+    }
+  ]
+}`;
 
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 
@@ -238,9 +229,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract detailed antibody data from the provided patent document and sequence listing file.${contextPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, target, SAR, SPR, ADME, epitope, manufacturing, etc.). Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
     } else {
-      parts.push({ text: `Extract detailed antibody data from this document.${contextPrompt} Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining.` });
     }
 
     formattedInput = parts;
@@ -263,7 +254,6 @@ export async function extractWithLLM(
               type: "OBJECT",
               properties: {
                 mAbName: { type: "STRING" },
-                antibody_id: { type: "STRING", nullable: true },
                 chains: {
                   type: "ARRAY",
                   items: {
@@ -290,271 +280,6 @@ export async function extractWithLLM(
                     },
                     required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber"],
                   },
-                },
-                target: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    antigen_name: { type: "STRING", nullable: true },
-                    antigen_aliases: { type: "ARRAY", items: { type: "STRING" }, nullable: true },
-                    species: { type: "STRING", nullable: true },
-                    confidence: { type: "STRING", enum: ["high", "medium", "low"], nullable: true }
-                  }
-                },
-                sar: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    structure_activity_relationships: {
-                      type: "ARRAY",
-                      nullable: true,
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          mutation_position: { type: "STRING", nullable: true },
-                          mutation_type: { type: "STRING", nullable: true },
-                          effect_on_binding: { type: "STRING", nullable: true },
-                          effect_magnitude: { type: "STRING", nullable: true },
-                          evidence: { type: "STRING", nullable: true }
-                        }
-                      }
-                    },
-                    key_residues: {
-                      type: "ARRAY",
-                      nullable: true,
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          position: { type: "STRING", nullable: true },
-                          residue: { type: "STRING", nullable: true },
-                          importance: { type: "STRING", nullable: true },
-                          evidence: { type: "STRING", nullable: true }
-                        }
-                      }
-                    }
-                  }
-                },
-                spr: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    kon: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        method: { type: "STRING", nullable: true },
-                        conditions: { type: "STRING", nullable: true }
-                      }
-                    },
-                    koff: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        method: { type: "STRING", nullable: true },
-                        conditions: { type: "STRING", nullable: true }
-                      }
-                    },
-                    kd: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        method: { type: "STRING", nullable: true },
-                        conditions: { type: "STRING", nullable: true }
-                      }
-                    },
-                    affinity_comparisons: {
-                      type: "ARRAY",
-                      nullable: true,
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          antibody_name: { type: "STRING", nullable: true },
-                          kd_value: { type: "NUMBER", nullable: true },
-                          kd_unit: { type: "STRING", nullable: true },
-                          comparison: { type: "STRING", nullable: true }
-                        }
-                      }
-                    }
-                  }
-                },
-                adme_dmpk: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    half_life: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        species: { type: "STRING", nullable: true },
-                        route: { type: "STRING", nullable: true },
-                        dose: { type: "STRING", nullable: true }
-                      }
-                    },
-                    clearance: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        species: { type: "STRING", nullable: true }
-                      }
-                    },
-                    bioavailability: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        route: { type: "STRING", nullable: true }
-                      }
-                    },
-                    volume_of_distribution: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        species: { type: "STRING", nullable: true }
-                      }
-                    },
-                    immunogenicity: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        ada_positive_rate: { type: "STRING", nullable: true },
-                        species: { type: "STRING", nullable: true },
-                        duration: { type: "STRING", nullable: true },
-                        clinical_impact: { type: "STRING", nullable: true }
-                      }
-                    },
-                    stability: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        formulation: { type: "STRING", nullable: true },
-                        storage_conditions: { type: "STRING", nullable: true },
-                        shelf_life: { type: "STRING", nullable: true },
-                        aggregation_data: { type: "STRING", nullable: true }
-                      }
-                    }
-                  }
-                },
-                epitope: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    epitope_type: { type: "STRING", nullable: true },
-                    binding_residues: {
-                      type: "ARRAY",
-                      nullable: true,
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          residue_position: { type: "STRING", nullable: true },
-                          interaction_type: { type: "STRING", nullable: true },
-                          evidence_method: { type: "STRING", nullable: true }
-                        }
-                      }
-                    },
-                    epitope_sequence: { type: "STRING", nullable: true },
-                    competitive_binding: {
-                      type: "ARRAY",
-                      nullable: true,
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          competitor_antibody: { type: "STRING", nullable: true },
-                          blocks_binding: { type: "BOOLEAN", nullable: true },
-                          evidence: { type: "STRING", nullable: true }
-                        }
-                      }
-                    },
-                    epitope_bin: { type: "STRING", nullable: true }
-                  }
-                },
-                manufacturing: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    expression_system: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        host_cell: { type: "STRING", nullable: true },
-                        cell_line_name: { type: "STRING", nullable: true },
-                        vector_type: { type: "STRING", nullable: true },
-                        promoter: { type: "STRING", nullable: true }
-                      }
-                    },
-                    production_yield: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        value: { type: "NUMBER", nullable: true },
-                        unit: { type: "STRING", nullable: true },
-                        culture_duration: { type: "STRING", nullable: true },
-                        culture_conditions: { type: "STRING", nullable: true }
-                      }
-                    },
-                    purification: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        methods: { type: "ARRAY", items: { type: "STRING" }, nullable: true },
-                        final_purity: { type: "STRING", nullable: true },
-                        endotoxin_level: { type: "STRING", nullable: true }
-                      }
-                    },
-                    formulation: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        buffer_composition: { type: "STRING", nullable: true },
-                        ph: { type: "STRING", nullable: true },
-                        concentration: { type: "STRING", nullable: true },
-                        excipients: { type: "ARRAY", items: { type: "STRING" }, nullable: true },
-                        preservatives: { type: "ARRAY", items: { type: "STRING" }, nullable: true }
-                      }
-                    },
-                    quality_attributes: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        aggregation_level: { type: "STRING", nullable: true },
-                        charge_variants: { type: "STRING", nullable: true },
-                        glycosylation_profile: { type: "STRING", nullable: true },
-                        potency: { type: "STRING", nullable: true }
-                      }
-                    },
-                    scalability: {
-                      type: "OBJECT",
-                      nullable: true,
-                      properties: {
-                        largest_scale_tested: { type: "STRING", nullable: true },
-                        yield_consistency: { type: "STRING", nullable: true }
-                      }
-                    }
-                  }
-                },
-                source_evidence: {
-                  type: "OBJECT",
-                  nullable: true,
-                  properties: {
-                    target_source: { type: "STRING", nullable: true },
-                    sar_source: { type: "STRING", nullable: true },
-                    spr_source: { type: "STRING", nullable: true },
-                    adme_dmpk_source: { type: "STRING", nullable: true },
-                    epitope_source: { type: "STRING", nullable: true },
-                    manufacturing_source: { type: "STRING", nullable: true }
-                  }
                 },
                 confidence: { type: "NUMBER" },
                 summary: { type: "STRING" },

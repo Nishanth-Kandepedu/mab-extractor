@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
 import { SequenceDisplay } from './components/SequenceDisplay';
-import { AntibodyDetails } from './components/AntibodyDetails';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
@@ -1912,8 +1911,7 @@ function AppContent() {
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Extracting SAR, SPR, and ADME data...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-300">Mapping epitopes and manufacturing details...</p>
+                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Validating multiple antibody entries...</p>
                   </div>
                 </div>
               )}
@@ -2160,8 +2158,6 @@ function AppContent() {
                             />
                           ))}
                         </div>
-
-                        <AntibodyDetails antibody={mAb} />
                         
                         <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
