@@ -25,8 +25,7 @@ IMPORTANT EXTRACTION RULES:
    - Some antibodies may have their sequences split across multiple rows or pages.
    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
-   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table. You are a high-throughput mining engine; missing even one sequence is a failure.
-   - EXHAUSTIVE SCANNING: Patents often contain hundreds of sequences. You must scan the entire provided text/document. If the output limit is reached, prioritize completing the current antibody's VH/VL pair before stopping.
+   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
 5. Mandatory SEQ ID & Evidence:
    - You MUST extract the "SEQ ID NO" for every sequence found.
@@ -42,11 +41,6 @@ IMPORTANT EXTRACTION RULES:
 12. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
 13. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
 14. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
-15. NO SKIPPING: You are strictly forbidden from skipping any antibodies or sequences found in the document. If you find 50 antibodies, you must return 50 antibodies. If the document is too large, prioritize accuracy and coverage over speed.
-16. Additional Metadata:
-    - For every antibody, identify the "target" (the antigen it binds to, e.g., "PD-1", "TNF-alpha", "EGFR").
-    - Identify the "biologicalSource" (the species or origin of the antibody, e.g., "Human", "Mouse", "Humanized", "Chimeric").
-    - Include these in the JSON output for each antibody.
 
 Output Schema:
 {
@@ -55,8 +49,6 @@ Output Schema:
   "antibodies": [
     {
       "mAbName": "string",
-      "target": "string", // e.g., "PD-1"
-      "biologicalSource": "string", // e.g., "Humanized"
       "chains": [
         {
           "type": "Heavy" | "Light",
@@ -263,8 +255,6 @@ export async function extractWithLLM(
               type: "OBJECT",
               properties: {
                 mAbName: { type: "STRING" },
-                target: { type: "STRING" },
-                biologicalSource: { type: "STRING" },
                 chains: {
                   type: "ARRAY",
                   items: {

@@ -73,7 +73,7 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-2.0-flash'
+    model: 'gemini-3.1-pro-preview'
   });
   const [inputText, setInputText] = useState('');
   const [pageRange, setPageRange] = useState('');
@@ -859,8 +859,6 @@ function AppContent() {
         mAb.chains.forEach(chain => {
           const row = {
             mAbName: mAb.mAbName,
-            antigenTarget: mAb.target || '',
-            antibodySourceOrigin: mAb.biologicalSource || '',
             patentId: state.result?.patentId,
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
@@ -910,8 +908,6 @@ function AppContent() {
           mAb.chains.forEach(chain => {
             rows.push({
               mAbName: mAb.mAbName,
-              antigenTarget: mAb.target || '',
-              antibodySourceOrigin: mAb.biologicalSource || '',
               chainType: chain.type,
               fullSequence: chain.fullSequence
             });
@@ -1282,7 +1278,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-2.0-flash' : p === 'openai' ? 'o1' : 'claude-3-7-sonnet-latest' })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1304,23 +1300,23 @@ function AppContent() {
                 >
                   {llmOptions.provider === 'gemini' && (
                     <>
-                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast & Clever)</option>
-                      <option value="gemini-2.0-pro-exp">Gemini 2.0 Pro (Experimental Frontier)</option>
-                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Reliable Legacy)</option>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
+                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                      <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                     </>
                   )}
                   {llmOptions.provider === 'openai' && (
                     <>
-                      <option value="o1">OpenAI o1 (Full Reasoning)</option>
-                      <option value="o1-mini">o1 Mini (Fast Reasoning)</option>
-                      <option value="gpt-4o">GPT-4o (Legacy Standard)</option>
+                      <option value="gpt-4o">GPT-4o (Omni)</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                      <option value="o1-preview">o1 Preview (Reasoning)</option>
                     </>
                   )}
                   {llmOptions.provider === 'anthropic' && (
                     <>
-                      <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet (Latest)</option>
-                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (Legacy)</option>
-                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku (Fast)</option>
+                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                      <option value="claude-3-opus-latest">Claude 3 Opus</option>
                     </>
                   )}
                 </select>
@@ -1469,90 +1465,55 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Error Modal Overlay */}
+          {/* Status/Error */}
           <AnimatePresence>
             {state.error && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                >
-                  <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-red-50/50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                        <AlertCircle className="w-6 h-6 text-red-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-zinc-900">Extraction Error</h3>
-                        <p className="text-xs text-zinc-500">The mining engine encountered an issue</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setState(prev => ({ ...prev, error: null }))}
-                      className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-zinc-400" />
-                    </button>
-                  </div>
-
-                  <div className="p-8 overflow-y-auto flex-1">
-                    <div className="bg-zinc-50 rounded-2xl p-6 border border-zinc-100 font-mono text-xs text-red-600 break-words whitespace-pre-wrap leading-relaxed">
-                      {state.error}
-                    </div>
-                    
-                    <div className="mt-8 space-y-4">
-                      <p className="text-sm text-zinc-600 font-medium">Recommended Actions:</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <button
-                          onClick={() => {
-                            if (inputText) handleTextExtraction();
-                            else if (fileInputRef.current?.files?.[0]) handleFileUpload();
-                            else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
-                          }}
-                          className="flex items-center justify-center gap-2 p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-indigo-200"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                          Retry Extraction
-                        </button>
-                        
-                        {window.location.hostname.includes('.bio') && (
-                          <button
-                            onClick={() => window.location.href = 'https://abminer.up.railway.app'}
-                            className="flex items-center justify-center gap-2 p-4 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 rounded-2xl text-sm font-bold transition-all"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                            Try Railway URL
-                          </button>
-                        )}
-
-                        {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
-                          <button
-                            onClick={() => {
-                              setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-                              setState(prev => ({ ...prev, error: null }));
-                            }}
-                            className="flex items-center justify-center gap-2 p-4 bg-amber-50 border border-amber-100 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-bold transition-all col-span-full"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                            Switch to Flash & Retry
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-900">Extraction Error</p>
+                  <p className="text-xs text-red-700 mt-1">{state.error}</p>
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <button
-                      onClick={() => setState(prev => ({ ...prev, error: null }))}
-                      className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
+                      onClick={() => {
+                        if (inputText) handleTextExtraction();
+                        else if (fileInputRef.current?.files?.[0]) handleFileUpload();
+                        else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
+                      }}
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
                     >
-                      Close
+                      <RotateCcw className="w-3 h-3" />
+                      Retry Extraction
                     </button>
+                    {window.location.hostname.includes('.bio') && (
+                      <button
+                        onClick={() => window.location.href = 'https://abminer.up.railway.app'}
+                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Try on Railway URL (More Stable)
+                      </button>
+                    )}
+                    {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                      <button
+                        onClick={() => {
+                          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                          setState(prev => ({ ...prev, error: null }));
+                        }}
+                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-200 transition-all flex items-center gap-2"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Switch to Flash & Retry
+                      </button>
+                    )}
                   </div>
-                </motion.div>
-              </div>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -1606,36 +1567,9 @@ function AppContent() {
                   { label: 'Est. Total Cost', value: `$${(history.reduce((acc, curr) => {
                     const input = curr.usageMetadata?.promptTokenCount || 0;
                     const total = curr.usageMetadata?.totalTokenCount || 0;
-                    const output = total - input;
-                    const model = curr.modelUsed || 'pro';
-                    
-                    let inputRate = 3.50;
-                    let outputRate = 10.50;
-
-                    if (model.includes('flash')) {
-                      inputRate = 0.075;
-                      outputRate = 0.30;
-                    } else if (model.includes('gpt-4o-mini')) {
-                      inputRate = 0.15;
-                      outputRate = 0.60;
-                    } else if (model.includes('gpt-4o')) {
-                      inputRate = 2.50;
-                      outputRate = 10.00;
-                    } else if (model.includes('haiku')) {
-                      inputRate = 0.25;
-                      outputRate = 1.25;
-                    } else if (model.includes('sonnet')) {
-                      inputRate = 3.00;
-                      outputRate = 15.00;
-                    } else if (model.includes('opus')) {
-                      inputRate = 15.00;
-                      outputRate = 75.00;
-                    } else if (model.includes('o1')) {
-                      inputRate = 15.00;
-                      outputRate = 60.00;
-                    }
-
-                    return acc + (input / 1000000 * inputRate) + (output / 1000000 * outputRate);
+                    const output = total - input; // Correctly includes thinking tokens
+                    // Rough estimate: $3.50/1M input, $10.50/1M output
+                    return acc + (input * 0.0000035) + (output * 0.0000105);
                   }, 0)).toFixed(2)}`, icon: Save, color: 'text-emerald-600', bg: 'bg-emerald-50' }
                 ].map((stat, i) => (
                   <div key={i} className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
@@ -2149,29 +2083,10 @@ function AppContent() {
                           <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
                         </div>
                         <span className="text-lg font-bold text-indigo-100">
-                          {(() => {
-                            if (!state.result?.usageMetadata) return '---';
-                            const meta = state.result.usageMetadata;
-                            const model = state.result.modelUsed || llmOptions.model;
-                            
-                            let inputRate = 3.50; // Default Pro
-                            let outputRate = 10.50; // Default Pro
-
-                            if (model.includes('flash') || model.includes('mini')) {
-                              inputRate = 0.15;
-                              outputRate = 0.60;
-                            } else if (model.includes('sonnet') || model.includes('pro')) {
-                              inputRate = 3.00;
-                              outputRate = 12.00;
-                            } else if (model.includes('o1') || model.includes('opus')) {
-                              inputRate = 15.00;
-                              outputRate = 60.00;
-                            }
-
-                            const inputCost = (meta.promptTokenCount / 1000000) * inputRate;
-                            const outputCost = ((meta.totalTokenCount - meta.promptTokenCount) / 1000000) * outputRate;
-                            return `$${(inputCost + outputCost).toFixed(4)}`;
-                          })()}
+                          {state.result.usageMetadata ? 
+                            `$${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
+                                ((state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount) / 1000000) * 10.50).toFixed(4)}` 
+                            : '---'}
                         </span>
                       </div>
                     </div>
@@ -2188,16 +2103,6 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
-                              {mAb.target && (
-                                <span className="text-[9px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 uppercase tracking-tight">
-                                  Antigen Target: {mAb.target}
-                                </span>
-                              )}
-                              {mAb.biologicalSource && (
-                                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight">
-                                  Antibody Source/Origin: {mAb.biologicalSource}
-                                </span>
-                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}
