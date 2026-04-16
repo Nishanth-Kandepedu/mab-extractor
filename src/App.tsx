@@ -529,19 +529,23 @@ function AppContent() {
       return;
     }
 
-    const historyQuery = (user.role === 'admin')
-      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
-      : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+    const isGuest = user.role === 'guest';
+    const isAdmin = user.role === 'admin';
+    const skipExtractions = isGuest || isAdmin;
 
-    const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      })) as ExtractionResult[];
-      setHistory(docs);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'extractions');
-    });
+    let unsubHistory = () => {};
+    if (!skipExtractions) {
+      const historyQuery = query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+      unsubHistory = onSnapshot(historyQuery, (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        })) as ExtractionResult[];
+        setHistory(docs);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'extractions');
+      });
+    }
 
     let unsubActivity = () => {};
     let unsubUsers = () => {};
@@ -723,8 +727,8 @@ function AppContent() {
           value: result.antibodies.length
         });
 
-        // Save extraction for all users (including guests)
-        if (user) {
+        // Save extraction (disabled for admin and guests to save quota)
+        if (user && user.role !== 'admin' && user.role !== 'guest') {
           // Strip any existing ID to avoid collisions
           const { id: _id, ...resultData } = result as any;
           const docData = {
@@ -1155,6 +1159,8 @@ function AppContent() {
                   Admin Dashboard
                 </button>
               )}
+          {user && (user as any)?.role !== 'admin' && (user as any)?.role !== 'guest' && (
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => {
                   setShowHistory(!showHistory);
@@ -1168,6 +1174,8 @@ function AppContent() {
                 <History className="w-4 h-4" />
                 { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
               </button>
+            </div>
+          )}
               <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-bold text-white">{user.displayName}</p>
@@ -2036,6 +2044,16 @@ function AppContent() {
                         </div>
                         <span className="text-lg font-bold text-white">{state.result.antibodies.length}</span>
                       </div>
+
+                      {((user as any)?.role === 'admin' || (user as any)?.role === 'guest') && (
+                        <div className="flex flex-col bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Clock className="w-3 h-3 text-amber-400" />
+                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Cloud Sync</span>
+                          </div>
+                          <span className="text-xs font-bold text-amber-600 uppercase tracking-tight">Disabled (Ephemeral Mode)</span>
+                        </div>
+                      )}
 
                       {state.result.extractionTime && (
                         <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
