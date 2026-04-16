@@ -1200,6 +1200,53 @@ function AppContent() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
+          {/* System Health Dashboard */}
+          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest flex items-center gap-2">
+                <Activity className="w-3 h-3 text-indigo-500" />
+                System Infrastructure
+              </h3>
+              <div className="flex items-center gap-1.5">
+                <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                <span className="text-[9px] font-bold text-zinc-500 uppercase">{networkStats.online ? 'Live' : 'Offline'}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
+                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">API Latency</p>
+                <div className="flex items-end gap-1">
+                  <span className="text-sm font-bold text-zinc-700">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
+                  <span className="text-[8px] text-zinc-400 mb-0.5">ms</span>
+                </div>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
+                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Engine Health</p>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase">Optimal</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-[9px]">
+                <span className="text-zinc-400 uppercase font-medium">Model Load</span>
+                <span className="text-zinc-600 font-bold uppercase tracking-tighter">Normal (0.4s)</span>
+              </div>
+              <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: '25%' }}
+                  className="h-full bg-indigo-500" 
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
+              <span className="text-[8px] text-zinc-400 italic">Last ping: {networkStats.lastChecked.toLocaleTimeString()}</span>
+              <button onClick={checkHealth} className="text-[8px] font-bold text-indigo-600 hover:underline uppercase tracking-widest">Verify Nodes</button>
+            </div>
+          </div>
+
           {/* Model Selection */}
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
@@ -1383,52 +1430,6 @@ function AppContent() {
                 </div>
               </div>
 
-              {/* System Health Dashboard */}
-              <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 space-y-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest flex items-center gap-2">
-                    <Activity className="w-3 h-3 text-indigo-500" />
-                    System Infrastructure
-                  </h3>
-                  <div className="flex items-center gap-1.5">
-                    <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase">{networkStats.online ? 'Live' : 'Offline'}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">API Latency</p>
-                    <div className="flex items-end gap-1">
-                      <span className="text-sm font-bold text-zinc-700">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
-                      <span className="text-[8px] text-zinc-400 mb-0.5">ms</span>
-                    </div>
-                  </div>
-                  <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Engine Health</p>
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase">Optimal</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[9px]">
-                    <span className="text-zinc-400 uppercase font-medium">Model Load</span>
-                    <span className="text-zinc-600 font-bold uppercase tracking-tighter">Normal (0.4s)</span>
-                  </div>
-                  <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: '25%' }}
-                      className="h-full bg-indigo-500" 
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
-                  <span className="text-[8px] text-zinc-400 italic">Last ping: {networkStats.lastChecked.toLocaleTimeString()}</span>
-                  <button onClick={checkHealth} className="text-[8px] font-bold text-indigo-600 hover:underline uppercase tracking-widest">Verify Nodes</button>
-                </div>
-              </div>
             </div>
           </div>
 
