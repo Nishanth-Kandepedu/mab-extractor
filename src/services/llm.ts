@@ -70,11 +70,9 @@ Output Schema:
         "company": "string",
         "indication": "string",
         "targets": "string", // e.g., "PD-1", "HER2"
-        "potency": "string", // e.g., "IC50 = 1.2 nM", "EC50 = 0.5 nM"
-        "bioactivities": "string", // e.g., "Binding affinity Kd = 0.5 nM", "Functional assay results"
+        "bioactivities": "string", // e.g., "IC50 = 1.2 nM", "Binding affinity Kd = 0.5 nM"
         "physchem": "string", // Physicochemical properties (pI, solubility, etc.)
-        "admet": "string", // ADMET properties
-        "dmpk": "string", // Drug Metabolism and Pharmacokinetics (DMPK) details
+        "admet": "string", // ADMET / PK properties
         "epitopeMapping": "string", // Epitope mapping details
         "biologicalSources": "string", // Cell lines, species, etc.
         "mabType": "string",
@@ -92,7 +90,6 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
-  tier?: 'fast' | 'balanced' | 'extended';
 }
 
 /**
@@ -258,7 +255,7 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: (options.tier === 'extended' || (options.tier !== 'fast' && model?.includes('3.1'))) ? "HIGH" : "MEDIUM",
+      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
       responseSchema: {
         type: "OBJECT",
         properties: {
@@ -307,11 +304,9 @@ export async function extractWithLLM(
                     company: { type: "STRING" },
                     indication: { type: "STRING" },
                     targets: { type: "STRING" },
-                    potency: { type: "STRING" },
                     bioactivities: { type: "STRING" },
                     physchem: { type: "STRING" },
                     admet: { type: "STRING" },
-                    dmpk: { type: "STRING" },
                     epitopeMapping: { type: "STRING" },
                     biologicalSources: { type: "STRING" },
                     mabType: { type: "STRING" },
@@ -408,23 +403,20 @@ export async function extractWithLLM(
                                pollError.name === 'TypeError';
         
         if (isNetworkError && attempts < maxAttempts - 1) {
-          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying...`);
+          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
+          // Check if we are still online
+          if (!navigator.onLine) {
+            console.error("[Extraction] Browser is offline. Waiting for connection...");
+          }
         } else {
           console.error("[Extraction] Non-recoverable polling error:", pollError);
           throw pollError;
         }
       }
 
-      // Adaptive polling: faster at the start, slower later
-      // First 5 attempts: 2s
-      // Next 10 attempts: 3s
-      // Thereafter: 5s
-      let waitTime = 5000;
-      if (attempts < 5) waitTime = 2000;
-      else if (attempts < 15) waitTime = 3500;
-      
-      const jitter = Math.floor(Math.random() * 500);
-      await new Promise(resolve => setTimeout(resolve, waitTime + jitter));
+      // Wait 5 seconds before next poll with jitter
+      const jitter = Math.floor(Math.random() * 1000);
+      await new Promise(resolve => setTimeout(resolve, 5000 + jitter));
       attempts++;
     }
 

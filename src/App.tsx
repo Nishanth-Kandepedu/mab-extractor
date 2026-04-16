@@ -73,8 +73,7 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview',
-    tier: 'balanced'
+    model: 'gemini-3.1-pro-preview'
   });
   const [inputText, setInputText] = useState('');
   const [pageRange, setPageRange] = useState('');
@@ -219,7 +218,7 @@ function AppContent() {
             
             // Default guests to Pro
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', tier: 'balanced' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           } else {
             // New user or anonymous session without doc
@@ -243,7 +242,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', tier: 'balanced' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
             }
           }
         } catch (error) {
@@ -869,11 +868,9 @@ function AppContent() {
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
             targets: mAb.properties?.targets || '',
-            potency: mAb.properties?.potency || '',
             bioactivities: mAb.properties?.bioactivities || '',
             physchem: mAb.properties?.physchem || '',
             admet: mAb.properties?.admet || '',
-            dmpk: mAb.properties?.dmpk || '',
             epitopeMapping: mAb.properties?.epitopeMapping || '',
             biologicalSources: mAb.properties?.biologicalSources || '',
             company: mAb.properties?.company || '',
@@ -1274,41 +1271,14 @@ function AppContent() {
             </div>
             
             {(user as any)?.role === 'guest' ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
-                    Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
-                  </p>
+              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Extraction Tier</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['fast', 'balanced', 'extended'] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setLlmOptions({ ...llmOptions, tier: t })}
-                        className={cn(
-                          "py-2 px-1 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all border",
-                          llmOptions.tier === t 
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[9px] text-zinc-400 italic">
-                    {llmOptions.tier === 'fast' ? '⚡ Flash: 2-5s. Best for single sequences.' : 
-                     llmOptions.tier === 'balanced' ? '⚖️ Balanced: 10-20s. Standard accuracy.' : 
-                     '🧠 Extended: 30s+. Deep reasoning for complex tables.'}
-                  </p>
-                </div>
+                <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
+                  Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1319,7 +1289,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ ...llmOptions, provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1361,26 +1331,6 @@ function AppContent() {
                     </>
                   )}
                 </select>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Extraction Tier</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['fast', 'balanced', 'extended'] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setLlmOptions({ ...llmOptions, tier: t })}
-                        className={cn(
-                          "py-2 px-1 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all border",
-                          llmOptions.tier === t 
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -2235,11 +2185,9 @@ function AppContent() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-zinc-100">
                               {[
                                 { label: 'Targets', value: mAb.properties.targets },
-                                { label: 'Potency (IC50/EC50)', value: mAb.properties.potency },
                                 { label: 'Bioactivities', value: mAb.properties.bioactivities },
                                 { label: 'Physicochemical', value: mAb.properties.physchem },
-                                { label: 'ADMET', value: mAb.properties.admet },
-                                { label: 'DMPK', value: mAb.properties.dmpk },
+                                { label: 'ADMET / PK', value: mAb.properties.admet },
                                 { label: 'Epitope Mapping', value: mAb.properties.epitopeMapping },
                                 { label: 'Biological Sources', value: mAb.properties.biologicalSources },
                                 { label: 'Company', value: mAb.properties.company },
