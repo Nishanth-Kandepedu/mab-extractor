@@ -32,16 +32,15 @@ IMPORTANT EXTRACTION RULES:
    - Capture the exact page number and table ID (if applicable) for every sequence.
    - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
-6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
-7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
-10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
-11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
-14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
-15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+6. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+7. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+8. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
+9. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+10. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+11. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+12. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
+13. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+14. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 Output Schema:
 {
@@ -266,7 +265,6 @@ export async function extractWithLLM(
                       seqId: { type: "STRING" },
                       pageNumber: { type: "INTEGER" },
                       tableId: { type: "STRING" },
-                      target: { type: "STRING" }, // Mandatory: e.g., "HER2"
                       cdrs: {
                         type: "ARRAY",
                         items: {
@@ -281,7 +279,7 @@ export async function extractWithLLM(
                         },
                       },
                     },
-                    required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber", "target"],
+                    required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber"],
                   },
                 },
                 confidence: { type: "NUMBER" },
