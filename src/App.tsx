@@ -530,8 +530,8 @@ function AppContent() {
     }
 
     const historyQuery = (user.role === 'admin')
-      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(1000))
-      : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+      ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
+      : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
 
     const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
@@ -548,7 +548,7 @@ function AppContent() {
     let unsubAccounts = () => {};
 
     if (user.role === 'admin') {
-      const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(200));
+      const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
         const logs = snapshot.docs.map(doc => ({
           ...doc.data(),
@@ -559,7 +559,7 @@ function AppContent() {
         handleFirestoreError(error, OperationType.GET, 'activity_logs');
       });
 
-      const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(50));
       unsubUsers = onSnapshot(usersQuery, (snapshot) => {
         const users = snapshot.docs.map(doc => ({
           ...doc.data(),
