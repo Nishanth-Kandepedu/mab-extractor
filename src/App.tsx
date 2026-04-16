@@ -1606,9 +1606,36 @@ function AppContent() {
                   { label: 'Est. Total Cost', value: `$${(history.reduce((acc, curr) => {
                     const input = curr.usageMetadata?.promptTokenCount || 0;
                     const total = curr.usageMetadata?.totalTokenCount || 0;
-                    const output = total - input; // Correctly includes thinking tokens
-                    // Rough estimate: $3.50/1M input, $10.50/1M output
-                    return acc + (input * 0.0000035) + (output * 0.0000105);
+                    const output = total - input;
+                    const model = curr.modelUsed || 'pro';
+                    
+                    let inputRate = 3.50;
+                    let outputRate = 10.50;
+
+                    if (model.includes('flash')) {
+                      inputRate = 0.075;
+                      outputRate = 0.30;
+                    } else if (model.includes('gpt-4o-mini')) {
+                      inputRate = 0.15;
+                      outputRate = 0.60;
+                    } else if (model.includes('gpt-4o')) {
+                      inputRate = 2.50;
+                      outputRate = 10.00;
+                    } else if (model.includes('haiku')) {
+                      inputRate = 0.25;
+                      outputRate = 1.25;
+                    } else if (model.includes('sonnet')) {
+                      inputRate = 3.00;
+                      outputRate = 15.00;
+                    } else if (model.includes('opus')) {
+                      inputRate = 15.00;
+                      outputRate = 75.00;
+                    } else if (model.includes('o1')) {
+                      inputRate = 15.00;
+                      outputRate = 60.00;
+                    }
+
+                    return acc + (input / 1000000 * inputRate) + (output / 1000000 * outputRate);
                   }, 0)).toFixed(2)}`, icon: Save, color: 'text-emerald-600', bg: 'bg-emerald-50' }
                 ].map((stat, i) => (
                   <div key={i} className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
@@ -2122,10 +2149,41 @@ function AppContent() {
                           <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
                         </div>
                         <span className="text-lg font-bold text-indigo-100">
-                          {state.result.usageMetadata ? 
-                            `$${((state.result.usageMetadata.promptTokenCount / 1000000) * 3.50 + 
-                                ((state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount) / 1000000) * 10.50).toFixed(4)}` 
-                            : '---'}
+                          {(() => {
+                            if (!state.result?.usageMetadata) return '---';
+                            const meta = state.result.usageMetadata;
+                            const model = state.result.modelUsed || llmOptions.model;
+                            
+                            let inputRate = 3.50; // Default Pro
+                            let outputRate = 10.50; // Default Pro
+
+                            if (model.includes('flash')) {
+                              inputRate = 0.075;
+                              outputRate = 0.30;
+                            } else if (model.includes('gpt-4o-mini')) {
+                              inputRate = 0.15;
+                              outputRate = 0.60;
+                            } else if (model.includes('gpt-4o')) {
+                              inputRate = 2.50;
+                              outputRate = 10.00;
+                            } else if (model.includes('haiku')) {
+                              inputRate = 0.25;
+                              outputRate = 1.25;
+                            } else if (model.includes('sonnet')) {
+                              inputRate = 3.00;
+                              outputRate = 15.00;
+                            } else if (model.includes('opus')) {
+                              inputRate = 15.00;
+                              outputRate = 75.00;
+                            } else if (model.includes('o1')) {
+                              inputRate = 15.00;
+                              outputRate = 60.00;
+                            }
+
+                            const inputCost = (meta.promptTokenCount / 1000000) * inputRate;
+                            const outputCost = ((meta.totalTokenCount - meta.promptTokenCount) / 1000000) * outputRate;
+                            return `$${(inputCost + outputCost).toFixed(4)}`;
+                          })()}
                         </span>
                       </div>
                     </div>

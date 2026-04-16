@@ -180,6 +180,8 @@ async function startServer() {
           }
           
           const result = extractJson(text);
+          result.modelUsed = model || 'gemini-3.1-pro-preview';
+          
           if (usage) {
             result.usageMetadata = {
               promptTokenCount: usage.promptTokenCount,
@@ -213,6 +215,7 @@ async function startServer() {
           const content = response.choices[0].message.content || '{}';
           const usage = response.usage;
           const result = extractJson(content);
+          result.modelUsed = model || 'gpt-4o';
           
           if (usage) {
             result.usageMetadata = {
@@ -244,6 +247,7 @@ async function startServer() {
           const content = response.content[0].type === 'text' ? response.content[0].text : '';
           const usage = response.usage;
           const result = extractJson(content || '{}');
+          result.modelUsed = model || 'claude-3-5-sonnet-latest';
           
           if (usage) {
             result.usageMetadata = {
