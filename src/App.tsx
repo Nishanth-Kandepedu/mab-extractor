@@ -73,7 +73,8 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview'
+    model: 'gemini-3.1-pro-preview',
+    tier: 'balanced'
   });
   const [inputText, setInputText] = useState('');
   const [pageRange, setPageRange] = useState('');
@@ -218,7 +219,7 @@ function AppContent() {
             
             // Default guests to Pro
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', tier: 'balanced' });
             }
           } else {
             // New user or anonymous session without doc
@@ -242,7 +243,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview', tier: 'balanced' });
             }
           }
         } catch (error) {
@@ -1273,14 +1274,41 @@ function AppContent() {
             </div>
             
             {(user as any)?.role === 'guest' ? (
-              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
+              <div className="space-y-4">
+                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
+                    Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
+                  </p>
                 </div>
-                <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
-                  Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
-                </p>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Extraction Tier</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['fast', 'balanced', 'extended'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setLlmOptions({ ...llmOptions, tier: t })}
+                        className={cn(
+                          "py-2 px-1 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all border",
+                          llmOptions.tier === t 
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-zinc-400 italic">
+                    {llmOptions.tier === 'fast' ? '⚡ Flash: 2-5s. Best for single sequences.' : 
+                     llmOptions.tier === 'balanced' ? '⚖️ Balanced: 10-20s. Standard accuracy.' : 
+                     '🧠 Extended: 30s+. Deep reasoning for complex tables.'}
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1291,7 +1319,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                        onClick={() => setLlmOptions({ ...llmOptions, provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1333,6 +1361,26 @@ function AppContent() {
                     </>
                   )}
                 </select>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Extraction Tier</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['fast', 'balanced', 'extended'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setLlmOptions({ ...llmOptions, tier: t })}
+                        className={cn(
+                          "py-2 px-1 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all border",
+                          llmOptions.tier === t 
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>

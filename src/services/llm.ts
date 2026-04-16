@@ -92,6 +92,7 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
+  tier?: 'fast' | 'balanced' | 'extended';
 }
 
 /**
@@ -257,7 +258,7 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
+      thinkingLevel: (options.tier === 'extended' || (options.tier !== 'fast' && model?.includes('3.1'))) ? "HIGH" : "MEDIUM",
       responseSchema: {
         type: "OBJECT",
         properties: {
@@ -407,20 +408,23 @@ export async function extractWithLLM(
                                pollError.name === 'TypeError';
         
         if (isNetworkError && attempts < maxAttempts - 1) {
-          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
-          // Check if we are still online
-          if (!navigator.onLine) {
-            console.error("[Extraction] Browser is offline. Waiting for connection...");
-          }
+          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying...`);
         } else {
           console.error("[Extraction] Non-recoverable polling error:", pollError);
           throw pollError;
         }
       }
 
-      // Wait 5 seconds before next poll with jitter
-      const jitter = Math.floor(Math.random() * 1000);
-      await new Promise(resolve => setTimeout(resolve, 5000 + jitter));
+      // Adaptive polling: faster at the start, slower later
+      // First 5 attempts: 2s
+      // Next 10 attempts: 3s
+      // Thereafter: 5s
+      let waitTime = 5000;
+      if (attempts < 5) waitTime = 2000;
+      else if (attempts < 15) waitTime = 3500;
+      
+      const jitter = Math.floor(Math.random() * 500);
+      await new Promise(resolve => setTimeout(resolve, waitTime + jitter));
       attempts++;
     }
 
