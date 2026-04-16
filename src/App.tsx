@@ -1469,55 +1469,90 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Status/Error */}
+          {/* Error Modal Overlay */}
           <AnimatePresence>
             {state.error && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-900">Extraction Error</p>
-                  <p className="text-xs text-red-700 mt-1">{state.error}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <button
-                      onClick={() => {
-                        if (inputText) handleTextExtraction();
-                        else if (fileInputRef.current?.files?.[0]) handleFileUpload();
-                        else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
-                      }}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-200 transition-all flex items-center gap-2"
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                >
+                  <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-red-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                        <AlertCircle className="w-6 h-6 text-red-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-zinc-900">Extraction Error</h3>
+                        <p className="text-xs text-zinc-500">The mining engine encountered an issue</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setState(prev => ({ ...prev, error: null }))}
+                      className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      Retry Extraction
+                      <X className="w-5 h-5 text-zinc-400" />
                     </button>
-                    {window.location.hostname.includes('.bio') && (
-                      <button
-                        onClick={() => window.location.href = 'https://abminer.up.railway.app'}
-                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-200 transition-all flex items-center gap-2"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Try on Railway URL (More Stable)
-                      </button>
-                    )}
-                    {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
-                      <button
-                        onClick={() => {
-                          setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
-                          setState(prev => ({ ...prev, error: null }));
-                        }}
-                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-200 transition-all flex items-center gap-2"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Switch to Flash & Retry
-                      </button>
-                    )}
                   </div>
-                </div>
-              </motion.div>
+
+                  <div className="p-8 overflow-y-auto flex-1">
+                    <div className="bg-zinc-50 rounded-2xl p-6 border border-zinc-100 font-mono text-xs text-red-600 break-words whitespace-pre-wrap leading-relaxed">
+                      {state.error}
+                    </div>
+                    
+                    <div className="mt-8 space-y-4">
+                      <p className="text-sm text-zinc-600 font-medium">Recommended Actions:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          onClick={() => {
+                            if (inputText) handleTextExtraction();
+                            else if (fileInputRef.current?.files?.[0]) handleFileUpload();
+                            else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file or re-enter text." }));
+                          }}
+                          className="flex items-center justify-center gap-2 p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-indigo-200"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          Retry Extraction
+                        </button>
+                        
+                        {window.location.hostname.includes('.bio') && (
+                          <button
+                            onClick={() => window.location.href = 'https://abminer.up.railway.app'}
+                            className="flex items-center justify-center gap-2 p-4 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 rounded-2xl text-sm font-bold transition-all"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            Try Railway URL
+                          </button>
+                        )}
+
+                        {(state.error.includes('503') || state.error.includes('429') || state.error.toLowerCase().includes('timeout')) && llmOptions.model !== 'gemini-3-flash-preview' && (
+                          <button
+                            onClick={() => {
+                              setLlmOptions({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+                              setState(prev => ({ ...prev, error: null }));
+                            }}
+                            className="flex items-center justify-center gap-2 p-4 bg-amber-50 border border-amber-100 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-bold transition-all col-span-full"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            Switch to Flash & Retry
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end">
+                    <button
+                      onClick={() => setState(prev => ({ ...prev, error: null }))}
+                      className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
         </div>
