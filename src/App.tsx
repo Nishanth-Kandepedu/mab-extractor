@@ -73,7 +73,7 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview'
+    model: 'gemini-2.0-pro-exp-02-05'
   });
   const [inputText, setInputText] = useState('');
   const [pageRange, setPageRange] = useState('');
@@ -1282,7 +1282,7 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-2.0-pro-exp-02-05' : p === 'openai' ? 'o1' : 'claude-3-7-sonnet-20250219' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1304,23 +1304,23 @@ function AppContent() {
                 >
                   {llmOptions.provider === 'gemini' && (
                     <>
-                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                      <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                      <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro (Frontier)</option>
+                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast & Clever)</option>
+                      <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (Stable Legacy)</option>
                     </>
                   )}
                   {llmOptions.provider === 'openai' && (
                     <>
-                      <option value="gpt-4o">GPT-4o (Omni)</option>
-                      <option value="gpt-4o-mini">GPT-4o Mini</option>
-                      <option value="o1-preview">o1 Preview (Reasoning)</option>
+                      <option value="o1">OpenAI o1 (Full Reasoning)</option>
+                      <option value="o1-mini">o1 Mini (Fast Reasoning)</option>
+                      <option value="gpt-4o">GPT-4o (Standard Flagship)</option>
                     </>
                   )}
                   {llmOptions.provider === 'anthropic' && (
                     <>
-                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                      <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                      <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Hybrid Reasoning)</option>
+                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (Legacy Stable)</option>
+                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku (Fast)</option>
                     </>
                   )}
                 </select>
@@ -2157,25 +2157,13 @@ function AppContent() {
                             let inputRate = 3.50; // Default Pro
                             let outputRate = 10.50; // Default Pro
 
-                            if (model.includes('flash')) {
-                              inputRate = 0.075;
-                              outputRate = 0.30;
-                            } else if (model.includes('gpt-4o-mini')) {
+                            if (model.includes('flash') || model.includes('mini')) {
                               inputRate = 0.15;
                               outputRate = 0.60;
-                            } else if (model.includes('gpt-4o')) {
-                              inputRate = 2.50;
-                              outputRate = 10.00;
-                            } else if (model.includes('haiku')) {
-                              inputRate = 0.25;
-                              outputRate = 1.25;
-                            } else if (model.includes('sonnet')) {
+                            } else if (model.includes('sonnet') || model.includes('pro')) {
                               inputRate = 3.00;
-                              outputRate = 15.00;
-                            } else if (model.includes('opus')) {
-                              inputRate = 15.00;
-                              outputRate = 75.00;
-                            } else if (model.includes('o1')) {
+                              outputRate = 12.00;
+                            } else if (model.includes('o1') || model.includes('opus')) {
                               inputRate = 15.00;
                               outputRate = 60.00;
                             }

@@ -157,12 +157,12 @@ async function startServer() {
 
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: model || 'gemini-3.1-pro-preview',
+            model: model || 'gemini-2.0-pro-exp-02-05',
             contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
             config: {
               systemInstruction,
               temperature: 0,
-              thinkingConfig: thinkingLevel ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
+              thinkingConfig: model?.includes('thinking') ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
               maxOutputTokens: 65536,
               responseMimeType: "application/json",
               responseSchema: responseSchema,
@@ -180,7 +180,7 @@ async function startServer() {
           }
           
           const result = extractJson(text);
-          result.modelUsed = model || 'gemini-3.1-pro-preview';
+          result.modelUsed = model || 'gemini-2.0-pro-exp-02-05';
           
           if (usage) {
             result.usageMetadata = {
@@ -203,7 +203,7 @@ async function startServer() {
           }
           const openai = new OpenAI({ apiKey });
           const response = await openai.chat.completions.create({
-            model: model || 'gpt-4o',
+            model: model || 'o1',
             messages: [
               { role: 'system', content: systemInstruction },
               { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
@@ -215,7 +215,7 @@ async function startServer() {
           const content = response.choices[0].message.content || '{}';
           const usage = response.usage;
           const result = extractJson(content);
-          result.modelUsed = model || 'gpt-4o';
+          result.modelUsed = model || 'o1';
           
           if (usage) {
             result.usageMetadata = {
@@ -236,7 +236,7 @@ async function startServer() {
           }
           const anthropic = new Anthropic({ apiKey });
           const response = await anthropic.messages.create({
-            model: model || 'claude-3-5-sonnet-latest',
+            model: model || 'claude-3-7-sonnet-20250219',
             max_tokens: 4096,
             system: systemInstruction,
             messages: [
@@ -247,7 +247,7 @@ async function startServer() {
           const content = response.content[0].type === 'text' ? response.content[0].text : '';
           const usage = response.usage;
           const result = extractJson(content || '{}');
-          result.modelUsed = model || 'claude-3-5-sonnet-latest';
+          result.modelUsed = model || 'claude-3-7-sonnet-20250219';
           
           if (usage) {
             result.usageMetadata = {
