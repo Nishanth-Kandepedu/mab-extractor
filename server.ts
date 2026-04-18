@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import pLimit from 'p-limit';
 import fs from 'fs';
 
@@ -16,15 +16,19 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Firebase Admin
-let db: admin.firestore.Firestore | null = null;
+// Initialize Firebase Admin with extra safety
+let db: any = null;
 try {
   const configPath = path.join(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    admin.initializeApp({
-      projectId: config.projectId,
-    });
+    
+    // Check if already initialized
+    if (admin.apps.length === 0) {
+      admin.initializeApp({
+        projectId: config.projectId,
+      });
+    }
     db = admin.firestore();
     console.log('[Firebase] Admin SDK initialized successfully');
   } else {
@@ -34,18 +38,27 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 2 at a time 
-// to avoid shared API key rate limits (RPM)
+// Concurrency control: Limit heavy LLM extractions to 2 at a time
 const limit = pLimit(2);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
 
 async function getJob(jobId: string) {
+  // Always check cache first for speed
   if (jobsCache.has(jobId)) return jobsCache.get(jobId);
+  
   if (db) {
-    const doc = await db.collection('extraction_jobs').doc(jobId).get();
-    if (doc.exists) return doc.data();
+    try {
+      const doc = await db.collection('extraction_jobs').doc(jobId).get();
+      if (doc.exists) {
+        const data = doc.data();
+        jobsCache.set(jobId, data);
+        return data;
+      }
+    } catch (e) {
+      console.error(`[Firebase] Error fetching job ${jobId}:`, e);
+    }
   }
   return null;
 }
@@ -53,8 +66,13 @@ async function getJob(jobId: string) {
 async function updateJob(jobId: string, data: any) {
   const updated = { ...data, updatedAt: Date.now() };
   jobsCache.set(jobId, updated);
+  
   if (db) {
-    await db.collection('extraction_jobs').doc(jobId).set(updated, { merge: true });
+    try {
+      await db.collection('extraction_jobs').doc(jobId).set(updated, { merge: true });
+    } catch (e) {
+      console.error(`[Firebase] Error updating job ${jobId}:`, e);
+    }
   }
 }
 
