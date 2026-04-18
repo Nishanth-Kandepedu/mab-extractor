@@ -15,12 +15,12 @@ IMPORTANT EXTRACTION RULES:
    - VL sequences are typically 110-120 amino acids long.
    - If VL appears incomplete, check the next page or table.
 
-3. Validation & Domain Boundary:
-   - Full Variable Domain ONLY: You MUST extract the ENTIRE Variable Domain (Fv). 
-   - VH (Heavy) Domain: typically 115-125 amino acids. MUST encompass Framework 1 through Framework 4. Ends with conserved "WGXG" (e.g., WGQG, WGRG) motif.
-   - VL (Light) Domain: typically 110-120 amino acids. Ends with conserved "FGXG" (e.g., FGQG, FGTG) motif.
-   - FRAGMENT PROTECTION: Do NOT extract individual CDRs (e.g., 5-15 AA sequences) as if they were full "chains". If you see a table of separate CDRs, DO NOT extract them into the "fullSequence" field. Only extract full VH/VL domains.
-   - TRUNCATION RULE: If the source contains the full chain (including Constant Regions), you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment motifs mentioned above.
+3. Validation & Domain Boundary (ZERO TOLERANCE):
+   - You are currently FAILING Heavy Chain extraction. VH Accuracy is ~83%.
+   - VH (Heavy) Domain: MUST be 115-125 amino acids.
+   - IDENTIFYING PARTIALS: If a VH sequence starts with something other than "EVQL", "QVQL", "EIVL", or "QIQL" and is shorter than 110 AA, it is 100% WRONG. You have missed Framework 1.
+   - RE-READ MANDATE: When you find a Heavy chain, you MUST search the Sequence Listing for the corresponding SEQ ID NO and capture the sequence FROM THE START.
+   - FRAGMENT REJECTION: Do NOT extract CDR tables (5-15 AA sequences). If you return these as "fullSequence", you are failing the task.
 
 4. Table Structure & Coverage:
    - Some antibodies may have their sequences split across multiple rows or pages.
@@ -35,12 +35,10 @@ IMPORTANT EXTRACTION RULES:
 
 6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
 
-7. Bispecific & Multispecific Antibodies (STRICT MODE):
-   - You MUST explicitly identify the molecular architecture (e.g., 2+2, 1+1, common light chain).
-   - PAIRING REQUIREMENT: Bispecifics usually contain TWO DIFFERENT Heavy chains (VH-A and VH-B). You are strictly forbidden from reusing VH-A as VH-B if they have different SEQ IDs or sequences in the document.
-   - ARM DIFFERENTIATION: For every chain in a bispecific, you MUST identify which specific arm it belongs to (e.g., "Arm A", "CD3-binding arm") in the "summary" field.
-   - INDEPENDENT VERIFICATION: Treat VH-A and VH-B as entirely separate extraction tasks. Do not assume they are similar. Check for subtle amino acid differences (point mutations) that distinguish variant properties.
-   - If accuracy for one arm is high but the other is low, RE-READ the Sequence Listing for EVERY chain.
+7. Bispecific & Multispecific Antibodies (OVER-EXTRACTION GUARD):
+   - Do NOT create duplicate variants for the same molecule found in different tables. Consolidate all evidence into a single Antibody entry with its specific chains.
+   - Bispecifics usually have TWO distinct Heavy chains. You MUST identify both (VH-A and VH-B) from the Sequence Listing.
+   - ACCESSORY CHAIN VERIFICATION: If you find 6 variants but only 3 are perfect, it means you are skipping the Sequence Listing for the other 3. Every variant ID (e.g., bsAb6321) MUST be mapped to its specific SEQ ID in the listing.
 
 8. Zero-Tolerance for Truncation (VH-Focus):
    - A Heavy chain variable domain (VH) MUST be ~115-125 AA.
