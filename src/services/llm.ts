@@ -15,12 +15,11 @@ IMPORTANT EXTRACTION RULES:
    - VL sequences are typically 110-120 amino acids long.
    - If VL appears incomplete, check the next page or table.
 
-3. Validation & Domain Boundary (ZERO TOLERANCE):
-   - You are currently FAILING Heavy Chain extraction. VH Accuracy is ~83%.
-   - VH (Heavy) Domain: MUST be 115-125 amino acids.
-   - IDENTIFYING PARTIALS: If a VH sequence starts with something other than "EVQL", "QVQL", "EIVL", or "QIQL" and is shorter than 110 AA, it is 100% WRONG. You have missed Framework 1.
-   - RE-READ MANDATE: When you find a Heavy chain, you MUST search the Sequence Listing for the corresponding SEQ ID NO and capture the sequence FROM THE START.
-   - FRAGMENT REJECTION: Do NOT extract CDR tables (5-15 AA sequences). If you return these as "fullSequence", you are failing the task.
+3. Validation & Domain Boundary:
+   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
+   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
+   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
+   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
 
 4. Table Structure & Coverage:
    - Some antibodies may have their sequences split across multiple rows or pages.
@@ -34,18 +33,10 @@ IMPORTANT EXTRACTION RULES:
    - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
 6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
-
-7. Bispecific & Multispecific Antibodies (OVER-EXTRACTION GUARD):
-   - Do NOT create duplicate variants for the same molecule found in different tables. Consolidate all evidence into a single Antibody entry with its specific chains.
-   - Bispecifics usually have TWO distinct Heavy chains. You MUST identify both (VH-A and VH-B) from the Sequence Listing.
-   - ACCESSORY CHAIN VERIFICATION: If you find 6 variants but only 3 are perfect, it means you are skipping the Sequence Listing for the other 3. Every variant ID (e.g., bsAb6321) MUST be mapped to its specific SEQ ID in the listing.
-
-8. Zero-Tolerance for Truncation (VH-Focus):
-   - A Heavy chain variable domain (VH) MUST be ~115-125 AA.
-   - CRITICAL FAILURE: If your VH extraction is shorter than 110 AA, you have missed the N-terminal (Framework 1). You MUST search backward in the source text/listing for the start of the sequence (e.g., EVQL..., QVQL...).
-   - Do NOT extract individual CDRs (5-15 AA) as "fullSequences". Only extract full VH/VL domains.
-
-9. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
+10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
