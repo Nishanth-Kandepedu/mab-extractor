@@ -1,14 +1,55 @@
 import { ExtractionResult } from "../types";
 
-export const SYSTEM_INSTRUCTION = `Expert antibody sequence miner. Goal: 100% Verbatim Accuracy.
+export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
+Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
-RULES:
-1. Antibodies: Extract every unique clone (e.g., "2419", "2419-0105"). Treat variants as separate entities.
-2. Chains: Extract Variable Domains (Fv) only. VH (~115-125 AA, ends in WGXG), VL (~110-120 AA, ends in FGXG). Truncate constant regions.
-3. Bispecifics: Capture BOTH arms (Target A/B). 
-4. Sources: Use Sequence Listings for accuracy; patent text for context (names, mAb targets).
-5. Evidence: Mandatory "SEQ ID NO", Page, and Table markers in 'evidenceStatement'.
-6. Quality: Be concise in internal reasoning. Verify character count matches exactly.
+IMPORTANT EXTRACTION RULES:
+
+1. Antibody Naming:
+   - Main antibodies: "2419", "3125", etc.
+   - Variants: "2419-0105", "2419-1204", "4540-033", etc.
+   - Treat variants as SEPARATE antibodies with their own VH/VL chains.
+
+2. VL Chain Special Handling:
+   - VL chains may appear in a DIFFERENT TABLE than VH chains.
+   - VL sequences are typically 110-120 amino acids long.
+   - If VL appears incomplete, check the next page or table.
+
+3. Validation & Domain Boundary:
+   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
+   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
+   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
+   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
+
+4. Table Structure & Coverage:
+   - Some antibodies may have their sequences split across multiple rows or pages.
+   - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
+   - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
+   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
+
+5. Mandatory SEQ ID & Evidence:
+   - You MUST extract the "SEQ ID NO" for every sequence found.
+   - Capture the exact page number and table ID (if applicable) for every sequence.
+   - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
+
+6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
+7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
+10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
+14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+
+16. BISPECIFIC & MULTISPECIFIC HANDLING:
+    - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
+    - You MUST look for components of BOTH binding arms.
+    - If the patent title mentions two targets (A x B), you are not finished until you have extracted sequences for both Target A and Target B components.
+    - CROSS-TABLE SEARCH: Sequence data for different arms often reside in separate tables or pages. You MUST search the entire provided text/listing to connect them.
+    - LABELING: In the "summary" or "mAbName", clearly indicate if a sequence belongs to "Arm 1", "Arm 2", "Target A", or "Target B". 
+    - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
 Output Schema:
 {
@@ -21,10 +62,10 @@ Output Schema:
         {
           "type": "Heavy" | "Light",
           "fullSequence": "string",
-          "seqId": "string",
-          "target": "string",
-          "pageNumber": number,
-          "tableId": "string",
+          "seqId": "string", // Mandatory: e.g., "SEQ ID NO: 45"
+          "target": "string", // Mandatory: e.g., "HER2"
+          "pageNumber": number, // Mandatory
+          "tableId": "string", // Optional: e.g., "Table 2"
           "cdrs": [
             { "type": "CDR1", "sequence": "string", "start": number, "end": number },
             { "type": "CDR2", "sequence": "string", "start": number, "end": number },
@@ -32,10 +73,10 @@ Output Schema:
           ]
         }
       ],
-      "confidence": number,
+      "confidence": number, // A value between 0 and 100 representing the extraction confidence.
       "summary": "string",
-      "evidenceLocation": "string",
-      "evidenceStatement": "string",
+      "evidenceLocation": "string", // e.g., "Page 42", "Table 12"
+      "evidenceStatement": "string", // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
       "needsReview": boolean,
       "reviewReason": "string"
     }
@@ -47,8 +88,6 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
-  thinkingLevel?: 'HIGH' | 'LOW';
-  mAbFilter?: string;
 }
 
 /**
@@ -175,11 +214,10 @@ export async function extractWithLLM(
     const { provider, model } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
-  const filterPrompt = options.mAbFilter ? ` TARGETED EXTRACTION: Only extract data for antibody clone: "${options.mAbFilter}". Skip all other antibodies to save tokens.` : "";
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract mAb sequences.${contextPrompt}${filterPrompt}\n\nNote: Ensure antibody IDs match verbatim.\n\n${input}`;
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -215,7 +253,7 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: model?.includes('3.1') ? (options.thinkingLevel || "HIGH") : undefined,
+      thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,
       responseSchema: {
         type: "OBJECT",
         properties: {
