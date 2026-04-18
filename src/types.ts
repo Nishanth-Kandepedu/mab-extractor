@@ -14,7 +14,6 @@ export interface Chain {
   tableId?: string;
   hasNonStandardAminoAcids?: boolean;
   nonStandardAminoAcids?: string[];
-  target?: string;
 }
 
 export type ExtractionTier = 'fast' | 'balanced' | 'extended';

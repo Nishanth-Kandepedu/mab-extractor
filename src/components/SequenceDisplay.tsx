@@ -15,7 +15,7 @@ interface SequenceDisplayProps {
 }
 
 export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEditable, onUpdate }) => {
-  const { fullSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids, target } = chain;
+  const { fullSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids } = chain;
   const [isEditing, setIsEditing] = React.useState(false);
   const [tempSequence, setTempSequence] = React.useState(fullSequence);
   const [copied, setCopied] = React.useState(false);
@@ -111,11 +111,6 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
           {tableId && (
             <span className="text-[9px] font-mono bg-zinc-200 text-zinc-600 px-2 py-0.5 rounded">
               {tableId}
-            </span>
-          )}
-          {target && (
-            <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 uppercase tracking-tight">
-              Target: {target}
             </span>
           )}
         </div>
