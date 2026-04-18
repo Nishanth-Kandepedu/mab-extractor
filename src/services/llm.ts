@@ -201,7 +201,8 @@ export async function extractWithLLM(
   input: string | { data: string; mimeType: string },
   options: LLMOptions,
   pageContext?: string,
-  sequenceListing?: { data: string; mimeType: string }
+  sequenceListing?: { data: string; mimeType: string },
+  prioritySeqIds?: string
 ): Promise<ExtractionResult> {
   if (!input || (typeof input === 'string' && input.trim().length === 0)) {
     throw new Error("Input text is required for extraction.");
@@ -214,10 +215,11 @@ export async function extractWithLLM(
     const { provider, model } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+  const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following SEQ ID NOs as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing.` : "";
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -240,9 +242,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
     } else {
-      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt} Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt} Perform high-quality verbatim mining.` });
     }
 
     formattedInput = parts;

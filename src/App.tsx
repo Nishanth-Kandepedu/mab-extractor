@@ -76,6 +76,7 @@ function AppContent() {
     model: 'gemini-3.1-pro-preview'
   });
   const [pageRange, setPageRange] = useState('');
+  const [prioritySeqIds, setPrioritySeqIds] = useState('');
   const [sequenceListingFile, setSequenceListingFile] = useState<File | null>(null);
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -711,7 +712,8 @@ function AppContent() {
           { data: fileData, mimeType: file.type }, 
           llmOptions, 
           pageRange,
-          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined
+          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+          prioritySeqIds
         );
         result.extractionTime = Date.now() - startTime;
         setState({ isExtracting: false, result, error: null });
@@ -1371,6 +1373,24 @@ function AppContent() {
                   value={pageRange}
                   onChange={(e) => setPageRange(e.target.value)}
                   placeholder="Focus on specific page, range, or table..."
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  disabled={state.isExtracting}
+                />
+              </div>
+
+              {/* Priority SEQ IDs Input */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    Priority / Missing SEQ IDs (Optional)
+                    <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, 45")</span>
+                  </div>
+                </label>
+                <input
+                  type="text"
+                  value={prioritySeqIds}
+                  onChange={(e) => setPrioritySeqIds(e.target.value)}
+                  placeholder="Tell AI which SEQ IDs to hunt for..."
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   disabled={state.isExtracting}
                 />
