@@ -43,6 +43,14 @@ IMPORTANT EXTRACTION RULES:
 14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
 15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
+16. BISPECIFIC & MULTISPECIFIC HANDLING:
+    - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
+    - You MUST look for components of BOTH binding arms.
+    - If the patent title mentions two targets (A x B), you are not finished until you have extracted sequences for both Target A and Target B components.
+    - CROSS-TABLE SEARCH: Sequence data for different arms often reside in separate tables or pages. You MUST search the entire provided text/listing to connect them.
+    - LABELING: In the "summary" or "mAbName", clearly indicate if a sequence belongs to "Arm 1", "Arm 2", "Target A", or "Target B". 
+    - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
+
 Output Schema:
 {
   "patentId": "string",
