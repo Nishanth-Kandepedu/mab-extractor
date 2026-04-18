@@ -87,6 +87,7 @@ function AppContent() {
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  const [forceLoadHistory, setForceLoadHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -529,13 +530,16 @@ function AppContent() {
       return;
     }
 
-    const isGuest = user.role === 'guest';
-    const isAdmin = user.role === 'admin';
-    const skipExtractions = isGuest || isAdmin;
+    const isGuest = (user as any).role === 'guest';
+    const isAdmin = (user as any).role === 'admin';
+    const skipExtractions = isGuest || (isAdmin && !forceLoadHistory);
 
     let unsubHistory = () => {};
     if (!skipExtractions) {
-      const historyQuery = query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+      const historyQuery = isAdmin
+        ? query(collection(db, 'extractions'), orderBy('createdAt', 'desc'), limit(100))
+        : query(collection(db, 'extractions'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+      
       unsubHistory = onSnapshot(historyQuery, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({
           ...doc.data(),
@@ -551,7 +555,7 @@ function AppContent() {
     let unsubUsers = () => {};
     let unsubAccounts = () => {};
 
-    if (user.role === 'admin') {
+    if (isAdmin && forceLoadHistory) {
       const activityQuery = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(50));
       unsubActivity = onSnapshot(activityQuery, (snapshot) => {
         const logs = snapshot.docs.map(doc => ({
@@ -592,7 +596,7 @@ function AppContent() {
       unsubUsers();
       unsubAccounts();
     };
-  }, [user]);
+  }, [user, forceLoadHistory]);
 
   // Update lastActive
   useEffect(() => {
@@ -1159,21 +1163,31 @@ function AppContent() {
                   Admin Dashboard
                 </button>
               )}
-          {user && (user as any)?.role !== 'admin' && (user as any)?.role !== 'guest' && (
+          {user && (user as any)?.role !== 'guest' && (
             <div className="flex items-center gap-4">
-              <button 
-                onClick={() => {
-                  setShowHistory(!showHistory);
-                  setShowAdminDashboard(false);
-                }}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                  showHistory ? "bg-indigo-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
-                )}
-              >
-                <History className="w-4 h-4" />
-                { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
-              </button>
+              { (user as any)?.role === 'admin' && !forceLoadHistory ? (
+                <button 
+                  onClick={() => setForceLoadHistory(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all uppercase tracking-widest"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Sync Database
+                </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    setShowAdminDashboard(false);
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                    showHistory ? "bg-indigo-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  <History className="w-4 h-4" />
+                  { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
+                </button>
+              )}
             </div>
           )}
               <div className="flex items-center gap-3 pl-4 border-l border-white/10">
@@ -2046,12 +2060,16 @@ function AppContent() {
                       </div>
 
                       {((user as any)?.role === 'admin' || (user as any)?.role === 'guest') && (
-                        <div className="flex flex-col bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Clock className="w-3 h-3 text-amber-400" />
-                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Cloud Sync</span>
+                        <div className="flex flex-col bg-amber-500/5 p-3 rounded-xl border border-amber-500/10 backdrop-blur-sm">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <Clock className="w-3 h-3 text-amber-500" />
+                            <span className="text-[10px] text-amber-600/70 uppercase font-black tracking-[0.1em]">Database Protection</span>
                           </div>
-                          <span className="text-xs font-bold text-amber-600 uppercase tracking-tight">Disabled (Ephemeral Mode)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-tight">Active session only</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          </div>
+                          <p className="text-[9px] text-amber-600/60 mt-1 font-medium italic">Result will not be saved to Cloud History for this role.</p>
                         </div>
                       )}
 

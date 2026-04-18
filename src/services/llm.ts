@@ -55,6 +55,7 @@ Output Schema:
           "type": "Heavy" | "Light",
           "fullSequence": "string",
           "seqId": "string", // Mandatory: e.g., "SEQ ID NO: 45"
+          "target": "string", // Mandatory: e.g., "HER2"
           "pageNumber": number, // Mandatory
           "tableId": "string", // Optional: e.g., "Table 2"
           "cdrs": [
