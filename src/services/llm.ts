@@ -43,6 +43,13 @@ IMPORTANT EXTRACTION RULES:
 14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
 15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
+16. Bispecific & Multispecific Antibodies:
+   - Identify molecules with multiple targets (e.g., "Bispecific", "Bi-specific", "Diabody", "DART", "Multispecific").
+   - A single antibody object (mAbName) should contain ALL chains belonging to that molecule.
+   - If a bispecific antibody (e.g., "BS-01") has two different VH chains and two different VL chains (or a common VL), you MUST include all four (or three) sequences in the "chains" array for that specific "BS-01" entry.
+   - Ensure the "target" field for EACH chain correctly identifies the specific antigen that specific chain pair binds to (e.g., VH1 and VL1 target "Target A", VH2 and VL2 target "Target B").
+   - Do NOT split a single bispecific molecule into two separate antibody entries unless the patent explicitly treats them as independent clones.
+
 Output Schema:
 {
   "patentId": "string",
