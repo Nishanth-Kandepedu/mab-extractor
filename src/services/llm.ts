@@ -34,24 +34,25 @@ IMPORTANT EXTRACTION RULES:
    - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
 6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
-7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
-10. VH/VL Chain Priority:
-   - Heavy chains (VH) often have overlapping numbering or are split in complex tables. Dedicate extra reasoning to ensuring the full 115+ AA sequence is captured.
-   - Given the perfection of VL extraction, apply the same rigorous scanning patterns used for VL to the VH domains.
+
+7. Bispecific & Multispecific Antibodies (STRICT MODE):
+   - You MUST explicitly identify the molecular architecture (e.g., 2+2, 1+1, common light chain).
+   - PAIRING REQUIREMENT: Bispecifics usually contain TWO DIFFERENT Heavy chains (VH-A and VH-B). You are strictly forbidden from reusing VH-A as VH-B if they have different SEQ IDs or sequences in the document.
+   - ARM DIFFERENTIATION: For every chain in a bispecific, you MUST identify which specific arm it belongs to (e.g., "Arm A", "CD3-binding arm") in the "summary" field.
+   - INDEPENDENT VERIFICATION: Treat VH-A and VH-B as entirely separate extraction tasks. Do not assume they are similar. Check for subtle amino acid differences (point mutations) that distinguish variant properties.
+   - If accuracy for one arm is high but the other is low, RE-READ the Sequence Listing for EVERY chain.
+
+8. Zero-Tolerance for Truncation (VH-Focus):
+   - A Heavy chain variable domain (VH) MUST be ~115-125 AA.
+   - CRITICAL FAILURE: If your VH extraction is shorter than 110 AA, you have missed the N-terminal (Framework 1). You MUST search backward in the source text/listing for the start of the sequence (e.g., EVQL..., QVQL...).
+   - Do NOT extract individual CDRs (5-15 AA) as "fullSequences". Only extract full VH/VL domains.
+
+9. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
 11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
 14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
 15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
-
-16. Bispecific & Multispecific Antibodies:
-   - Identify molecules with multiple targets (e.g., "Bispecific", "Bi-specific", "Diabody", "DART", "Multispecific").
-   - A single antibody object (mAbName) should contain ALL chains belonging to that molecule.
-   - If a bispecific antibody (e.g., "BS-01") has two different VH chains and two different VL chains (or a common VL), you MUST include all four (or three) sequences in the "chains" array for that specific "BS-01" entry.
-   - Ensure the "target" field for EACH chain correctly identifies the specific antigen that specific chain pair binds to (e.g., VH1 and VL1 target "Target A", VH2 and VL2 target "Target B").
-   - Do NOT split a single bispecific molecule into two separate antibody entries unless the patent explicitly treats them as independent clones.
 
 Output Schema:
 {
