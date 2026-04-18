@@ -16,10 +16,11 @@ IMPORTANT EXTRACTION RULES:
    - If VL appears incomplete, check the next page or table.
 
 3. Validation & Domain Boundary:
-   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
-   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
-   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
-   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
+   - Full Variable Domain ONLY: You MUST extract the ENTIRE Variable Domain (Fv). 
+   - VH (Heavy) Domain: typically 115-125 amino acids. MUST encompass Framework 1 through Framework 4. Ends with conserved "WGXG" (e.g., WGQG, WGRG) motif.
+   - VL (Light) Domain: typically 110-120 amino acids. Ends with conserved "FGXG" (e.g., FGQG, FGTG) motif.
+   - FRAGMENT PROTECTION: Do NOT extract individual CDRs (e.g., 5-15 AA sequences) as if they were full "chains". If you see a table of separate CDRs, DO NOT extract them into the "fullSequence" field. Only extract full VH/VL domains.
+   - TRUNCATION RULE: If the source contains the full chain (including Constant Regions), you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment motifs mentioned above.
 
 4. Table Structure & Coverage:
    - Some antibodies may have their sequences split across multiple rows or pages.
@@ -36,7 +37,9 @@ IMPORTANT EXTRACTION RULES:
 7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
 8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
 9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
-10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+10. VH/VL Chain Priority:
+   - Heavy chains (VH) often have overlapping numbering or are split in complex tables. Dedicate extra reasoning to ensuring the full 115+ AA sequence is captured.
+   - Given the perfection of VL extraction, apply the same rigorous scanning patterns used for VL to the VH domains.
 11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
