@@ -5,43 +5,60 @@ Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 IMPORTANT EXTRACTION RULES:
 
-1. Antibody Naming:
+1. Antibody Identification & Naming:
    - Main antibodies: "2419", "3125", etc.
    - Variants: "2419-0105", "2419-1204", "4540-033", etc.
+   - Bispecific/Multispecific Antibodies: Explicitly identify and extract bispecific antibodies (e.g., "bsAb", "BiTE", "scFv-Fc"). Note that bispecifics may contain MULTIPLE distinct heavy or light chains or linked fragments.
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
 
-2. VL Chain Special Handling:
+2. C-Terminal & CDR3 Precision (CRITICAL):
+   - AVOID C-TERMINAL TRUNCATION: Most errors cluster in the last 25 amino acids (CDR3 and Framework 4). 
+   - You MUST ensure the sequence does not end prematurely. Single amino acid deletions at the C-terminus cause cascading alignment errors.
+   - Re-verify the last 20 amino acids of every sequence against the source text at least THREE times.
+   - Pay extreme attention to hypervariable CDR3 regions which are harder to parse but must be verbatim.
+
+3. OCR Error Awareness (Visual Confusions):
+   - PATENT PDF OCR IS PRONE TO ERROR. You MUST perform mental "visual disambiguation" for common confusions:
+     * V vs L (The most common error! Verify every V and L carefully)
+     * I vs T
+     * S vs T
+     * F vs P
+   - If a sequence looks "broken" or has an unexpected amino acid, check if it's a visual OCR mistake from the PDF source.
+
+4. Heavy Chain Scrutiny:
+   - Heavy chains (VH) are nearly 2x more prone to errors than light chains.
+   - VH sequences are longer (~120-130 aa).
+   - Allocate MORE reasoning cycles and "thinking" tokens to Heavy chain extraction.
+
+5. VL Chain Special Handling:
    - VL chains may appear in a DIFFERENT TABLE than VH chains.
-   - VL sequences are typically 110-120 amino acids long.
    - If VL appears incomplete, check the next page or table.
 
-3. Validation & Domain Boundary:
+6. Validation & Domain Boundary:
    - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
    - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
-   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
-   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
+   - VARIABLE DOMAIN ONLY: Extract ONLY the Variable Domain (Fv). Do NOT include Constant Regions (CH1, CL).
+   - Terminate immediately after the J-segment (Framework 4) motifs (WGXG for Heavy, FGXG for Light).
 
-4. Table Structure & Coverage:
-   - Some antibodies may have their sequences split across multiple rows or pages.
-   - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
-   - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
-   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
+7. Mandatory SEQ ID & Evidence:
+   - Extract the "SEQ ID NO" for every sequence.
+   - Capture page number and table ID.
+   - "evidenceStatement" must include SEQ ID, page, and table coordinates.
 
-5. Mandatory SEQ ID & Evidence:
-   - You MUST extract the "SEQ ID NO" for every sequence found.
-   - Capture the exact page number and table ID (if applicable) for every sequence.
-   - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
+8. ID-Mapping & Target Identification: 
+   - Identify every unique ID (e.g., "mAb 1", "bsAb 2").
+   - Extract the primary target (antigen) (e.g., HER2, CD20) for every antibody.
 
-6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
-7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
-8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
-10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
-11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
-14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
-15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+9. Length-Check & Alignment:
+   - Verify character counts match the source exactly.
+   - Ensure the N-terminus and C-terminus are perfectly aligned with the source listing or table.
+
+10. Logic Passes:
+    - Pass 1: Identify all mAb/bsAb IDs and their corresponding SEQ IDs.
+    - Pass 2: Extract sequences verbatim.
+    - Pass 3: Review the C-terminal 25 amino acids for any missing characters or OCR-confusions (V/L, I/T).
+
+11. Return ONLY valid JSON. If output length is a concern, prioritize full extraction of the most important sequences first.
 
 Output Schema:
 {
@@ -493,10 +510,38 @@ export async function extractWithLLM(
             reviewReason += " [Likely constant region included]";
           }
         }
+
+        // C-terminal Scrutiny for Heavy Chains (CDR3 region)
+        const cTerminal = seq.slice(-25);
+        if (cTerminal.includes('L') && !cTerminal.includes('V')) {
+          // L is often confused for V in VH framework 4
+          needsReview = true;
+          reviewReason += " [High risk of L->V OCR substitution in Heavy C-terminus]";
+        }
+      }
+
+      // Cascading Error Detection (Length Mismatches)
+      // Check for common conserved motifs at the end
+      const fw4Heavy = "WGQG";
+      const fw4Light = "FGQG";
+      const endOfSeq = seq.slice(-15);
+      if (chain.type === 'Heavy' && !endOfSeq.includes(fw4Heavy) && !endOfSeq.includes("WGRG")) {
+        needsReview = true;
+        reviewReason += " [Missing conserved Heavy Framework 4 motif: WGQG/WGRG]";
+      }
+      if (chain.type === 'Light' && !endOfSeq.includes(fw4Light) && !endOfSeq.includes("FGAG") && !endOfSeq.includes("FGTG")) {
+        needsReview = true;
+        reviewReason += " [Missing conserved Light Framework 4 motif: FGQG/FGTG]";
       }
 
       return { ...chain, fullSequence: seq };
     });
+
+    // Bispecific Check
+    if (mAb.mAbName.toLowerCase().includes('bsab') && mAb.chains.length < 2) {
+      needsReview = true;
+      reviewReason += " [Bispecific ID detected but potentially missing chains]";
+    }
 
     // Problematic Variant Check
     if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
