@@ -782,11 +782,12 @@ function AppContent() {
       console.error('File reading error:', err);
       setState({ isExtracting: false, result: null, error: 'Failed to read file' });
     }
-  }, [pageRange, sequenceListingFile, llmOptions, user]);
+  }, [pageRange, prioritySeqIds, sequenceListingFile, llmOptions, user]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
     setPageRange('');
+    setPrioritySeqIds('');
     setSequenceListingFile(null);
     setShowHistory(false);
     if (fileInputRef.current) {
