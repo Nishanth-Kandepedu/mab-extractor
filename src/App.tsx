@@ -1378,19 +1378,19 @@ function AppContent() {
                 />
               </div>
 
-              {/* Priority SEQ IDs Input */}
+              {/* Priority SEQ IDs / Clone Names Input */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    Priority / Missing SEQ IDs (Optional)
-                    <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, 45")</span>
+                    Priority SEQ IDs / Clone Names (Optional)
+                    <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
                   </div>
                 </label>
                 <input
                   type="text"
                   value={prioritySeqIds}
                   onChange={(e) => setPrioritySeqIds(e.target.value)}
-                  placeholder="Tell AI which SEQ IDs to hunt for..."
+                  placeholder="Focus AI on specific SEQ IDs or Clone Names..."
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   disabled={state.isExtracting}
                 />

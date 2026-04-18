@@ -215,7 +215,7 @@ export async function extractWithLLM(
     const { provider, model } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
-  const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following SEQ ID NOs as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing.` : "";
+  const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
   let formattedInput: any;
 
   if (typeof input === "string") {
