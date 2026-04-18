@@ -921,6 +921,7 @@ function AppContent() {
             rows.push({
               mAbName: mAb.mAbName,
               chainType: chain.type,
+              target: chain.target || '',
               fullSequence: chain.fullSequence
             });
           });
@@ -2058,20 +2059,6 @@ function AppContent() {
                         </div>
                         <span className="text-lg font-bold text-white">{state.result.antibodies.length}</span>
                       </div>
-
-                      {((user as any)?.role === 'admin' || (user as any)?.role === 'guest') && (
-                        <div className="flex flex-col bg-amber-500/5 p-3 rounded-xl border border-amber-500/10 backdrop-blur-sm">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <Clock className="w-3 h-3 text-amber-500" />
-                            <span className="text-[10px] text-amber-600/70 uppercase font-black tracking-[0.1em]">Database Protection</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-tight">Active session only</span>
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          </div>
-                          <p className="text-[9px] text-amber-600/60 mt-1 font-medium italic">Result will not be saved to Cloud History for this role.</p>
-                        </div>
-                      )}
 
                       {state.result.extractionTime && (
                         <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
