@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -73,7 +73,9 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview'
+    model: 'gemini-3.1-pro-preview',
+    thinkingLevel: 'HIGH',
+    mAbFilter: ''
   });
   const [pageRange, setPageRange] = useState('');
   const [sequenceListingFile, setSequenceListingFile] = useState<File | null>(null);
@@ -1347,6 +1349,54 @@ function AppContent() {
                     </>
                   )}
                 </select>
+
+                <div className="pt-4 border-t border-zinc-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Zap className="w-3 h-3 text-amber-500" />
+                      Token Optimizer
+                    </label>
+                    <div className="flex bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                      <button
+                        onClick={() => setLlmOptions({ ...llmOptions, thinkingLevel: 'LOW' })}
+                        className={cn(
+                          "px-2 py-1 text-[9px] font-bold uppercase rounded-md transition-all",
+                          llmOptions.thinkingLevel === 'LOW' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                        )}
+                      >
+                        Basic
+                      </button>
+                      <button
+                        onClick={() => setLlmOptions({ ...llmOptions, thinkingLevel: 'HIGH' })}
+                        className={cn(
+                          "px-2 py-1 text-[9px] font-bold uppercase rounded-md transition-all",
+                          llmOptions.thinkingLevel === 'HIGH' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                        )}
+                      >
+                        Intensive
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Target Specific Clone (Recommended)
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400" />
+                      <input
+                        type="text"
+                        placeholder="e.g. mAb 2419"
+                        value={llmOptions.mAbFilter}
+                        onChange={(e) => setLlmOptions({ ...llmOptions, mAbFilter: e.target.value })}
+                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-8 pr-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      />
+                    </div>
+                    <p className="text-[9px] text-zinc-400 leading-tight">
+                      Entering a clone name can save up to 40% in candidate tokens by skipping non-target results.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
