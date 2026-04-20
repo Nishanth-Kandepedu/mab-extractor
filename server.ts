@@ -180,16 +180,18 @@ async function startServer() {
 
             const ai = new GoogleGenAI({ apiKey });
             
+            const isGemma = targetModel === 'models/gemma-4-31b-it';
+            
             // Fix request structure: Ensure contents matches the Gemini API expectations
             const contents = typeof input === 'string' 
-              ? [{ role: 'user', parts: [{ text: input }] }] 
+              ? [{ role: 'user', parts: [{ text: isGemma ? `${systemInstruction}\n\n${input}` : input }] }] 
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
               model: targetModel || 'gemini-3.1-pro-preview',
               contents,
               config: {
-                systemInstruction,
+                systemInstruction: isGemma ? undefined : systemInstruction,
                 temperature: 0,
                 thinkingConfig: thinkingLevel ? { 
                   thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
@@ -197,8 +199,8 @@ async function startServer() {
                                  ThinkingLevel.MINIMAL 
                 } : undefined,
                 maxOutputTokens: 65536,
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
+                responseMimeType: isGemma ? "text/plain" : "application/json",
+                responseSchema: isGemma ? undefined : responseSchema,
               },
             });
 
