@@ -303,9 +303,9 @@ function AppContent() {
               }
             }
             
-            // Default guests to Pro
+            // Default guests to Gemma 4
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
             }
           } else {
             // New user or anonymous session without doc
@@ -329,7 +329,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
             }
           }
         } catch (error) {
@@ -1336,7 +1336,7 @@ function AppContent() {
               <div className="space-y-4">
                 <div className="grid grid-cols-4 gap-2">
                   {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                    const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
+                    const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
                     return (
                       <button
                         key={p}
@@ -1359,7 +1359,6 @@ function AppContent() {
                   value={llmOptions.model}
                   onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
-                  disabled={(user as any)?.role === 'guest'}
                 >
                   {llmOptions.provider === 'gemini' && (
                     <>
