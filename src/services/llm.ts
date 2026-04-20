@@ -248,9 +248,9 @@ export async function extractWithLLM(
     if (input.mimeType === 'application/pdf') {
       let finalData = input.data;
       
-      // Physically crop PDF if a page range is provided to save tokens
-      if (pageContext && /^[0-9,-]+$/.test(pageContext.trim())) {
-        finalData = await getPdfPages(input.data, pageContext.trim());
+      // Physically crop PDF if the context contains numbers (likely a page selection)
+      if (pageContext && /[\d]+/.test(pageContext)) {
+        finalData = await getPdfPages(input.data, pageContext);
       }
 
       parts.push({

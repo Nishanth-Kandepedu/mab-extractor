@@ -690,17 +690,10 @@ function AppContent() {
     }
   };
 
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
-    let file: File | undefined;
-    
-    if ('files' in e.target && (e.target as HTMLInputElement).files) {
-      file = (e.target as HTMLInputElement).files?.[0];
-    } else if ('dataTransfer' in e && e.dataTransfer.files) {
-      file = e.dataTransfer.files[0];
-    }
-
+  const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions) => {
     if (!file) return;
-    console.log('File selected for extraction:', file.name, 'with page range:', pageRange);
+    const activeOptions = overrideOptions || llmOptions;
+    console.log('Running extraction:', file.name, 'with range:', pageRange, 'Model:', activeOptions.model);
 
     setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
     
@@ -723,84 +716,76 @@ function AppContent() {
         listingMimeType = sequenceListingFile.type;
       }
       
-      try {
-        const startTime = Date.now();
-        const result = await extractWithLLM(
-          { data: fileData, mimeType: file.type }, 
-          llmOptions, 
-          pageRange,
-          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-          prioritySeqIds
-        );
+      const startTime = Date.now();
+      const result = await extractWithLLM(
+        { data: fileData, mimeType: file.type }, 
+        activeOptions, 
+        pageRange,
+        listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+        prioritySeqIds
+      );
 
-        result.extractionTime = Date.now() - startTime;
-        setState({ isExtracting: false, result, error: null });
-        setShowHistory(false);
+      result.extractionTime = Date.now() - startTime;
+      setState({ isExtracting: false, result, error: null });
+      setShowHistory(false);
 
-        // Clear file input so the same file can be uploaded again
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        setSequenceListingFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setSequenceListingFile(null);
 
-        // Track extraction event
-        ReactGA.event({
-          category: 'Extraction',
-          action: 'File Upload',
-          label: file!.type,
-          value: result.antibodies.length
+      ReactGA.event({
+        category: 'Extraction',
+        action: 'File Upload',
+        label: file.type,
+        value: result.antibodies.length
+      });
+
+      if (user && user.role !== 'admin' && user.role !== 'guest') {
+        const { id: _id, ...resultData } = result as any;
+        const docData = {
+          ...resultData,
+          userId: user.uid,
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          userRole: user.role || 'guest',
+          createdAt: Timestamp.now(),
+          status: user.role === 'admin' ? 'validated' : 'pending',
+          autoSaved: true
+        };
+        
+        await addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          accountId: user.accountId,
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          action: 'extraction_completed',
+          patentId: result.patentId,
+          patentTitle: result.patentTitle,
+          timestamp: Timestamp.now()
         });
 
-        // Save extraction (disabled for admin and guests to save quota)
-        if (user && user.role !== 'admin' && user.role !== 'guest') {
-          // Strip any existing ID to avoid collisions
-          const { id: _id, ...resultData } = result as any;
-          const docData = {
-            ...resultData,
-            userId: user.uid,
-            userDisplayName: user.displayName || 'Anonymous Guest',
-            userRole: user.role || 'guest',
-            createdAt: Timestamp.now(),
-            status: user.role === 'admin' ? 'validated' : 'pending',
-            autoSaved: true
-          };
-          
-          // Log activity
-          addDoc(collection(db, 'activity_logs'), {
-            userId: user.uid,
-            accountId: user.accountId,
-            userDisplayName: user.displayName || 'Anonymous Guest',
-            action: 'extraction_completed',
-            patentId: result.patentId,
-            patentTitle: result.patentTitle,
-            timestamp: Timestamp.now()
-          }).catch(err => {
-            console.warn('Failed to log activity:', err);
-          });
-
-          addDoc(collection(db, 'extractions'), docData).then(docRef => {
-            setState(prev => {
-              if (prev.result && !prev.result.id) {
-                return { ...prev, result: { ...prev.result, id: docRef.id } };
-              }
-              return prev;
-            });
-          }).catch(err => {
-            console.warn('Failed to auto-save extraction:', err);
-          });
-        }
-      } catch (err) {
-        console.error('Extraction error:', err);
-        setState({ isExtracting: false, result: null, error: err instanceof Error ? err.message : 'Extraction failed' });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        const docRef = await addDoc(collection(db, 'extractions'), docData);
+        setState(prev => ({ 
+          ...prev, 
+          result: { ...result, id: docRef.id } 
+        }));
       }
-    } catch (err) {
-      console.error('File reading error:', err);
-      setState({ isExtracting: false, result: null, error: 'Failed to read file' });
+    } catch (err: any) {
+      console.error('Final extraction error:', err);
+      setState({ isExtracting: false, result: null, error: err.message || String(err) });
     }
-  }, [pageRange, prioritySeqIds, sequenceListingFile, llmOptions, user]);
+  }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
+
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+    let file: File | undefined;
+    
+    if ('target' in e && (e.target as any).files) {
+      file = (e.target as HTMLInputElement).files?.[0];
+    } else if ('dataTransfer' in e && (e as any).dataTransfer.files) {
+      file = (e as any).dataTransfer.files[0];
+    }
+
+    if (file) runExtraction(file);
+  }, [runExtraction]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
@@ -1562,7 +1547,8 @@ function AppContent() {
                     <div className="w-full flex flex-col gap-3">
                       <button
                         onClick={() => {
-                          if (fileInputRef.current?.files?.[0]) handleFileUpload();
+                          const file = fileInputRef.current?.files?.[0];
+                          if (file) runExtraction(file);
                           else setState(prev => ({ ...prev, error: "No input found to retry. Please re-select your file." }));
                         }}
                         className="w-full bg-[#050505] text-white py-4 rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 flex items-center justify-center gap-3"
@@ -1572,7 +1558,22 @@ function AppContent() {
                       </button>
 
                       <div className="grid grid-cols-2 gap-3 mt-2">
-                        {window.location.hostname.includes('.bio') && (
+                        {/* Always show Mirror option for token limit errors */}
+                        {(state.error.includes('token') || state.error.includes('262144')) ? (
+                          <button
+                            onClick={() => {
+                              const proOptions = { ...llmOptions, provider: 'gemini' as const, model: 'gemini-1.5-pro' };
+                              setLlmOptions(proOptions);
+                              const file = fileInputRef.current?.files?.[0];
+                              if (file) runExtraction(file, proOptions);
+                              else setState(prev => ({ ...prev, error: "Switching to Pro... Please re-select your file to proceed." }));
+                            }}
+                            className="col-span-2 bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-indigo-100"
+                          >
+                            <Coins className="w-4 h-4" />
+                            Use Mirror (Gemini Pro - 2M Window)
+                          </button>
+                        ) : window.location.hostname.includes('.bio') && (
                           <button
                             onClick={() => window.location.href = 'https://abminer.up.railway.app'}
                             className="bg-zinc-100 text-zinc-700 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"

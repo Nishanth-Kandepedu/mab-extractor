@@ -33,21 +33,43 @@ export function parsePageRange(range: string, totalPages: number): number[] {
  */
 export async function getPdfPages(base64Data: string, range: string): Promise<string> {
   try {
-    const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    // 1. Convert base64 to Uint8Array efficiently (avoid heavy memory copying)
+    const binaryString = atob(base64Data.trim());
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+
     const srcDoc = await PDFDocument.load(bytes);
     const totalPages = srcDoc.getPageCount();
     
-    const pageIndices = parsePageRange(range, totalPages);
-    if (pageIndices.length === 0) return base64Data;
+    // 2. Parse range - be more permissive (extract numbers/ranges)
+    // Strip words like "Page", "Section", "Table" etc.
+    const cleanRange = range.replace(/[^0-9,-]/g, '');
+    const pageIndices = parsePageRange(cleanRange, totalPages);
+    
+    if (pageIndices.length === 0) {
+      console.warn("[PDF] No valid page numbers found in range context:", range);
+      return base64Data;
+    }
+
+    console.log(`[PDF] Physical Crop: Reducing ${totalPages}pp to ${pageIndices.length}pp (Indices: ${pageIndices})`);
 
     const newDoc = await PDFDocument.create();
     const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
     copiedPages.forEach(p => newDoc.addPage(p));
     
     const newBytes = await newDoc.save();
-    return btoa(String.fromCharCode(...newBytes));
+    
+    // 3. Convert back to base64 safely (avoid String.fromCharCode(...newBytes) stack error)
+    let binary = '';
+    const len = newBytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(newBytes[i]);
+    }
+    return btoa(binary);
   } catch (e) {
-    console.error("Error splitting PDF:", e);
+    console.error("[PDF] Optimization failed, falling back to original file:", e);
     return base64Data; // Fallback to original
   }
 }
