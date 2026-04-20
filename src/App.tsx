@@ -77,8 +77,6 @@ function AppContent() {
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
-  const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434/v1/chat/completions');
-  const [ollamaApiKey, setOllamaApiKey] = useState('');
   const [sequenceListingFile, setSequenceListingFile] = useState<File | null>(null);
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -715,11 +713,7 @@ function AppContent() {
         const startTime = Date.now();
         const result = await extractWithLLM(
           { data: fileData, mimeType: file.type }, 
-          { 
-            ...llmOptions, 
-            customEndpoint: ollamaEndpoint, 
-            customApiKey: ollamaApiKey 
-          }, 
+          llmOptions, 
           pageRange,
           listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
           prioritySeqIds
@@ -1310,20 +1304,14 @@ function AppContent() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-4 gap-2">
-                  {(['gemini', 'openai', 'anthropic', 'ollama'] as LLMProvider[]).map(p => {
+                <div className="grid grid-cols-3 gap-2">
+                  {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => {
                     const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
                     return (
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ 
-                          provider: p, 
-                          model: p === 'gemini' ? 'gemini-3.1-pro-preview' : 
-                                 p === 'openai' ? 'gpt-4o' : 
-                                 p === 'anthropic' ? 'claude-3-5-sonnet-latest' :
-                                 'gemma4:31b-cloud'
-                        })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p 
@@ -1337,72 +1325,37 @@ function AppContent() {
                     );
                   })}
                 </div>
-                {llmOptions.provider === 'ollama' ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Model Name</label>
-                      <input
-                        type="text"
-                        value={llmOptions.model || ''}
-                        onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                        placeholder="e.g., gemma4:31b-cloud"
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Endpoint URL</label>
-                      <input
-                        type="text"
-                        value={ollamaEndpoint}
-                        onChange={(e) => setOllamaEndpoint(e.target.value)}
-                        placeholder="http://localhost:11434/v1/chat/completions"
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-zinc-400 uppercase">API Key (Optional)</label>
-                      <input
-                        type="password"
-                        value={ollamaApiKey}
-                        onChange={(e) => setOllamaApiKey(e.target.value)}
-                        placeholder="••••••••••••••••"
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <select
-                    value={llmOptions.model}
-                    onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
-                    disabled={(user as any)?.role === 'guest'}
-                  >
-                    {llmOptions.provider === 'gemini' && (
-                      <>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                        <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                        <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
-                        <option value="gemma-2-27b-it">Gemma 2 27B (Google Hosted)</option>
-                        <option value="gemma-2-9b-it">Gemma 2 9B (Google Hosted)</option>
-                        <option value="gemma-4-31b-it">Gemma 4 31B (Google Hosted)</option>
-                      </>
-                    )}
-                    {llmOptions.provider === 'openai' && (
-                      <>
-                        <option value="gpt-4o">GPT-4o (Omni)</option>
-                        <option value="gpt-4o-mini">GPT-4o Mini</option>
-                        <option value="o1-preview">o1 Preview (Reasoning)</option>
-                      </>
-                    )}
-                    {llmOptions.provider === 'anthropic' && (
-                      <>
-                        <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                        <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                        <option value="claude-3-opus-latest">Claude 3 Opus</option>
-                      </>
-                    )}
-                  </select>
-                )}
+                <select
+                  value={llmOptions.model}
+                  onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                  disabled={(user as any)?.role === 'guest'}
+                >
+                  {llmOptions.provider === 'gemini' && (
+                    <>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
+                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                      <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                      <option value="gemma-2-27b-it">Gemma 2 27B (Google Hosted)</option>
+                      <option value="gemma-2-9b-it">Gemma 2 9B (Google Hosted)</option>
+                      <option value="gemma-4-31b-it">Gemma 4 31B (Google Hosted)</option>
+                    </>
+                  )}
+                  {llmOptions.provider === 'openai' && (
+                    <>
+                      <option value="gpt-4o">GPT-4o (Omni)</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                      <option value="o1-preview">o1 Preview (Reasoning)</option>
+                    </>
+                  )}
+                  {llmOptions.provider === 'anthropic' && (
+                    <>
+                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                      <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                    </>
+                  )}
+                </select>
               </div>
             )}
           </div>

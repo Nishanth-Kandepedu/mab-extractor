@@ -83,13 +83,11 @@ Output Schema:
   ]
 }`;
 
-export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'ollama';
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
 
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
-  customEndpoint?: string;
-  customApiKey?: string;
 }
 
 /**
@@ -214,7 +212,7 @@ export async function extractWithLLM(
   }
   
   try {
-    const { provider, model, customEndpoint, customApiKey } = options;
+    const { provider, model } = options;
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
@@ -255,8 +253,6 @@ export async function extractWithLLM(
     const payload = JSON.stringify({
       provider,
       model,
-      customEndpoint,
-      customApiKey,
       input: formattedInput,
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingLevel: model?.includes('3.1') ? "HIGH" : undefined,

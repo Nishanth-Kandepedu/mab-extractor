@@ -138,7 +138,7 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
-    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, customEndpoint, customApiKey } = req.body;
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
     
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
       return res.status(400).json({ error: "Input text is required." });
@@ -192,50 +192,6 @@ async function startServer() {
               thinkingTokenCount: (usage as any).thinkingTokenCount,
               cachedContentTokenCount: (usage as any).cachedContentTokenCount,
               totalTokenCount: usage.totalTokenCount
-            };
-          }
-          
-          await updateJob(jobId, { status: 'completed', result });
-        } else if (provider === 'ollama') {
-          // Ollama or custom OpenAI-compatible endpoint
-          const endpoint = customEndpoint || 'http://localhost:11434/v1/chat/completions';
-          
-          if (!endpoint) throw new Error('Missing Ollama/Custom Endpoint URL.');
-
-          const payload = {
-            model: model || 'gemma4:31b-cloud',
-            messages: [
-              { role: 'system', content: systemInstruction },
-              { role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0,
-            stream: false
-          };
-
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              ...(customApiKey ? { 'Authorization': `Bearer ${customApiKey}` } : {})
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama/Custom API error: ${response.status} ${errorText}`);
-          }
-
-          const data: any = await response.json();
-          const content = data.choices ? data.choices[0].message.content : data.response;
-          const result = extractJson(content || '{}');
-          
-          if (data.usage) {
-            result.usageMetadata = {
-              promptTokenCount: data.usage.prompt_tokens || data.usage.input_tokens,
-              candidatesTokenCount: data.usage.completion_tokens || data.usage.output_tokens,
-              totalTokenCount: data.usage.total_tokens || (data.usage.input_tokens + data.usage.output_tokens)
             };
           }
           
