@@ -151,7 +151,7 @@ async function startServer() {
     // Map custom or experimental models to valid Gemini API IDs
     const mapModel = (m: string) => {
       const lowerM = m?.toLowerCase() || '';
-      if (lowerM === 'gemma-4') return 'gemma-4-31b-it';
+      if (lowerM === 'gemma-4') return 'models/gemma-4-31b-it';
       return m;
     };
 
@@ -159,7 +159,8 @@ async function startServer() {
 
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
-      const key = Object.keys(process.env).find(k => k.toUpperCase().includes(pattern.toUpperCase()));
+      const p = pattern.toUpperCase();
+      const key = Object.keys(process.env).find(k => k.toUpperCase().includes(p));
       return key ? process.env[key] : null;
     };
 
@@ -171,20 +172,30 @@ async function startServer() {
 
       const runExtraction = async (): Promise<void> => {
         try {
-          console.log(`[Job ${jobId}] Starting ${provider} extraction (Attempt ${retryCount + 1})...`);
+          console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
           if (provider === 'gemini') {
             const apiKey = findKey('GEMINI_API_KEY');
             if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
 
             const ai = new GoogleGenAI({ apiKey });
+            
+            // Fix request structure: Ensure contents matches the Gemini API expectations
+            const contents = typeof input === 'string' 
+              ? [{ role: 'user', parts: [{ text: input }] }] 
+              : [{ role: 'user', parts: input }];
+
             const response = await ai.models.generateContent({
               model: targetModel || 'gemini-3.1-pro-preview',
-              contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
+              contents,
               config: {
                 systemInstruction,
                 temperature: 0,
-                thinkingConfig: thinkingLevel ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
+                thinkingConfig: thinkingLevel ? { 
+                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
+                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
+                                 ThinkingLevel.MINIMAL 
+                } : undefined,
                 maxOutputTokens: 65536,
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
@@ -257,28 +268,34 @@ async function startServer() {
           }
         } catch (error: any) {
           const errorMessage = error.message || String(error);
-          const isOverCapacity = errorMessage.toLowerCase().includes('capacity') || 
-                               errorMessage.includes('503') || 
-                               errorMessage.includes('429');
+          const lowerError = errorMessage.toLowerCase();
+          
+          const isRetryable = lowerError.includes('capacity') || 
+                             lowerError.includes('503') || 
+                             lowerError.includes('429') ||
+                             lowerError.includes('internal error') ||
+                             lowerError.includes('timeout');
 
-          if (isOverCapacity && retryCount < MAX_RETRIES) {
+          if (isRetryable && retryCount < MAX_RETRIES) {
             retryCount++;
             const delay = Math.pow(2, retryCount) * 1000;
-            console.warn(`[Job ${jobId}] AI over capacity. Retrying in ${delay / 1000}s... (Attempt ${retryCount}/${MAX_RETRIES})`);
+            console.warn(`[Job ${jobId}] Retryable error (${errorMessage}). Retrying in ${delay / 1000}s...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return runExtraction();
           }
 
-          console.error(`[Job ${jobId}] Extraction error:`, errorMessage);
+          console.error(`[Job ${jobId}] Permanent Failure:`, errorMessage);
           await updateJob(jobId, { 
             status: 'failed', 
-            error: isOverCapacity 
-              ? 'The AI engine is currently over capacity due to high demand. Please try your extraction again in 30 seconds.' 
+            error: isRetryable 
+              ? 'The AI engine is currently over capacity or experienced a transient error. Please wait a moment and try again.' 
               : errorMessage 
           });
         } finally {
-          const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
-          console.log(`[Job ${jobId}] Finished in ${duration}s`);
+          if (retryCount === 0 || retryCount === MAX_RETRIES) {
+            const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
+            console.log(`[Job ${jobId}] Completed/Failed in ${duration}s`);
+          }
         }
       };
 
