@@ -77,7 +77,6 @@ function AppContent() {
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
-  const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [sequenceListingFile, setSequenceListingFile] = useState<File | null>(null);
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -715,8 +714,7 @@ function AppContent() {
           llmOptions, 
           pageRange,
           listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-          prioritySeqIds,
-          additionalInstructions
+          prioritySeqIds
         );
         result.extractionTime = Date.now() - startTime;
         setState({ isExtracting: false, result, error: null });
@@ -785,13 +783,12 @@ function AppContent() {
       console.error('File reading error:', err);
       setState({ isExtracting: false, result: null, error: 'Failed to read file' });
     }
-  }, [pageRange, prioritySeqIds, additionalInstructions, sequenceListingFile, llmOptions, user]);
+  }, [pageRange, prioritySeqIds, sequenceListingFile, llmOptions, user]);
 
   const handleReset = () => {
     setState({ isExtracting: false, result: null, error: null });
     setPageRange('');
     setPrioritySeqIds('');
-    setAdditionalInstructions('');
     setSequenceListingFile(null);
     setShowHistory(false);
     if (fileInputRef.current) {

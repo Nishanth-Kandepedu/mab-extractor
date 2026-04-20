@@ -6,10 +6,9 @@ Your goal is 100% Verbatim Accuracy and 100% Coverage.
 IMPORTANT EXTRACTION RULES:
 
 1. Antibody Naming:
-   - Main antibodies: "2419", "3125", "mAb12999", "mAb14226", "REGN6321", etc.
-   - Variants: "2419-0105", "4540-033", etc.
+   - Main antibodies: "2419", "3125", etc.
+   - Variants: "2419-0105", "2419-1204", "4540-033", etc.
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
-   - For bispecifics (e.g. REGN-series), name them by their REGN ID or the combination of target IDs.
 
 2. VL Chain Special Handling:
    - VL chains may appear in a DIFFERENT TABLE than VH chains.
@@ -45,14 +44,12 @@ IMPORTANT EXTRACTION RULES:
 15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 16. BISPECIFIC & MULTISPECIFIC HANDLING:
-    - Many patents describe bispecific antibodies (e.g., EGFR x CD28, REGN-series). 
-    - You MUST look for components of BOTH binding arms (e.g., TWO unique heavy chains and ONE common light chain).
-    - If the patent title or tables mention multiple targets (A x B), you are not finished until you have extracted sequences for all target components.
-    - Group these under a single antibody entry: 2 Heavy Chains + 1 Light Chain = 1 Bispecific entry.
+    - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
+    - You MUST look for components of BOTH binding arms.
+    - If the patent title mentions two targets (A x B), you are not finished until you have extracted sequences for both Target A and Target B components.
     - CROSS-TABLE SEARCH: Sequence data for different arms often reside in separate tables or pages. You MUST search the entire provided text/listing to connect them.
     - LABELING: In the "summary" or "mAbName", clearly indicate if a sequence belongs to "Arm 1", "Arm 2", "Target A", or "Target B". 
-    - DO NOT FILTER: You are strictly forbidden from filtering by antibody type. Extract ALL antibodies regardless of whether they are monoclonal or bispecific.
-    - TABLE DISCOVERY: Proactively seek out and mine data from ALL tables in the document.
+    - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
 Output Schema:
 {
@@ -205,8 +202,7 @@ export async function extractWithLLM(
   options: LLMOptions,
   pageContext?: string,
   sequenceListing?: { data: string; mimeType: string },
-  prioritySeqIds?: string,
-  additionalInstructions?: string
+  prioritySeqIds?: string
 ): Promise<ExtractionResult> {
   if (!input || (typeof input === 'string' && input.trim().length === 0)) {
     throw new Error("Input text is required for extraction.");
@@ -220,16 +216,15 @@ export async function extractWithLLM(
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
-  const addedInstructionsPrompt = additionalInstructions ? `\n\nADDITIONAL USER INSTRUCTIONS: ${additionalInstructions}` : "";
   
   const gemmaOptimization = options.model === 'gemma-4' 
-    ? "\n\nSYSTEM OPTIMIZATION: GEMMA 4 (Antibody Patent Discovery Phase)\n1. COVERAGE MANDATE: Extract antibody sequences from ALL tables in the document. Do not filter by target or format.\n2. ARCHITECTURE RECOGNITION: Detect Regeneron-style bispecifics (e.g. 2 unique Heavy chains + 1 Common Light chain). Group these components under a single 'Antibody' entry.\n3. CROSS-REFERENCE: Scan the entire document to connect mAb names (e.g., mAb12999) with their respective SEQ ID NOs in different tables.\n4. VERBATIM ACCURACY: Zero tolerance for character deviations from source tables or sequence listings."
+    ? "\n\nOPTIMIZATION FOR GEMMA 4: Focus on precision. Break down the sequence listing processing into logical chunks. Ensure strict adherence to the output schema. Use your efficient parameter setup to maximize verbatim extraction accuracy."
     : "";
 
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}${addedInstructionsPrompt}${gemmaOptimization}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}${gemmaOptimization}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -252,9 +247,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt}${addedInstructionsPrompt}${gemmaOptimization} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt}${gemmaOptimization} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
     } else {
-      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt}${addedInstructionsPrompt}${gemmaOptimization} Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt}${gemmaOptimization} Perform high-quality verbatim mining.` });
     }
 
     formattedInput = parts;
