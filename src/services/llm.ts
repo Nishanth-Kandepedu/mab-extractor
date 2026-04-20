@@ -217,9 +217,13 @@ export async function extractWithLLM(
     const isGemini = provider === 'gemini';
 
     if (isGemini) {
-      const apiKey = process.env.GEMINI_API_KEY;
+      // In Vite/React, we check multiple possible locations for the key
+      const apiKey = process.env.GEMINI_API_KEY || 
+                     (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+                     (window as any).process?.env?.GEMINI_API_KEY;
+      
       if (!apiKey) {
-        throw new Error("The Gemini API key is not configured in this environment. Please ensure GEMINI_API_KEY is set in the project settings.");
+        throw new Error("The Gemini API key is missing. Please ensure GEMINI_API_KEY is configured in the project settings (Settings > Secrets).");
       }
 
       const ai = new GoogleGenAI({ apiKey });
