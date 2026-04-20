@@ -7,7 +7,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
 import fs from 'fs';
 
@@ -24,12 +25,12 @@ try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     
     // Check if already initialized
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
+    if (getApps().length === 0) {
+      initializeApp({
         projectId: config.projectId,
       });
     }
-    db = admin.firestore();
+    db = getFirestore();
     console.log('[Firebase] Admin SDK initialized successfully');
   } else {
     console.warn('[Firebase] Config file not found, persistent jobs disabled');
@@ -159,7 +160,42 @@ async function startServer() {
       try {
         console.log(`[Job ${jobId}] Starting ${provider} extraction...`);
 
-        if (provider === 'openai') {
+        if (provider === 'gemini') {
+          const apiKey = findKey('GEMINI_API_KEY');
+          if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
+
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: model || 'gemini-3.1-pro-preview',
+            contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
+            config: {
+              systemInstruction,
+              temperature: 0,
+              thinkingConfig: thinkingLevel ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
+              maxOutputTokens: 65536,
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+            },
+          });
+
+          const text = response.text;
+          const usage = response.usageMetadata;
+          
+          if (!text) throw new Error("Empty response from AI engine");
+          
+          const result = extractJson(text);
+          if (usage) {
+            result.usageMetadata = {
+              promptTokenCount: usage.promptTokenCount,
+              candidatesTokenCount: usage.candidatesTokenCount,
+              thinkingTokenCount: (usage as any).thinkingTokenCount,
+              cachedContentTokenCount: (usage as any).cachedContentTokenCount,
+              totalTokenCount: usage.totalTokenCount
+            };
+          }
+          
+          await updateJob(jobId, { status: 'completed', result });
+        } else if (provider === 'openai') {
           const apiKey = findKey('OPENAI_API_KEY');
           if (!apiKey) throw new Error('Missing OpenAI API Key.');
           const openai = new OpenAI({ apiKey });
