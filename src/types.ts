@@ -42,7 +42,10 @@ export interface AntibodyProperties {
   expressionSystem?: 'Yes' | 'No';
 }
 
+export type AssayCategory = 'In Vitro' | 'PK' | 'ADMET' | 'In Vivo' | 'Physical' | 'Other';
+
 export interface AssayData {
+  category: AssayCategory;
   property: string; // e.g., "IC50", "EC50", "PK", "Physical property"
   value: string;
   unit: string;

@@ -68,10 +68,23 @@ IMPORTANT EXTRACTION RULES:
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
-19. CHARACTERIZATION & ASSAY DATA (EXTENDED MINING):
-    - For each clone, you MUST extract experimental characterization data: IC50, EC50, PK properties (e.g., half-life, clearance), and Physical properties (e.g., Tm, stability, aggregation).
-    - Association: Connect every value to its specific assay conditions (e.g., "Binding to human PD-L1 in ELISA", "Pharmacokinetics in Cynomolgus monkey, 5mg/kg IV").
-    - Structure: Return these in the "experimentalData" array for each antibody. Capture the property name, value, unit, condition, and evidence (page/table reference).
+19. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
+    For each antibody clone, you MUST extract the following properties into the "experimentalData" array, categorized strictly:
+    
+    - "In Vitro": Target or cell line centric activity/potency/affinity. (e.g., Kd, IC50, EC50, binding by ELISA/FACS/SPR, neutralization).
+    - "PK": Pharmacokinetics (e.g., half-life, clearance, Vd, Cmax, AUC). Specify species (Cyno, Mouse, Human).
+    - "ADMET": Absorption, Distribution, Metabolism, Excretion, and Toxicity-related data (e.g., stability in serum, solubility, viscosity, immunogenicity).
+    - "In Vivo": Efficacy in animal models (e.g., Tumor Growth Inhibition (TGI), survival rates, dose-response in xenografts).
+    - "Physical": Biophysical properties (e.g., Tm (melting temperature), Tagg, aggregation %, pI, purity, hydrophobicity).
+    - "Other": Any other critical pharmaceutical property mentioned.
+
+    Association: Every entry MUST include:
+    - category: One of the 6 strings above.
+    - property: The name of the parameter (e.g., "IC50", "Half-life").
+    - value: The exact numerical value or range.
+    - unit: The unit of measurement (e.g., "nM", "days", "°C").
+    - condition: The specific assay or experimental context (e.g., "in human PD-L1 ELISA", "in MC38 tumor bearing mice, 10mg/kg").
+    - evidence: The page or table number where this value was found.
 `;
 
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
@@ -312,13 +325,14 @@ export async function extractWithLLM(
                 items: {
                   type: "OBJECT",
                   properties: {
+                    category: { type: "STRING", enum: ["In Vitro", "PK", "ADMET", "In Vivo", "Physical", "Other"] },
                     property: { type: "STRING" },
                     value: { type: "STRING" },
                     unit: { type: "STRING" },
                     condition: { type: "STRING" },
                     evidence: { type: "STRING" }
                   },
-                  required: ["property", "value", "unit", "condition", "evidence"]
+                  required: ["category", "property", "value", "unit", "condition", "evidence"]
                 }
               } : undefined
             },

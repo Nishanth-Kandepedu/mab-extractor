@@ -472,9 +472,9 @@ function AppContent() {
         setUser(newUser);
         setLoginError('');
         
-        // Default to Pro for guests
+        // Default to Gemma 4 for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemini', model: 'gemini-3.1-pro-preview' });
+          setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -885,7 +885,7 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
-            characterization: mAb.experimentalData?.map(d => `${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
+            characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
             evidenceLocation: mAb.evidenceLocation || '',
             evidenceStatement: mAb.evidenceStatement || '',
             summary: mAb.summary
@@ -2261,31 +2261,48 @@ function AppContent() {
 
                         {mAb.experimentalData && mAb.experimentalData.length > 0 && (
                           <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm mt-4">
-                            <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-2">
-                              <Beaker className="w-4 h-4 text-indigo-600" />
-                              <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-700">Experimental & Assay Properties</h4>
+                            <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Beaker className="w-4 h-4 text-indigo-600" />
+                                <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-700">Experimental & Characterization Data</h4>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-400 bg-white px-2 py-0.5 rounded border border-zinc-100">
+                                Gemma 4 High-Fidelity Extraction
+                              </span>
                             </div>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs">
-                                <thead className="bg-zinc-50/50">
-                                  <tr className="border-b border-zinc-200">
-                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Property</th>
-                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Value</th>
-                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Assay Conditions</th>
-                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Evidence</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-zinc-200">
-                                  {mAb.experimentalData.map((data, idx) => (
-                                    <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                                      <td className="px-4 py-2 font-bold text-zinc-900">{data.property}</td>
-                                      <td className="px-4 py-2 font-mono whitespace-nowrap">{data.value} {data.unit}</td>
-                                      <td className="px-4 py-2 text-zinc-600 italic leading-relaxed">{data.condition}</td>
-                                      <td className="px-4 py-2 text-[10px] text-zinc-400 font-mono whitespace-nowrap">{data.evidence}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            <div className="divide-y divide-zinc-200">
+                              {['In Vitro', 'PK', 'ADMET', 'In Vivo', 'Physical', 'Other'].map(cat => {
+                                const items = mAb.experimentalData!.filter(d => d.category === cat);
+                                if (items.length === 0) return null;
+                                return (
+                                  <div key={cat} className="overflow-x-auto">
+                                    <div className="px-4 py-2 bg-zinc-50/50 flex items-center gap-2 border-b border-zinc-100">
+                                      <div className={cn(
+                                        "w-1.5 h-1.5 rounded-full",
+                                        cat === 'In Vitro' ? "bg-blue-500" :
+                                        cat === 'PK' ? "bg-amber-500" :
+                                        cat === 'ADMET' ? "bg-purple-500" :
+                                        cat === 'In Vivo' ? "bg-red-500" :
+                                        cat === 'Physical' ? "bg-emerald-500" :
+                                        "bg-zinc-400"
+                                      )} />
+                                      <span className="text-[9px] font-bold uppercase tracking-tight text-zinc-500">{cat} Properties</span>
+                                    </div>
+                                    <table className="w-full text-left text-xs">
+                                      <tbody className="divide-y divide-zinc-100">
+                                        {items.map((data, idx) => (
+                                          <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
+                                            <td className="px-4 py-1.5 font-bold text-zinc-900 w-1/4">{data.property}</td>
+                                            <td className="px-4 py-1.5 font-mono text-indigo-600 whitespace-nowrap w-1/4">{data.value} {data.unit}</td>
+                                            <td className="px-4 py-1.5 text-zinc-600 leading-relaxed italic">{data.condition}</td>
+                                            <td className="px-4 py-1.5 text-[10px] text-zinc-400 font-mono whitespace-nowrap text-right">{data.evidence}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
