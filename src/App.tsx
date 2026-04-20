@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -885,6 +885,7 @@ function AppContent() {
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             confidence: mAb.confidence,
+            characterization: mAb.experimentalData?.map(d => `${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
             evidenceLocation: mAb.evidenceLocation || '',
             evidenceStatement: mAb.evidenceStatement || '',
             summary: mAb.summary
@@ -2257,6 +2258,37 @@ function AppContent() {
                           <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
                           {mAb.summary}
                         </div>
+
+                        {mAb.experimentalData && mAb.experimentalData.length > 0 && (
+                          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm mt-4">
+                            <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-2">
+                              <Beaker className="w-4 h-4 text-indigo-600" />
+                              <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-700">Experimental & Assay Properties</h4>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-zinc-50/50">
+                                  <tr className="border-b border-zinc-200">
+                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Property</th>
+                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Value</th>
+                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Assay Conditions</th>
+                                    <th className="px-4 py-2 font-bold text-zinc-400 uppercase text-[9px] tracking-wider">Evidence</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-200">
+                                  {mAb.experimentalData.map((data, idx) => (
+                                    <tr key={idx} className="hover:bg-zinc-50 transition-colors">
+                                      <td className="px-4 py-2 font-bold text-zinc-900">{data.property}</td>
+                                      <td className="px-4 py-2 font-mono whitespace-nowrap">{data.value} {data.unit}</td>
+                                      <td className="px-4 py-2 text-zinc-600 italic leading-relaxed">{data.condition}</td>
+                                      <td className="px-4 py-2 text-[10px] text-zinc-400 font-mono whitespace-nowrap">{data.evidence}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
 
                         {mAb.evidenceStatement && (
                           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700 flex items-start gap-3">

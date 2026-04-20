@@ -42,12 +42,21 @@ export interface AntibodyProperties {
   expressionSystem?: 'Yes' | 'No';
 }
 
+export interface AssayData {
+  property: string; // e.g., "IC50", "EC50", "PK", "Physical property"
+  value: string;
+  unit: string;
+  condition: string; // assay conditions
+  evidence: string; // page or table reference
+}
+
 export interface Antibody {
   mAbName: string;
   chains: Chain[];
   confidence: number;
   summary: string;
   properties?: AntibodyProperties;
+  experimentalData?: AssayData[]; // New field for detailed properties
   needsReview?: boolean;
   reviewReason?: string;
   evidenceLocation?: string; // e.g., "Page 42", "Table 12"

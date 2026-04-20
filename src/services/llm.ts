@@ -45,7 +45,7 @@ IMPORTANT EXTRACTION RULES:
 11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
-14. Return the data in the specified JSON format. Do not include any other text, explanation, or markdown formatting. Return ONLY the JSON object. If you are unsure about a sequence, mark it as [NEEDS_REVIEW] but still include the best possible extraction.
+14. Return the data in valid JSON format.
 15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
 
 16. BISPECIFIC & MULTISPECIFIC HANDLING:
@@ -65,38 +65,14 @@ IMPORTANT EXTRACTION RULES:
 18. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
+`;
 
-Output Schema:
-{
-  "patentId": "string",
-  "patentTitle": "string",
-  "antibodies": [
-    {
-      "mAbName": "string",
-      "chains": [
-        {
-          "type": "Heavy" | "Light",
-          "fullSequence": "string",
-          "seqId": "string", // Mandatory: e.g., "SEQ ID NO: 45"
-          "target": "string", // Mandatory: e.g., "HER2"
-          "pageNumber": number, // Mandatory
-          "tableId": "string", // Optional: e.g., "Table 2"
-          "cdrs": [
-            { "type": "CDR1", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR2", "sequence": "string", "start": number, "end": number },
-            { "type": "CDR3", "sequence": "string", "start": number, "end": number }
-          ]
-        }
-      ],
-      "confidence": number, // A value between 0 and 100 representing the extraction confidence.
-      "summary": "string",
-      "evidenceLocation": "string", // e.g., "Page 42", "Table 12"
-      "evidenceStatement": "string", // e.g., "Sequence found in Table 5 on page 12, corresponding to SEQ ID NO: 45"
-      "needsReview": boolean,
-      "reviewReason": "string"
-    }
-  ]
-}`;
+export const GEMMA_4_EXTRA_INSTRUCTION = `
+19. CHARACTERIZATION & ASSAY DATA (EXTENDED MINING):
+    - For each clone, you MUST extract experimental characterization data: IC50, EC50, PK properties (e.g., half-life, clearance), and Physical properties (e.g., Tm, stability, aggregation).
+    - Association: Connect every value to its specific assay conditions (e.g., "Binding to human PD-L1 in ELISA", "Pharmacokinetics in Cynomolgus monkey, 5mg/kg IV").
+    - Structure: Return these in the "experimentalData" array for each antibody. Capture the property name, value, unit, condition, and evidence (page/table reference).
+`;
 
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
 
@@ -283,64 +259,83 @@ export async function extractWithLLM(
     formattedInput = parts;
   }
 
+    const isGemma4 = model === 'gemma-4';
+    const activeInstruction = isGemma4 ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
+
+    const responseSchema: any = {
+      type: "OBJECT",
+      properties: {
+        patentId: { type: "STRING" },
+        patentTitle: { type: "STRING" },
+        antibodies: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              mAbName: { type: "STRING" },
+              chains: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    type: { type: "STRING", enum: ["Heavy", "Light"] },
+                    fullSequence: { type: "STRING" },
+                    seqId: { type: "STRING" },
+                    pageNumber: { type: "INTEGER" },
+                    tableId: { type: "STRING" },
+                    target: { type: "STRING" }, 
+                    cdrs: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
+                          sequence: { type: "STRING" },
+                          start: { type: "INTEGER" },
+                          end: { type: "INTEGER" },
+                        },
+                        required: ["type", "sequence", "start", "end"],
+                      },
+                    },
+                  },
+                  required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber", "target"],
+                },
+              },
+              confidence: { type: "NUMBER" },
+              summary: { type: "STRING" },
+              evidenceLocation: { type: "STRING" },
+              evidenceStatement: { type: "STRING" },
+              needsReview: { type: "BOOLEAN" },
+              reviewReason: { type: "STRING" },
+              experimentalData: isGemma4 ? {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    property: { type: "STRING" },
+                    value: { type: "STRING" },
+                    unit: { type: "STRING" },
+                    condition: { type: "STRING" },
+                    evidence: { type: "STRING" }
+                  },
+                  required: ["property", "value", "unit", "condition", "evidence"]
+                }
+              } : undefined
+            },
+            required: ["mAbName", "chains", "confidence", "summary"],
+          },
+        },
+      },
+      required: ["patentId", "patentTitle", "antibodies"],
+    };
+
     const payload = JSON.stringify({
       provider,
       model,
       input: formattedInput,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingLevel: (model?.includes('3.1') || model === 'gemma-4') ? "HIGH" : undefined,
-      responseSchema: {
-        type: "OBJECT",
-        properties: {
-          patentId: { type: "STRING" },
-          patentTitle: { type: "STRING" },
-          antibodies: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                mAbName: { type: "STRING" },
-                chains: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      type: { type: "STRING", enum: ["Heavy", "Light"] },
-                      fullSequence: { type: "STRING" },
-                      seqId: { type: "STRING" },
-                      pageNumber: { type: "INTEGER" },
-                      tableId: { type: "STRING" },
-                      target: { type: "STRING" }, // Mandatory: e.g., "HER2"
-                      cdrs: {
-                        type: "ARRAY",
-                        items: {
-                          type: "OBJECT",
-                          properties: {
-                            type: { type: "STRING", enum: ["CDR1", "CDR2", "CDR3"] },
-                            sequence: { type: "STRING" },
-                            start: { type: "INTEGER" },
-                            end: { type: "INTEGER" },
-                          },
-                          required: ["type", "sequence", "start", "end"],
-                        },
-                      },
-                    },
-                    required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber", "target"],
-                  },
-                },
-                confidence: { type: "NUMBER" },
-                summary: { type: "STRING" },
-                evidenceLocation: { type: "STRING" },
-                evidenceStatement: { type: "STRING" },
-                needsReview: { type: "BOOLEAN" },
-                reviewReason: { type: "STRING" },
-              },
-              required: ["mAbName", "chains", "confidence", "summary"],
-            },
-          },
-        },
-        required: ["patentId", "patentTitle", "antibodies"],
-      },
+      systemInstruction: activeInstruction,
+      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
+      responseSchema: responseSchema,
     });
 
     console.log(`[Extraction] Initiating fetch. Payload size: ${payload.length} bytes`);
