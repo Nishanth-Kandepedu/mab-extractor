@@ -117,7 +117,7 @@ function AppContent() {
     'gemini-2.5-flash-preview': { input: 0.075, output: 0.30 },
     'gemma-2-27b-it': { input: 0.10, output: 0.10 },
     'gemma-2-9b-it': { input: 0.05, output: 0.05 },
-    'gemma-4-31b': { input: 0.15, output: 0.15 },
+    'gemma-4-31b-it': { input: 0.15, output: 0.15 },
     'gpt-4o': { input: 2.5, output: 10.0 },
     'gpt-4o-mini': { input: 0.15, output: 0.60 },
     'o1-preview': { input: 15.0, output: 60.0 },
@@ -1384,7 +1384,7 @@ function AppContent() {
                         <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                         <option value="gemma-2-27b-it">Gemma 2 27B (Google Hosted)</option>
                         <option value="gemma-2-9b-it">Gemma 2 9B (Google Hosted)</option>
-                        <option value="gemma-4-31b">Gemma 4 31B (Google Hosted)</option>
+                        <option value="gemma-4-31b-it">Gemma 4 31B (Google Hosted)</option>
                       </>
                     )}
                     {llmOptions.provider === 'openai' && (
