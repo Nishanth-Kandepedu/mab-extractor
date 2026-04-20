@@ -241,22 +241,32 @@ export async function extractWithLLM(
       throw new Error(`File upload is currently only supported for Gemini. Please switch to Gemini or paste the text directly.`);
     }
     
-    const parts: any[] = [
-      {
+    const parts: any[] = [];
+    
+    // Handle main input (PDF or Text)
+    if (input.mimeType === 'application/pdf') {
+      parts.push({
         inlineData: {
           data: input.data,
           mimeType: input.mimeType,
         },
-      }
-    ];
+      });
+    } else {
+      // It's a text file readout
+      parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
+    }
 
     if (sequenceListing) {
-      parts.push({
-        inlineData: {
-          data: sequenceListing.data,
-          mimeType: sequenceListing.mimeType,
-        },
-      });
+      if (sequenceListing.mimeType === 'application/pdf') {
+        parts.push({
+          inlineData: {
+            data: sequenceListing.data,
+            mimeType: sequenceListing.mimeType,
+          },
+        });
+      } else {
+        parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
+      }
       parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt} Identify Parental clones in Tables 1/3 and Bispecifics in Table 6. Extract all separately. Verbatim accuracy is mandatory.` });
     } else {
       parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt} Ensure every mAb ID in Tables 1/3 and every bsAb in Table 6 is captured separately.` });

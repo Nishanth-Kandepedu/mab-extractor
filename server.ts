@@ -242,7 +242,7 @@ async function startServer() {
         try {
           console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
-          if (provider === 'gemini') {
+          if (provider === 'gemini' || provider === 'gemma') {
             const apiKey = findKey('GEMINI_API_KEY');
             if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
 

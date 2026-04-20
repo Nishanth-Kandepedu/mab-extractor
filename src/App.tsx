@@ -110,7 +110,7 @@ function AppContent() {
   });
 
   const MODEL_RATES = {
-    'gemini-3.1-pro-preview': { input: 3.5, output: 10.5 },
+    'gemini-3.1-pro-preview': { input: 1.25, output: 5.0 }, // Estimates based on 1.5 Pro pricing
     'gemini-3-flash-preview': { input: 0.075, output: 0.30 },
     'gemini-2.5-flash-preview': { input: 0.075, output: 0.30 },
     'gpt-4o': { input: 2.5, output: 10.0 },
@@ -119,15 +119,18 @@ function AppContent() {
     'claude-3-5-sonnet-latest': { input: 3.0, output: 15.0 },
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
-    'gemma-4': { input: 0.05, output: 0.15 },
+    'gemma-4': { input: 0.15, output: 0.60 },
   };
 
   const getEstCost = (usage: any, modelUsed: string) => {
     if (!usage) return '---';
-    const rates = (MODEL_RATES as any)[modelUsed] || (MODEL_RATES as any)['gemini-3.1-pro-preview'];
+    const rateKey = Object.keys(MODEL_RATES).find(k => modelUsed.includes(k)) || 'gemini-3.1-pro-preview';
+    const rates = (MODEL_RATES as any)[rateKey] || (MODEL_RATES as any)['gemini-3.1-pro-preview'];
+    
     const inputCost = (usage.promptTokenCount / 1000000) * rates.input;
     const outputTokens = usage.totalTokenCount - usage.promptTokenCount;
     const outputCost = (outputTokens / 1000000) * rates.output;
+    
     return `$${(inputCost + outputCost).toFixed(4)}`;
   };
 
@@ -160,8 +163,17 @@ function AppContent() {
     const interval = setInterval(async () => {
       const start = Date.now();
       try {
-        await fetch('/api/health?ping=' + start, { method: 'HEAD', cache: 'no-store' });
-        setNetworkStats(prev => ({ ...prev, latency: Date.now() - start, lastChecked: new Date() }));
+        const res = await fetch('/api/health?ping=' + start, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setHealthInfo(data);
+          setNetworkStats(prev => ({ 
+            ...prev, 
+            latency: Date.now() - start, 
+            lastChecked: new Date(),
+            online: true 
+          }));
+        }
       } catch (e) {
         setNetworkStats(prev => ({ ...prev, online: false, latency: -1 }));
       }
@@ -1250,20 +1262,30 @@ function AppContent() {
               </div>
               <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
                 <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Engine Health</p>
-                <span className="text-[10px] font-bold text-emerald-600 uppercase">Optimal</span>
+                <span className={cn(
+                  "text-[10px] font-bold uppercase",
+                  healthInfo?.status === 'ok' ? "text-emerald-600" : "text-amber-600"
+                )}>
+                  {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Checking...'}
+                </span>
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between text-[9px]">
-                <span className="text-zinc-400 uppercase font-medium">Model Load</span>
-                <span className="text-zinc-600 font-bold uppercase tracking-tighter">Normal (0.4s)</span>
+                <span className="text-zinc-400 uppercase font-medium">System Concurrent Load</span>
+                <span className="text-zinc-600 font-bold uppercase tracking-tighter">
+                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} Active / ${healthInfo.concurrency?.pendingCount || 0} Queued` : '--'}
+                </span>
               </div>
               <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: '25%' }}
-                  className="h-full bg-indigo-500" 
+                  animate={{ width: healthInfo ? `${Math.min(100, (healthInfo.concurrency?.activeCount / 2) * 100)}%` : '0%' }}
+                  className={cn(
+                    "h-full transition-all duration-500",
+                    (healthInfo?.concurrency?.activeCount || 0) >= 2 ? "bg-amber-500" : "bg-indigo-500"
+                  )} 
                 />
               </div>
             </div>
@@ -1325,10 +1347,10 @@ function AppContent() {
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p === 'gemma' ? 'gemini' : p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' })}
+                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                          (llmOptions.model === 'gemma-4' && p === 'gemma') || (llmOptions.provider === p && llmOptions.model !== 'gemma-4')
+                          llmOptions.provider === p
                             ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
                             : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
                           isDisabled && "opacity-40 grayscale cursor-not-allowed"
@@ -1345,12 +1367,16 @@ function AppContent() {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   disabled={(user as any)?.role === 'guest'}
                 >
-                  {(llmOptions.provider === 'gemini' || llmOptions.model === 'gemma-4') && (
+                  {llmOptions.provider === 'gemini' && (
                     <>
-                      <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
                       <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
                       <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                    </>
+                  )}
+                  {llmOptions.provider === 'gemma' && (
+                    <>
+                      <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                     </>
                   )}
                   {llmOptions.provider === 'openai' && (
@@ -1626,9 +1652,11 @@ function AppContent() {
                   { label: 'Est. Total Cost', value: `$${(history.reduce((acc, curr) => {
                     const input = curr.usageMetadata?.promptTokenCount || 0;
                     const total = curr.usageMetadata?.totalTokenCount || 0;
-                    const output = total - input; // Correctly includes thinking tokens
-                    // Rough estimate: $3.50/1M input, $10.50/1M output
-                    return acc + (input * 0.0000035) + (output * 0.0000105);
+                    const output = total - input;
+                    const model = curr.modelUsed || 'gemini-3.1-pro-preview';
+                    const rateKey = Object.keys(MODEL_RATES).find(k => model.includes(k)) || 'gemini-3.1-pro-preview';
+                    const rates = (MODEL_RATES as any)[rateKey] || (MODEL_RATES as any)['gemini-3.1-pro-preview'];
+                    return acc + (input / 1000000 * rates.input) + (output / 1000000 * rates.output);
                   }, 0)).toFixed(2)}`, icon: Save, color: 'text-emerald-600', bg: 'bg-emerald-50' }
                 ].map((stat, i) => (
                   <div key={i} className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
