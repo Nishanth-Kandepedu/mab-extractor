@@ -1345,11 +1345,9 @@ function AppContent() {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   disabled={(user as any)?.role === 'guest'}
                 >
-                  {llmOptions.model === 'gemma-4' && (
-                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
-                  )}
-                  {llmOptions.provider === 'gemini' && llmOptions.model !== 'gemma-4' && (
+                  {(llmOptions.provider === 'gemini' || llmOptions.model === 'gemma-4') && (
                     <>
+                      <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
                       <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
                       <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>

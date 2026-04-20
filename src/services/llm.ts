@@ -231,10 +231,14 @@ export async function extractWithLLM(
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
   
+  const gemmaManifest = options.model === 'gemma-4' 
+    ? "\n\nCRITICAL CONE-CELL SCAN: You MUST identify and extract every 'mAb' ID found in Table 1 and Table 3. These are PARENTAL clones and they are separate from the bispecifics in Table 6. Failure to extract mAb12999P2, mAb13008P2, etc., is a coverage failure. Do NOT skip them."
+    : "";
+
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}${gemmaManifest}\n\nNote: Ensure EVERY antibody ID (mAb and bsAb) is captured separately. Verbatim sequences only.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -257,9 +261,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt}${gemmaManifest} Use the sequence listing as the primary source for character accuracy. Extract Parental mAbs (from early tables) AND Bispecifics (from result tables) as separate entries.` });
     } else {
-      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt} Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt}${gemmaManifest} Identify all Parental clones in Tables 1/3 and Bispecifics in Table 6. Extract all separately.` });
     }
 
     formattedInput = parts;
