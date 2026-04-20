@@ -1,4 +1,5 @@
 import { ExtractionResult } from "../types";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -213,8 +214,117 @@ export async function extractWithLLM(
   
   try {
     const { provider, model } = options;
+    const isGemini = provider === 'gemini';
 
-  const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+    if (isGemini) {
+      const apiKey = (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Missing GEMINI_API_KEY environment variable.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const isGemma = model?.includes('gemma');
+      const thinkingLevel = model?.includes('3.1') ? ThinkingLevel.HIGH : undefined;
+
+      // Extract context prompt
+      const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
+      const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
+
+      let geminiInput: any;
+      if (typeof input === 'string') {
+        geminiInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+      } else {
+        const parts: any[] = [{ inlineData: { data: input.data, mimeType: input.mimeType } }];
+        if (sequenceListing) {
+          parts.push({ inlineData: { data: sequenceListing.data, mimeType: sequenceListing.mimeType } });
+          parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context. Perform high-quality verbatim mining.` });
+        } else {
+          parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt} Perform high-quality verbatim mining.` });
+        }
+        geminiInput = { parts };
+      }
+
+      console.log(`[Extraction] Running Gemini extraction in frontend for model: ${model}`);
+      
+      const response = await ai.models.generateContent({
+        model: model || 'gemini-3.1-pro-preview',
+        contents: geminiInput,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0,
+          thinkingConfig: thinkingLevel ? { thinkingLevel } : undefined,
+          maxOutputTokens: 65536,
+          responseMimeType: "application/json",
+          responseSchema: isGemma ? undefined : {
+            type: Type.OBJECT,
+            properties: {
+              patentId: { type: Type.STRING },
+              patentTitle: { type: Type.STRING },
+              antibodies: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    mAbName: { type: Type.STRING },
+                    chains: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          type: { type: Type.STRING, enum: ["Heavy", "Light"] },
+                          fullSequence: { type: Type.STRING },
+                          seqId: { type: Type.STRING },
+                          pageNumber: { type: Type.INTEGER },
+                          tableId: { type: Type.STRING },
+                          target: { type: Type.STRING },
+                          cdrs: {
+                            type: Type.ARRAY,
+                            items: {
+                              type: Type.OBJECT,
+                              properties: {
+                                type: { type: Type.STRING, enum: ["CDR1", "CDR2", "CDR3"] },
+                                sequence: { type: Type.STRING },
+                                start: { type: Type.INTEGER },
+                                end: { type: Type.INTEGER },
+                              },
+                              required: ["type", "sequence", "start", "end"],
+                            },
+                          },
+                        },
+                        required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber", "target"],
+                      },
+                    },
+                    confidence: { type: Type.NUMBER },
+                    summary: { type: Type.STRING },
+                    evidenceLocation: { type: Type.STRING },
+                    evidenceStatement: { type: Type.STRING },
+                    needsReview: { type: Type.BOOLEAN },
+                    reviewReason: { type: Type.STRING },
+                  },
+                  required: ["mAbName", "chains", "confidence", "summary"],
+                },
+              },
+            },
+            required: ["patentId", "patentTitle", "antibodies"],
+          },
+        },
+      });
+
+      const text = response.text;
+      if (!text) throw new Error("Empty response from Gemini");
+      
+      const result = extractJson(text);
+      if (response.usageMetadata) {
+        result.usageMetadata = {
+          promptTokenCount: response.usageMetadata.promptTokenCount,
+          candidatesTokenCount: response.usageMetadata.candidatesTokenCount,
+          totalTokenCount: response.usageMetadata.totalTokenCount
+        };
+      }
+      return result;
+    }
+
+    const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
   let formattedInput: any;
 
@@ -222,32 +332,7 @@ export async function extractWithLLM(
     formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
-    if (provider !== 'gemini') {
-      throw new Error(`File upload is currently only supported for Gemini. Please switch to Gemini or paste the text directly.`);
-    }
-    
-    const parts: any[] = [
-      {
-        inlineData: {
-          data: input.data,
-          mimeType: input.mimeType,
-        },
-      }
-    ];
-
-    if (sequenceListing) {
-      parts.push({
-        inlineData: {
-          data: sequenceListing.data,
-          mimeType: sequenceListing.mimeType,
-        },
-      });
-      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
-    } else {
-      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt} Perform high-quality verbatim mining.` });
-    }
-
-    formattedInput = parts;
+    throw new Error(`File upload is currently only supported for Gemini. Please switch to Gemini or paste the text directly.`);
   }
 
     const payload = JSON.stringify({

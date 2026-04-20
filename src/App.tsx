@@ -1356,6 +1356,34 @@ function AppContent() {
                     </>
                   )}
                 </select>
+                {llmOptions.model?.includes('gemma') && !llmOptions.model?.includes('gemma-4') && (
+                  <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                    <div className="flex gap-2">
+                      <div className="text-amber-500 mt-0.5">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <p className="text-[9px] text-amber-700 leading-tight">
+                        <span className="font-bold">Context window Note:</span> Older Gemma models (like Gemma 2) have a smaller context window (~8k tokens). If extraction fails on large patents, please use Gemini 3.1 Pro.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {llmOptions.model?.includes('gemma-4') && (
+                  <div className="mt-2 p-2 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <div className="flex gap-2">
+                      <div className="text-indigo-500 mt-0.5">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-[9px] text-indigo-700 leading-tight">
+                        <span className="font-bold">Model Note:</span> Gemma 4 supports an expanded 256k context window. 
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

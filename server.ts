@@ -159,44 +159,7 @@ async function startServer() {
       try {
         console.log(`[Job ${jobId}] Starting ${provider} extraction...`);
 
-        if (provider === 'gemini') {
-          const apiKey = findKey('GEMINI_API_KEY');
-          if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
-
-          const ai = new GoogleGenAI({ apiKey });
-          const isGemma = model?.includes('gemma');
-          
-          const response = await ai.models.generateContent({
-            model: model || 'gemini-3.1-pro-preview',
-            contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
-            config: {
-              systemInstruction,
-              temperature: 0,
-              thinkingConfig: (!isGemma && thinkingLevel) ? { thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : thinkingLevel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } : undefined,
-              maxOutputTokens: 65536,
-              responseMimeType: "application/json",
-              responseSchema: isGemma ? undefined : responseSchema,
-            },
-          });
-
-          const text = response.text;
-          const usage = response.usageMetadata;
-          
-          if (!text) throw new Error("Empty response from AI engine");
-          
-          const result = extractJson(text);
-          if (usage) {
-            result.usageMetadata = {
-              promptTokenCount: usage.promptTokenCount,
-              candidatesTokenCount: usage.candidatesTokenCount,
-              thinkingTokenCount: (usage as any).thinkingTokenCount,
-              cachedContentTokenCount: (usage as any).cachedContentTokenCount,
-              totalTokenCount: usage.totalTokenCount
-            };
-          }
-          
-          await updateJob(jobId, { status: 'completed', result });
-        } else if (provider === 'openai') {
+        if (provider === 'openai') {
           const apiKey = findKey('OPENAI_API_KEY');
           if (!apiKey) throw new Error('Missing OpenAI API Key.');
           const openai = new OpenAI({ apiKey });
