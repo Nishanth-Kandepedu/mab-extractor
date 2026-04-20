@@ -7,7 +7,14 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   
   // Platform injected GEMINI_API_KEY might be in process.env but not in env if prefixing is weird
-  const geminiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || '';
+  // We explicitly ignore the placeholder value from .env.example
+  const isPlaceholder = (val?: string) => !val || val === "MY_GEMINI_API_KEY" || val === "YOUR_API_KEY";
+  
+  let geminiKey = '';
+  if (!isPlaceholder(env.GEMINI_API_KEY)) geminiKey = env.GEMINI_API_KEY;
+  else if (!isPlaceholder(process.env.GEMINI_API_KEY)) geminiKey = process.env.GEMINI_API_KEY!;
+  else if (!isPlaceholder(env.GOOGLE_API_KEY)) geminiKey = env.GOOGLE_API_KEY;
+  else if (!isPlaceholder(process.env.GOOGLE_API_KEY)) geminiKey = process.env.GOOGLE_API_KEY!;
 
   return {
     plugins: [react(), tailwindcss()],
