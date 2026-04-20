@@ -78,37 +78,105 @@ async function updateJob(jobId: string, data: any) {
 }
 
 /**
- * Robustly extracts JSON from a string that might contain Markdown code blocks or extra text.
+ * Robustly extracts and repairs JSON from a string that might be truncated or malformed.
  */
 function extractJson(text: string): any {
-  // Try direct parsing first
+  if (!text || typeof text !== 'string') {
+    throw new Error("Empty or invalid response received from AI");
+  }
+
+  const cleanText = text.trim();
+
+  // 1. Try direct parsing
   try {
-    return JSON.parse(text);
+    return JSON.parse(cleanText);
   } catch (e) {
-    // Try to find JSON block in markdown
-    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
+    // Continue
+  }
+
+  // 2. Try to find JSON block in markdown
+  const markdownMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/) || cleanText.match(/```\s*([\s\S]*?)\s*```/);
+  if (markdownMatch && markdownMatch[1]) {
+    const inner = markdownMatch[1].trim();
+    try {
+      return JSON.parse(inner);
+    } catch (e) {
       try {
-        return JSON.parse(match[1].trim());
-      } catch (e2) {
-        // Continue to fallback
-      }
+        return repairAndParseJson(inner);
+      } catch (e2) {}
+    }
+  }
+
+  // 3. Find the first '{' and try to parse/repair from there
+  const firstBrace = cleanText.indexOf('{');
+  if (firstBrace !== -1) {
+    const lastBrace = cleanText.lastIndexOf('}');
+    let candidate = "";
+    
+    if (lastBrace !== -1 && lastBrace > firstBrace) {
+      candidate = cleanText.substring(firstBrace, lastBrace + 1);
+    } else {
+      candidate = cleanText.substring(firstBrace);
     }
 
-    // Fallback: find the first '{' and last '}'
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      const candidate = text.substring(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
       try {
-        return JSON.parse(candidate);
-      } catch (e3) {
-        // Continue to error
+        return repairAndParseJson(candidate);
+      } catch (e2) {
+        console.error("JSON Repair failed. Snippet:", cleanText.substring(0, 200));
+        throw new Error("Could not parse or repair JSON response.");
       }
     }
-    
-    console.error("Failed to parse AI response:", text);
-    throw new Error("Could not find valid JSON in response");
+  }
+
+  throw new Error("No JSON found in response.");
+}
+
+/**
+ * Attempts to repair truncated JSON.
+ */
+function repairAndParseJson(jsonStr: string): any {
+  let repaired = jsonStr.trim();
+  
+  // Remove trailing commas which are common in truncated JSON
+  repaired = repaired.replace(/,\s*$/, "");
+  repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+
+  const stack: string[] = [];
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (char === '{' || char === '[') {
+      stack.push(char);
+    } else if (char === '}' || char === ']') {
+      const last = stack.pop();
+      if ((char === '}' && last !== '{') || (char === ']' && last !== '[')) {
+        // Mismatched - continue anyway
+      }
+    }
+  }
+
+  // Close remaining open structures in reverse order
+  while (stack.length > 0) {
+    const last = stack.pop();
+    if (last === '{') repaired += '}';
+    else if (last === '[') repaired += ']';
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch (e) {
+    // If it still fails, try one more aggressive trim to the last valid closing character
+    const lastClosing = Math.max(repaired.lastIndexOf('}'), repaired.lastIndexOf(']'));
+    if (lastClosing !== -1) {
+      try {
+        return JSON.parse(repaired.substring(0, lastClosing + 1));
+      } catch (e2) {
+        throw e; // Give up
+      }
+    }
+    throw e;
   }
 }
 
@@ -180,18 +248,16 @@ async function startServer() {
 
             const ai = new GoogleGenAI({ apiKey });
             
-            const isGemma = targetModel === 'models/gemma-4-31b-it';
-            
-            // Fix request structure: Ensure contents matches the Gemini API expectations
+            // Unify request structure for all Gemini/Gemma models
             const contents = typeof input === 'string' 
-              ? [{ role: 'user', parts: [{ text: isGemma ? `${systemInstruction}\n\n${input}` : input }] }] 
+              ? [{ role: 'user', parts: [{ text: input }] }] 
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
               model: targetModel || 'gemini-3.1-pro-preview',
               contents,
               config: {
-                systemInstruction: isGemma ? undefined : systemInstruction,
+                systemInstruction,
                 temperature: 0,
                 thinkingConfig: thinkingLevel ? { 
                   thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
@@ -199,8 +265,8 @@ async function startServer() {
                                  ThinkingLevel.MINIMAL 
                 } : undefined,
                 maxOutputTokens: 65536,
-                responseMimeType: isGemma ? "text/plain" : "application/json",
-                responseSchema: isGemma ? undefined : responseSchema,
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
               },
             });
 
@@ -210,6 +276,12 @@ async function startServer() {
             if (!text) throw new Error("Empty response from AI engine");
             
             const result = extractJson(text);
+            
+            if (!result.antibodies || result.antibodies.length === 0) {
+              console.warn(`[Job ${jobId}] Model returned 0 antibodies. Raw text snippet: ${text.substring(0, 500)}`);
+              // We don't throw here to let the UI show 0 results, but we log it for debug
+            }
+
             if (usage) {
               result.usageMetadata = {
                 promptTokenCount: usage.promptTokenCount,

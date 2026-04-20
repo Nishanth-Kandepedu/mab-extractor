@@ -231,14 +231,10 @@ export async function extractWithLLM(
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
   
-  const gemmaManifest = options.model === 'gemma-4' 
-    ? "\n\nACT AS AN EXPERT BIOTECH MINER. Return the antibody data strictly in the JSON format defined in the Output Schema below. Do not omit any monoclonal antibodies (mAbs) found in early tables (e.g. Table 1, Table 3)."
-    : "";
-
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `${contextPrompt}${priorityPrompt}${gemmaManifest}\n\n${input}`;
+    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTY-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -261,9 +257,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract the antibody sequences according to the schema.${contextPrompt}${priorityPrompt}${gemmaManifest}` });
+      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt} Identify Parental clones in Tables 1/3 and Bispecifics in Table 6. Extract all separately. Verbatim accuracy is mandatory.` });
     } else {
-      parts.push({ text: `Extract the antibody sequences according to the schema.${contextPrompt}${priorityPrompt}${gemmaManifest}` });
+      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt} Ensure every mAb ID in Tables 1/3 and every bsAb in Table 6 is captured separately.` });
     }
 
     formattedInput = parts;
