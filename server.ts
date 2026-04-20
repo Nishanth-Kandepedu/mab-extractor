@@ -151,7 +151,7 @@ async function startServer() {
     // Map custom or experimental models to valid Gemini API IDs
     const mapModel = (m: string) => {
       const lowerM = m?.toLowerCase() || '';
-      if (lowerM === 'gemma-4') return 'gemma-4-27b-it';
+      if (lowerM === 'gemma-4') return 'gemma-4-31b-it';
       return m;
     };
 
