@@ -1298,12 +1298,12 @@ function AppContent() {
                 <div className="flex items-center gap-3">
                   <div className={cn("w-2 h-2 rounded-full animate-pulse", llmOptions.model === 'gemma-4' ? "bg-amber-500" : "bg-emerald-500")} />
                   <span className={cn("text-xs font-medium", llmOptions.model === 'gemma-4' ? "text-amber-700" : "text-zinc-600")}>
-                    {llmOptions.model === 'gemma-4' ? 'Gemma 4 Optimized Mode' : 'High-Quality Mining Engine (Pro)'}
+                    {llmOptions.model === 'gemma-4' ? 'Gemma 4 High-Thinking Engine' : 'High-Quality Mining Engine (Pro)'}
                   </span>
                 </div>
                 <p className={cn("text-[10px] mt-2 leading-relaxed", llmOptions.model === 'gemma-4' ? "text-amber-600/80" : "text-zinc-400")}>
                   {llmOptions.model === 'gemma-4' 
-                    ? 'Using Gemma 4 open weights with high-efficiency parameters for sequence mining. Optimized for verbatim accuracy.'
+                    ? 'Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy and structural validation.'
                     : 'Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.'}
                 </p>
               </div>
@@ -1337,7 +1337,7 @@ function AppContent() {
                   disabled={(user as any)?.role === 'guest'}
                 >
                   {llmOptions.model === 'gemma-4' && (
-                    <option value="gemma-4">Gemma 4 (Open Weights / Efficiency)</option>
+                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                   )}
                   {llmOptions.provider === 'gemini' && llmOptions.model !== 'gemma-4' && (
                     <>
