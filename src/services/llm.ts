@@ -22,18 +22,22 @@ IMPORTANT EXTRACTION RULES:
    - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
 
 4. Table Structure & Coverage:
-   - Some antibodies may have their sequences split across multiple rows or pages.
-   - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
-   - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
-   - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
+    - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
+    - Some antibodies may have their sequences split across multiple rows or pages.
+    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
+    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
+    - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
 5. Mandatory SEQ ID & Evidence:
-   - You MUST extract the "SEQ ID NO" for every sequence found.
-   - Capture the exact page number and table ID (if applicable) for every sequence.
-   - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
+    - You MUST extract the "SEQ ID NO" for every sequence found.
+    - Capture the exact page number and table ID (if applicable) for every sequence.
+    - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
 6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
-7. ID-Mapping Strategy: First, identify every unique mAb ID (e.g., "mAb 1", "2419"). You MUST extract sequences for every ID found.
+7. ID-Mapping & Cross-Referencing Strategy: 
+    - First, identify every unique mAb ID (e.g., "mAb 1", "2419") from the tables. You MUST extract sequences for every ID found.
+    - CROSS-REFERENCE: Many antibodies have multiple names (e.g., "mAb 1" is "REGN7075"). You MUST map these names together in the "mAbName" field (e.g., "mAb 1 (REGN7075)") or ensure both are mentioned in the summary.
+    - ANTI-LAZINESS: Do NOT rely on candidate summaries in the text which often omit the "parental" clones listed in the tables. If a clone exists in a table, it MUST be in your output.
 8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
 9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
 10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
@@ -50,6 +54,12 @@ IMPORTANT EXTRACTION RULES:
     - CROSS-TABLE SEARCH: Sequence data for different arms often reside in separate tables or pages. You MUST search the entire provided text/listing to connect them.
     - LABELING: In the "summary" or "mAbName", clearly indicate if a sequence belongs to "Arm 1", "Arm 2", "Target A", or "Target B". 
     - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
+
+17. TABLE SCANNING HIERARCHY:
+    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies.
+    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies.
+    - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing.
+    - STEP 4: If a clone name like "mAb12999P2" appears in a table, it MUST be extracted, even if it is not a "Lead" candidate.
 
 Output Schema:
 {
