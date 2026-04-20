@@ -119,6 +119,7 @@ function AppContent() {
     'claude-3-5-sonnet-latest': { input: 3.0, output: 15.0 },
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
+    'gemma-4': { input: 0.05, output: 0.15 },
   };
 
   const getEstCost = (usage: any, modelUsed: string) => {
@@ -1289,29 +1290,36 @@ function AppContent() {
               )}
             </div>
             
-            {(user as any)?.role === 'guest' ? (
-              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+            {((user as any)?.role === 'guest' || llmOptions.model === 'gemma-4') ? (
+              <div className={cn(
+                "p-4 rounded-xl border",
+                llmOptions.model === 'gemma-4' ? "bg-amber-50 border-amber-100" : "bg-zinc-50 border-zinc-100"
+              )}>
                 <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-zinc-600">High-Quality Mining Engine (Pro)</span>
+                  <div className={cn("w-2 h-2 rounded-full animate-pulse", llmOptions.model === 'gemma-4' ? "bg-amber-500" : "bg-emerald-500")} />
+                  <span className={cn("text-xs font-medium", llmOptions.model === 'gemma-4' ? "text-amber-700" : "text-zinc-600")}>
+                    {llmOptions.model === 'gemma-4' ? 'Gemma 4 Optimized Mode' : 'High-Quality Mining Engine (Pro)'}
+                  </span>
                 </div>
-                <p className="text-[10px] text-zinc-400 mt-2 leading-relaxed">
-                  Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
+                <p className={cn("text-[10px] mt-2 leading-relaxed", llmOptions.model === 'gemma-4' ? "text-amber-600/80" : "text-zinc-400")}>
+                  {llmOptions.model === 'gemma-4' 
+                    ? 'Using Gemma 4 open weights with high-efficiency parameters for sequence mining. Optimized for verbatim accuracy.'
+                    : 'Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.'}
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
-                  {(['gemini', 'openai', 'anthropic'] as LLMProvider[]).map(p => {
+                <div className="grid grid-cols-4 gap-2">
+                  {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                     const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini';
                     return (
                       <button
                         key={p}
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : 'claude-3-5-sonnet-latest' })}
+                        onClick={() => setLlmOptions({ provider: p === 'gemma' ? 'gemini' : p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' })}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                          llmOptions.provider === p 
+                          (llmOptions.model === 'gemma-4' && p === 'gemma') || (llmOptions.provider === p && llmOptions.model !== 'gemma-4')
                             ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
                             : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
                           isDisabled && "opacity-40 grayscale cursor-not-allowed"
@@ -1328,7 +1336,10 @@ function AppContent() {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   disabled={(user as any)?.role === 'guest'}
                 >
-                  {llmOptions.provider === 'gemini' && (
+                  {llmOptions.model === 'gemma-4' && (
+                    <option value="gemma-4">Gemma 4 (Open Weights / Efficiency)</option>
+                  )}
+                  {llmOptions.provider === 'gemini' && llmOptions.model !== 'gemma-4' && (
                     <>
                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
                       <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>

@@ -216,10 +216,15 @@ export async function extractWithLLM(
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
+  
+  const gemmaOptimization = options.model === 'gemma-4' 
+    ? "\n\nOPTIMIZATION FOR GEMMA 4: Focus on precision. Break down the sequence listing processing into logical chunks. Ensure strict adherence to the output schema. Use your efficient parameter setup to maximize verbatim extraction accuracy."
+    : "";
+
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
+    formattedInput = `Extract ALL mAb sequences from the following text.${contextPrompt}${priorityPrompt}${gemmaOptimization}\n\nNote: Ensure EVERY antibody ID is captured and sequences are verbatim.\n\n${input}`;
   } else {
     // For non-Gemini providers, we currently only support text
     if (provider !== 'gemini') {
@@ -242,9 +247,9 @@ export async function extractWithLLM(
           mimeType: sequenceListing.mimeType,
         },
       });
-      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from the provided patent document and sequence listing file.${contextPrompt}${priorityPrompt}${gemmaOptimization} Use the sequence listing as the primary source for character accuracy, and the patent document for context (mAb names, chain types, etc.). Perform high-quality verbatim mining.` });
     } else {
-      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt} Perform high-quality verbatim mining.` });
+      parts.push({ text: `Extract ALL mAb sequences from this document.${contextPrompt}${priorityPrompt}${gemmaOptimization} Perform high-quality verbatim mining.` });
     }
 
     formattedInput = parts;
