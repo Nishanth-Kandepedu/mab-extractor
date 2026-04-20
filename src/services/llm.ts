@@ -97,7 +97,7 @@ Output Schema:
   ]
 }`;
 
-export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
 
 export interface LLMOptions {
   provider: LLMProvider;
@@ -236,9 +236,9 @@ export async function extractWithLLM(
   if (typeof input === "string") {
     formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTY-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
   } else {
-    // For non-Gemini providers, we currently only support text
-    if (provider !== 'gemini') {
-      throw new Error(`File upload is currently only supported for Gemini. Please switch to Gemini or paste the text directly.`);
+    // For Gemini/Gemma infrastructure, we support multimodal inputs
+    if (provider !== 'gemini' && provider !== 'gemma') {
+      throw new Error(`File upload is currently only supported for Gemini/Gemma. Please switch provider or paste the text directly.`);
     }
     
     const parts: any[] = [];
