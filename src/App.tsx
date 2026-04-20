@@ -119,13 +119,15 @@ function AppContent() {
     'claude-3-5-sonnet-latest': { input: 3.0, output: 15.0 },
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
-    'gemma-4': { input: 0.15, output: 0.60 },
+    'gemma-4': { input: 0, output: 0, free: true },
   };
 
   const getEstCost = (usage: any, modelUsed: string) => {
     if (!usage) return '---';
     const rateKey = Object.keys(MODEL_RATES).find(k => modelUsed.includes(k)) || 'gemini-3.1-pro-preview';
-    const rates = (MODEL_RATES as any)[rateKey] || (MODEL_RATES as any)['gemini-3.1-pro-preview'];
+    const rates = (MODEL_RATES as any)[rateKey] as { input: number, output: number, free?: boolean };
+    
+    if (rates.free) return 'FREE';
     
     const inputCost = (usage.promptTokenCount / 1000000) * rates.input;
     const outputTokens = usage.totalTokenCount - usage.promptTokenCount;
@@ -1273,7 +1275,7 @@ function AppContent() {
 
             <div className="space-y-2">
               <div className="flex justify-between text-[9px]">
-                <span className="text-zinc-400 uppercase font-medium">System Concurrent Load</span>
+                <span className="text-zinc-400 uppercase font-medium">Model Load / Concurrency</span>
                 <span className="text-zinc-600 font-bold uppercase tracking-tighter">
                   {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} Active / ${healthInfo.concurrency?.pendingCount || 0} Queued` : '--'}
                 </span>
@@ -1281,13 +1283,16 @@ function AppContent() {
               <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: healthInfo ? `${Math.min(100, (healthInfo.concurrency?.activeCount / 2) * 100)}%` : '0%' }}
+                  animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount + healthInfo.concurrency?.pendingCount) / 4) * 100)}%` : '0%' }}
                   className={cn(
                     "h-full transition-all duration-500",
                     (healthInfo?.concurrency?.activeCount || 0) >= 2 ? "bg-amber-500" : "bg-indigo-500"
                   )} 
                 />
               </div>
+              <p className="text-[8px] text-zinc-400 font-mono tracking-tight leading-tight">
+                {healthInfo ? `Throughput: 100% | Latency: ${networkStats.latency}ms | Load: ${healthInfo.concurrency?.activeCount > 0 ? 'Elevated' : 'Stable'}` : 'Synchronizing system metrics...'}
+              </p>
             </div>
 
             <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
