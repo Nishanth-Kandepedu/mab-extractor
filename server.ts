@@ -148,6 +148,15 @@ async function startServer() {
     const jobId = Math.random().toString(36).substring(7);
     await updateJob(jobId, { status: 'pending', startTime: Date.now() });
 
+    // Map custom or experimental models to valid Gemini API IDs
+    const mapModel = (m: string) => {
+      const lowerM = m?.toLowerCase() || '';
+      if (lowerM === 'gemma-4') return 'gemma-4-27b-it';
+      return m;
+    };
+
+    const targetModel = mapModel(model);
+
     // Helper to find keys case-insensitively
     const findKey = (pattern: string) => {
       const key = Object.keys(process.env).find(k => k.toUpperCase().includes(pattern.toUpperCase()));
@@ -166,7 +175,7 @@ async function startServer() {
 
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: model || 'gemini-3.1-pro-preview',
+            model: targetModel || 'gemini-3.1-pro-preview',
             contents: typeof input === 'string' ? [{ parts: [{ text: input }] }] : input,
             config: {
               systemInstruction,
