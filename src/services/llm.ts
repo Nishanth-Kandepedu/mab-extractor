@@ -217,9 +217,9 @@ export async function extractWithLLM(
     const isGemini = provider === 'gemini';
 
     if (isGemini) {
-      const apiKey = (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error("Missing GEMINI_API_KEY environment variable.");
+        throw new Error("The Gemini API key is not configured in this environment. Please ensure GEMINI_API_KEY is set in the project settings.");
       }
 
       const ai = new GoogleGenAI({ apiKey });
