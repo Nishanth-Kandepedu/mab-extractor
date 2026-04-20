@@ -56,10 +56,14 @@ IMPORTANT EXTRACTION RULES:
     - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
 17. TABLE SCANNING HIERARCHY:
-    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies.
-    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies.
-    - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing.
-    - STEP 4: If a clone name like "mAb12999P2" appears in a table, it MUST be extracted, even if it is not a "Lead" candidate.
+    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies (e.g., mAb12999P2, mAb14226). These MUST be extracted as separate entries.
+    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies (e.g., bsAb7075, REGN7075).
+    - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing for verbatim accuracy.
+    - STEP 4: If a clone name like "mAb12999P2" appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in Table 1 and Table 3 is a mandatory mining target.
+
+18. PARENTAL VS COMPONENT CLONES:
+    - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
+    - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
 Output Schema:
 {
