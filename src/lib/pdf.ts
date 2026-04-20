@@ -51,34 +51,3 @@ export async function getPdfPages(base64Data: string, range: string): Promise<st
     return base64Data; // Fallback to original
   }
 }
-
-/**
- * Splits a PDF into multiple chunks of given size.
- */
-export async function splitPdfIntoChunks(base64Data: string, chunkSize: number = 30): Promise<string[]> {
-  try {
-    const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-    const srcDoc = await PDFDocument.load(bytes);
-    const totalPages = srcDoc.getPageCount();
-    const chunks: string[] = [];
-
-    for (let i = 0; i < totalPages; i += chunkSize) {
-      const end = Math.min(i + chunkSize, totalPages);
-      const newDoc = await PDFDocument.create();
-      
-      const indices = [];
-      for (let j = i; j < end; j++) indices.push(j);
-      
-      const copiedPages = await newDoc.copyPages(srcDoc, indices);
-      copiedPages.forEach(p => newDoc.addPage(p));
-      
-      const newBytes = await newDoc.save();
-      chunks.push(btoa(String.fromCharCode(...newBytes)));
-    }
-
-    return chunks;
-  } catch (e) {
-    console.error("Error chunking PDF:", e);
-    return [base64Data];
-  }
-}
