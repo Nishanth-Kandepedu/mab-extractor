@@ -1,4 +1,5 @@
-import { ExtractionResult } from "../types";
+import { ExtractionResult, Antibody } from "../types";
+import { getPdfPages, splitPdfIntoChunks } from "../lib/pdf";
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -245,9 +246,16 @@ export async function extractWithLLM(
     
     // Handle main input (PDF or Text)
     if (input.mimeType === 'application/pdf') {
+      let finalData = input.data;
+      
+      // Physically crop PDF if a page range is provided to save tokens
+      if (pageContext && /^[0-9,-]+$/.test(pageContext.trim())) {
+        finalData = await getPdfPages(input.data, pageContext.trim());
+      }
+
       parts.push({
         inlineData: {
-          data: input.data,
+          data: finalData,
           mimeType: input.mimeType,
         },
       });
@@ -564,4 +572,66 @@ export async function extractWithLLM(
     }
     throw e;
   }
+}
+
+/**
+ * Handles massive PDF documents by splitting them into smaller chunks (40pp)
+ * and processing them sequentially to stay within model token limits.
+ */
+export async function extractLargePdfInChunks(
+  file: { data: string; mimeType: string },
+  options: LLMOptions,
+  sequenceListing?: { data: string; mimeType: string },
+  prioritySeqIds?: string,
+  onProgress?: (processed: number, total: number) => void
+): Promise<ExtractionResult> {
+  const chunks = await splitPdfIntoChunks(file.data, 40); 
+  const total = chunks.length;
+  const allAntibodies: Antibody[] = [];
+  let totalUsage = {
+    promptTokenCount: 0,
+    candidatesTokenCount: 0,
+    totalTokenCount: 0
+  };
+  let totalTime = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (onProgress) onProgress(i + 1, total);
+    
+    try {
+      const res = await extractWithLLM(
+        { data: chunks[i], mimeType: file.mimeType },
+        options,
+        undefined, 
+        sequenceListing,
+        prioritySeqIds
+      );
+
+      allAntibodies.push(...res.antibodies);
+      totalTime += (res.extractionTime || 0);
+      
+      if (res.usageMetadata) {
+        totalUsage.promptTokenCount += (res.usageMetadata.promptTokenCount || 0);
+        totalUsage.candidatesTokenCount += (res.usageMetadata.candidatesTokenCount || 0);
+        totalUsage.totalTokenCount += (res.usageMetadata.totalTokenCount || 0);
+      }
+    } catch (e) {
+      console.error(`[Chunk ${i + 1}] Skip error:`, e);
+    }
+  }
+
+  const uniqueAntibodies = allAntibodies.reduce((acc: Antibody[], current) => {
+    const x = acc.find(item => item.mAbName === current.mAbName);
+    if (!x) return acc.concat([current]);
+    return acc;
+  }, []);
+
+  return {
+    patentId: "Merged Result",
+    patentTitle: "Batch Extraction Scan",
+    antibodies: uniqueAntibodies,
+    usageMetadata: totalUsage,
+    extractionTime: totalTime,
+    modelUsed: options.model
+  };
 }

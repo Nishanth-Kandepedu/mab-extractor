@@ -28,6 +28,7 @@
     "openai": "^6.33.0",
     "p-limit": "^7.3.0",
     "papaparse": "^5.5.3",
+    "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-ga4": "^2.1.0",

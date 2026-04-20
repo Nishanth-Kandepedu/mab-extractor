@@ -3,7 +3,7 @@ import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
-import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
+import { extractWithLLM, extractLargePdfInChunks, LLMProvider, LLMOptions } from './services/llm';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
@@ -103,6 +103,8 @@ function AppContent() {
   const [sessionLogged, setSessionLogged] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [healthInfo, setHealthInfo] = useState<any>(null);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
   const [networkStats, setNetworkStats] = useState({ 
     online: navigator.onLine, 
     latency: -1,
@@ -149,6 +151,8 @@ function AppContent() {
         return parsed.error.message;
       }
     } catch(e) {}
+    if (error.includes('token count exceeds') || error.includes('262144')) 
+      return "Document too large for Gemma 4 (256k limit). Please switch to Gemini 3.1 Pro (1M+ limit) or use a text-only subset.";
     if (error.includes('503')) return "The extraction service is temporarily unavailable. Please try again shortly.";
     if (error.includes('429')) return "Too many requests. Please wait a moment before trying again.";
     if (error.includes('timeout')) return "The request timed out. High-volume patents may require using a specific page range.";
@@ -723,15 +727,29 @@ function AppContent() {
       
       try {
         const startTime = Date.now();
-        const result = await extractWithLLM(
-          { data: fileData, mimeType: file.type }, 
-          llmOptions, 
-          pageRange,
-          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-          prioritySeqIds
-        );
+        let result: ExtractionResult;
+
+        if (batchMode && file.type === 'application/pdf') {
+          result = await extractLargePdfInChunks(
+            { data: fileData, mimeType: file.type },
+            llmOptions,
+            listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+            prioritySeqIds,
+            (current, total) => setBatchProgress({ current, total })
+          );
+        } else {
+          result = await extractWithLLM(
+            { data: fileData, mimeType: file.type }, 
+            llmOptions, 
+            pageRange,
+            listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+            prioritySeqIds
+          );
+        }
+
         result.extractionTime = Date.now() - startTime;
         setState({ isExtracting: false, result, error: null });
+        setBatchProgress(null);
         setShowHistory(false);
 
         // Clear file input so the same file can be uploaded again
@@ -1326,7 +1344,8 @@ function AppContent() {
                   </span>
                 </div>
                 <p className="text-[10px] mt-2 leading-relaxed text-amber-600/80">
-                  Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy and structural validation.
+                  Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy. 
+                  <span className="block mt-1 font-bold">Note: 256k token limit per document. Use Gemini 3.1 Pro for large patents.</span>
                 </p>
               </div>
             )}
@@ -1399,6 +1418,30 @@ function AppContent() {
                     </>
                   )}
                 </select>
+
+                <div className="mt-4 pt-4 border-t border-zinc-100">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={batchMode}
+                        onChange={(e) => setBatchMode(e.target.checked)}
+                        disabled={state.isExtracting}
+                      />
+                      <div className="w-10 h-5 bg-zinc-200 rounded-full peer peer-checked:bg-indigo-600 transition-all border border-zinc-200"></div>
+                      <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all peer-checked:translate-x-5 shadow-sm"></div>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-zinc-700 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
+                        Recursive Full-Document Scan
+                      </span>
+                      <span className="text-[9px] text-zinc-400 leading-tight">
+                        Auto-splits massive PDFs (300+ pages) into smart chunks to bypass token limits.
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
             )}
           </div>
@@ -2000,6 +2043,26 @@ function AppContent() {
                       {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
                     </span>
                   </div>
+
+                  {batchProgress && (
+                    <div className="mt-4 mb-8 w-full max-w-xs space-y-2">
+                      <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                        <span>Mining Progress</span>
+                        <span>{batchProgress.current} / {batchProgress.total} Batches</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                        <motion.div 
+                          className="h-full bg-indigo-600"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-[9px] text-zinc-400 italic">
+                        Merging results across document segments...
+                      </p>
+                    </div>
+                  )}
+
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
                     <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
