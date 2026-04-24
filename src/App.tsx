@@ -2190,9 +2190,11 @@ function AppContent() {
                             (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount).toLocaleString() 
                             : '---'}
                         </span>
-                        {state.result.usageMetadata && (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > state.result.usageMetadata.candidatesTokenCount) && (
+                        {state.result.usageMetadata && (state.result.usageMetadata.thinkingTokenCount || (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > (state.result.usageMetadata.candidatesTokenCount || 0))) && (
                           <span className="text-[9px] text-amber-500/70 mt-1">
-                            {state.result.usageMetadata.candidatesTokenCount.toLocaleString()} response + {(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - state.result.usageMetadata.candidatesTokenCount).toLocaleString()} thinking
+                            {state.result.usageMetadata.thinkingTokenCount 
+                              ? `${state.result.usageMetadata.thinkingTokenCount.toLocaleString()} reasoning tokens`
+                              : `${(state.result.usageMetadata.candidatesTokenCount || 0).toLocaleString()} response + ${(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - (state.result.usageMetadata.candidatesTokenCount || 0)).toLocaleString()} thinking`}
                           </span>
                         )}
                       </div>
