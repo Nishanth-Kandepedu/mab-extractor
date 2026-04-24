@@ -74,7 +74,7 @@ function AppContent() {
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
     model: 'gemini-3.1-pro-preview',
-    isSarMode: false
+    isSarMode: true
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
@@ -306,7 +306,7 @@ function AppContent() {
             
             // Default guests to Gemma 4
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
             }
           } else {
             // New user or anonymous session without doc
@@ -330,7 +330,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
             }
           }
         } catch (error) {
@@ -475,7 +475,7 @@ function AppContent() {
         
         // Default to Gemma 4 for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
+          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -1322,109 +1322,95 @@ function AppContent() {
               </div>
             )}
 
-            {((user as any)?.role === 'guest') ? (
-              <div className="p-4 rounded-xl border bg-zinc-50 border-zinc-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full animate-pulse bg-emerald-500" />
-                  <span className="text-xs font-medium text-zinc-600">
-                    High-Quality Mining Engine (Pro)
-                  </span>
-                </div>
-                <p className="text-[10px] mt-2 leading-relaxed text-zinc-400">
-                  Using optimized sequence mining parameters for maximum verbatim accuracy and CDR identification.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-4 gap-2">
-                  {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                    const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        disabled={isDisabled}
-                        onClick={() => setLlmOptions(prev => ({ 
-                          ...prev, 
-                          provider: p, 
-                          model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
-                        }))}
-                        className={cn(
-                          "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                          llmOptions.provider === p
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
-                          isDisabled && "opacity-40 grayscale cursor-not-allowed"
-                        )}
-                      >
-                        {p}
-                      </button>
-                    );
-                  })}
-                </div>
-                <select
-                  value={llmOptions.model}
-                  onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
-                >
-                  {llmOptions.provider === 'gemini' && (
-                    <>
-                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                      <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
-                    </>
-                  )}
-                  {llmOptions.provider === 'gemma' && (
-                    <>
-                      <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
-                    </>
-                  )}
-                  {llmOptions.provider === 'openai' && (
-                    <>
-                      <option value="gpt-4o">GPT-4o (Omni)</option>
-                      <option value="gpt-4o-mini">GPT-4o Mini</option>
-                      <option value="o1-preview">o1 Preview (Reasoning)</option>
-                    </>
-                  )}
-                  {llmOptions.provider === 'anthropic' && (
-                    <>
-                      <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                      <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                      <option value="claude-3-opus-latest">Claude 3 Opus</option>
-                    </>
-                  )}
-                </select>
-
-                <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-100">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-zinc-700">SAR Data Extraction</span>
-                      {llmOptions.model !== 'gemma-4' && (
-                        <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-bold tracking-tighter">Gemma 4 Only</span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-zinc-400 leading-tight">Extract IC50, PK, ADMET & In Vivo evidence</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setLlmOptions(prev => ({ ...prev, isSarMode: !prev.isSarMode }))}
-                    disabled={llmOptions.model !== 'gemma-4'}
-                    className={cn(
-                      "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
-                      llmOptions.isSarMode ? "bg-indigo-600" : "bg-zinc-200",
-                      llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed grayscale"
-                    )}
-                  >
-                    <span
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-2">
+                {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
+                  const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => setLlmOptions(prev => ({ 
+                        ...prev, 
+                        provider: p, 
+                        model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                      }))}
                       className={cn(
-                        "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                        llmOptions.isSarMode ? "translate-x-5" : "translate-x-0"
+                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
+                        llmOptions.provider === p
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
+                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
+                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
                       )}
-                    />
-                  </button>
-                </div>
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+              <select
+                value={llmOptions.model}
+                onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+              >
+                {llmOptions.provider === 'gemini' && (
+                  <>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                  </>
+                )}
+                {llmOptions.provider === 'gemma' && (
+                  <>
+                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                  </>
+                )}
+                {llmOptions.provider === 'openai' && (
+                  <>
+                    <option value="gpt-4o">GPT-4o (Omni)</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="o1-preview">o1 Preview (Reasoning)</option>
+                  </>
+                )}
+                {llmOptions.provider === 'anthropic' && (
+                  <>
+                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                  </>
+                )}
+              </select>
+
+              <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-100">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-zinc-700">SAR Data Extraction</span>
+                    {llmOptions.model !== 'gemma-4' && (
+                      <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-bold tracking-tighter">Gemma 4 Only</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-zinc-400 leading-tight">Extract IC50, PK, ADMET & In Vivo evidence</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLlmOptions(prev => ({ ...prev, isSarMode: !prev.isSarMode }))}
+                  disabled={llmOptions.model !== 'gemma-4'}
+                  className={cn(
+                    "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+                    llmOptions.isSarMode ? "bg-indigo-600" : "bg-zinc-200",
+                    llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed grayscale"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                      llmOptions.isSarMode ? "translate-x-5" : "translate-x-0"
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm sticky top-24">
