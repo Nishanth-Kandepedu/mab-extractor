@@ -72,9 +72,9 @@ function AppContent() {
     error: null,
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
-    provider: 'gemini',
-    model: 'gemini-3.1-pro-preview',
-    isSarMode: true
+    provider: 'gemma',
+    model: 'gemma-4',
+    isSarMode: false
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
@@ -304,9 +304,9 @@ function AppContent() {
               }
             }
             
-            // Default guests to Gemma 4
+            // Default guests to Scientific Discovery Engine (Gemma 4)
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
             }
           } else {
             // New user or anonymous session without doc
@@ -330,7 +330,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
+              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
             }
           }
         } catch (error) {
@@ -473,9 +473,9 @@ function AppContent() {
         setUser(newUser);
         setLoginError('');
         
-        // Default to Gemma 4 for guests
+        // Default to Scientific Discovery Engine for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: true });
+          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -1326,6 +1326,7 @@ function AppContent() {
               <div className="grid grid-cols-4 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                   const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
+                  const displayLabel = p === 'gemini' ? 'Precision' : p === 'gemma' ? 'Scientific' : p === 'openai' ? 'General' : 'Technical';
                   return (
                     <button
                       key={p}
@@ -1344,7 +1345,7 @@ function AppContent() {
                         isDisabled && "opacity-40 grayscale cursor-not-allowed"
                       )}
                     >
-                      {p}
+                      {displayLabel}
                     </button>
                   );
                 })}
@@ -1352,32 +1353,32 @@ function AppContent() {
               <select
                 value={llmOptions.model}
                 onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (High Thinking)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                    <option value="gemini-3.1-pro-preview">High-Precision Reasoning (Deep Mining)</option>
+                    <option value="gemini-3-flash-preview">Rapid Processing Mode (Speed Focus)</option>
+                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Standard Mining Engine</option>
                   </>
                 )}
                 {llmOptions.provider === 'gemma' && (
                   <>
-                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                    <option value="gemma-4">Scientific Discovery Engine (Chemical & Assay Focus)</option>
                   </>
                 )}
                 {llmOptions.provider === 'openai' && (
                   <>
-                    <option value="gpt-4o">GPT-4o (Omni)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="o1-preview">o1 Preview (Reasoning)</option>
+                    <option value="gpt-4o">General Multimodal Logic (Balanced)</option>
+                    <option value="gpt-4o-mini">Efficient General Logic</option>
+                    <option value="o1-preview">Academic Reasoning (Preview)</option>
                   </>
                 )}
                 {llmOptions.provider === 'anthropic' && (
                   <>
-                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                    <option value="claude-3-5-sonnet-latest">Technical Analysis Engine (High Fidelity)</option>
+                    <option value="claude-3-5-haiku-latest">Fast Technical Parser</option>
+                    <option value="claude-3-opus-latest">Exhaustive Literature Mining (Beta)</option>
                   </>
                 )}
               </select>
