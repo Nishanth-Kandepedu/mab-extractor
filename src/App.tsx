@@ -1326,7 +1326,7 @@ function AppContent() {
               <div className="grid grid-cols-4 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                   const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                  const displayLabel = p === 'gemini' ? 'Precision' : p === 'gemma' ? 'Scientific' : p === 'openai' ? 'General' : 'Technical';
+                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
                   return (
                     <button
                       key={p}
@@ -1357,28 +1357,28 @@ function AppContent() {
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
-                    <option value="gemini-3.1-pro-preview">High-Precision Reasoning (Deep Mining)</option>
-                    <option value="gemini-3-flash-preview">Rapid Processing Mode (Speed Focus)</option>
-                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Standard Mining Engine</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                   </>
                 )}
                 {llmOptions.provider === 'gemma' && (
                   <>
-                    <option value="gemma-4">Scientific Discovery Engine (Chemical & Assay Focus)</option>
+                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                   </>
                 )}
                 {llmOptions.provider === 'openai' && (
                   <>
-                    <option value="gpt-4o">General Multimodal Logic (Balanced)</option>
-                    <option value="gpt-4o-mini">Efficient General Logic</option>
-                    <option value="o1-preview">Academic Reasoning (Preview)</option>
+                    <option value="gpt-4o">GPT-4o (Omni)</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="o1-preview">o1 Preview (Reasoning)</option>
                   </>
                 )}
                 {llmOptions.provider === 'anthropic' && (
                   <>
-                    <option value="claude-3-5-sonnet-latest">Technical Analysis Engine (High Fidelity)</option>
-                    <option value="claude-3-5-haiku-latest">Fast Technical Parser</option>
-                    <option value="claude-3-opus-latest">Exhaustive Literature Mining (Beta)</option>
+                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
                   </>
                 )}
               </select>
