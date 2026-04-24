@@ -92,6 +92,7 @@ export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
+  isSarMode?: boolean;
 }
 
 /**
@@ -273,7 +274,8 @@ export async function extractWithLLM(
   }
 
     const isGemma4 = model === 'gemma-4';
-    const activeInstruction = isGemma4 ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
+    const useSarExtra = isGemma4 && options.isSarMode;
+    const activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
 
     const responseSchema: any = {
       type: "OBJECT",
@@ -320,7 +322,7 @@ export async function extractWithLLM(
               evidenceStatement: { type: "STRING" },
               needsReview: { type: "BOOLEAN" },
               reviewReason: { type: "STRING" },
-              experimentalData: isGemma4 ? {
+              experimentalData: useSarExtra ? {
                 type: "ARRAY",
                 items: {
                   type: "OBJECT",

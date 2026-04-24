@@ -73,7 +73,8 @@ function AppContent() {
   });
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemini',
-    model: 'gemini-3.1-pro-preview'
+    model: 'gemini-3.1-pro-preview',
+    isSarMode: false
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
@@ -474,7 +475,7 @@ function AppContent() {
         
         // Default to Gemma 4 for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemma', model: 'gemma-4' });
+          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -1337,12 +1338,17 @@ function AppContent() {
               <div className="space-y-4">
                 <div className="grid grid-cols-4 gap-2">
                   {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                    const isDisabled = (user as any)?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
+                    const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
                     return (
                       <button
                         key={p}
+                        type="button"
                         disabled={isDisabled}
-                        onClick={() => setLlmOptions({ provider: p, model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' })}
+                        onClick={() => setLlmOptions(prev => ({ 
+                          ...prev, 
+                          provider: p, 
+                          model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                        }))}
                         className={cn(
                           "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
                           llmOptions.provider === p
@@ -1388,6 +1394,35 @@ function AppContent() {
                     </>
                   )}
                 </select>
+
+                <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-100">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-zinc-700">SAR Data Extraction</span>
+                      {llmOptions.model !== 'gemma-4' && (
+                        <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-bold tracking-tighter">Gemma 4 Only</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-zinc-400 leading-tight">Extract IC50, PK, ADMET & In Vivo evidence</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLlmOptions(prev => ({ ...prev, isSarMode: !prev.isSarMode }))}
+                    disabled={llmOptions.model !== 'gemma-4'}
+                    className={cn(
+                      "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+                      llmOptions.isSarMode ? "bg-indigo-600" : "bg-zinc-200",
+                      llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed grayscale"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        llmOptions.isSarMode ? "translate-x-5" : "translate-x-0"
+                      )}
+                    />
+                  </button>
+                </div>
               </div>
             )}
           </div>
