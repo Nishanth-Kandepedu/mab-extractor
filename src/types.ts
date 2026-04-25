@@ -53,6 +53,13 @@ export interface AssayData {
   evidence: string; // page or table reference
 }
 
+export interface TargetMetadata {
+  standardName: string;
+  synonyms: string[];
+  geneSymbols: string[];
+  uniprotId: string;
+}
+
 export interface Antibody {
   mAbName: string;
   chains: Chain[];
@@ -67,6 +74,7 @@ export interface Antibody {
   seqId?: string; // Overall SEQ ID if applicable
   pageNumber?: number;
   tableId?: string;
+  targetMetadata?: TargetMetadata;
 }
 
 export interface UsageMetadata {

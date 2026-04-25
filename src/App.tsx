@@ -4,6 +4,7 @@ import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRigh
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
+import { fetchTargetMetadata } from './services/uniprot';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
@@ -727,6 +728,42 @@ function AppContent() {
       );
 
       result.extractionTime = Date.now() - startTime;
+      
+      // Enrichment with UniProt Target Metadata
+      try {
+        console.log('[Enrichment] Initiating target metadata enrichment...');
+        const uniqueTargets = Array.from(new Set(
+          result.antibodies.flatMap(mAb => 
+            mAb.chains.map(c => (c as any).target).filter(Boolean) as string[]
+          )
+        ));
+
+        if (uniqueTargets.length > 0) {
+          const metaResults = await Promise.all(
+            uniqueTargets.map(async (t) => ({
+              target: t,
+              metadata: await fetchTargetMetadata(t)
+            }))
+          );
+
+          const targetMap = new Map();
+          metaResults.forEach(r => {
+            if (r.metadata) targetMap.set(r.target, r.metadata);
+          });
+
+          for (const mAb of result.antibodies) {
+            // Find the primary target for this antibody
+            const primaryTarget = mAb.chains.find(c => (c as any).target)?.target;
+            if (primaryTarget && targetMap.has(primaryTarget)) {
+              mAb.targetMetadata = targetMap.get(primaryTarget);
+              console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${primaryTarget})`);
+            }
+          }
+        }
+      } catch (enrichError) {
+        console.error('[Enrichment] Failed to fetch target metadata:', enrichError);
+      }
+
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
 
@@ -2263,6 +2300,45 @@ function AppContent() {
                             <div>
                               <span className="font-bold block mb-1">Review Reason:</span>
                               {mAb.reviewReason}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {mAb.targetMetadata && (
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Database className="w-4 h-4 text-indigo-600" />
+                              <span className="font-bold text-indigo-900 uppercase tracking-wider text-[10px]">Target Info (UniProtKB)</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Standard Name</span>
+                                <div className="font-bold text-zinc-900 flex items-center gap-2">
+                                  {mAb.targetMetadata.standardName}
+                                  <a 
+                                    href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-400 hover:text-indigo-600 transition-colors"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Gene Symbols</span>
+                                <div className="text-zinc-600 font-mono">
+                                  {mAb.targetMetadata.geneSymbols.join(', ')}
+                                </div>
+                              </div>
+                              {mAb.targetMetadata.synonyms.length > 0 && (
+                                <div className="col-span-full">
+                                  <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Synonyms</span>
+                                  <div className="text-zinc-500 leading-relaxed italic">
+                                    {mAb.targetMetadata.synonyms.join(', ')}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
