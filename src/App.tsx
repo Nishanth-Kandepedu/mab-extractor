@@ -748,15 +748,26 @@ function AppContent() {
 
           const targetMap = new Map();
           metaResults.forEach(r => {
-            if (r.metadata) targetMap.set(r.target, r.metadata);
+            if (r.metadata) {
+              targetMap.set(r.target.toLowerCase().trim(), r.metadata);
+            }
           });
 
           for (const mAb of result.antibodies) {
-            // Find the primary target for this antibody
-            const primaryTarget = mAb.chains.find(c => (c as any).target)?.target;
-            if (primaryTarget && targetMap.has(primaryTarget)) {
-              mAb.targetMetadata = targetMap.get(primaryTarget);
-              console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${primaryTarget})`);
+            // Find the most frequent primary target for this antibody
+            const targetCounts: Record<string, number> = {};
+            mAb.chains.forEach(c => {
+              if (c.target) {
+                const t = c.target.toLowerCase().trim();
+                targetCounts[t] = (targetCounts[t] || 0) + 1;
+              }
+            });
+
+            const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+            
+            if (topTarget && targetMap.has(topTarget)) {
+              mAb.targetMetadata = targetMap.get(topTarget);
+              console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${topTarget})`);
             }
           }
         }
@@ -2304,7 +2315,7 @@ function AppContent() {
                           </div>
                         )}
                         
-                        {mAb.targetMetadata && (
+                        {mAb.targetMetadata ? (
                           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs">
                             <div className="flex items-center gap-2 mb-2">
                               <Database className="w-4 h-4 text-indigo-600" />
@@ -2340,6 +2351,26 @@ function AppContent() {
                                 </div>
                               )}
                             </div>
+                          </div>
+                        ) : mAb.chains.some(c => c.target) && (
+                          <div className="flex justify-start">
+                            <button 
+                              onClick={async () => {
+                                const target = mAb.chains.find(c => c.target)?.target;
+                                if (target) {
+                                  const meta = await fetchTargetMetadata(target);
+                                  if (meta && state.result) {
+                                    const newResult = { ...state.result };
+                                    newResult.antibodies[mAbIdx].targetMetadata = meta;
+                                    setState(prev => ({ ...prev, result: newResult }));
+                                  }
+                                }
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-indigo-600 transition-all text-[10px] font-bold uppercase tracking-wider"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Fetch UniProt Metadata for {mAb.chains.find(c => c.target)?.target}
+                            </button>
                           </div>
                         )}
                         

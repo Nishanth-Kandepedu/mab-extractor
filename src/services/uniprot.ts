@@ -11,33 +11,41 @@ export async function fetchTargetMetadata(targetName: string): Promise<UniProtMe
     return null;
   }
 
+  // Clean the target name: remove "Target: " prefix if present, take first entity
+  const cleanTarget = targetName
+    .replace(/^target:\s*/i, '')
+    .split(',')[0]
+    .split('/')[0]
+    .trim();
+
   try {
-    // We search for human proteins by default (organism_id:9606)
-    // We query for the target name which could be a gene symbol or protein name
-    const query = encodeURIComponent(`(gene:${targetName} OR name:${targetName}) AND organism_id:9606`);
-    const url = `https://rest.uniprot.org/uniprotkb/search?query=${query}&format=json&size=1`;
+    // Strategy: Search for the target in human proteins (organism 9606)
+    // We prioritize reviewed entries (Swiss-Prot) for better data quality
+    const queries = [
+      `gene_exact:${cleanTarget} AND organism_id:9606 AND reviewed:true`,
+      `protein_name:${cleanTarget} AND organism_id:9606 AND reviewed:true`,
+      `name:${cleanTarget} AND organism_id:9606 AND reviewed:true`,
+      `${cleanTarget} AND organism_id:9606 AND reviewed:true`,
+      `${cleanTarget} AND organism_id:9606` // Fallback to unreviewed if needed
+    ];
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`UniProt API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (!data.results || data.results.length === 0) {
-      // Try a more broad search if the specific one fails
-      const broadQuery = encodeURIComponent(`${targetName} AND organism_id:9606`);
-      const broadUrl = `https://rest.uniprot.org/uniprotkb/search?query=${broadQuery}&format=json&size=1`;
-      const broadResponse = await fetch(broadUrl);
-      if (broadResponse.ok) {
-        const broadData = await broadResponse.json();
-        if (broadData.results && broadData.results.length > 0) {
-          return parseUniProtEntry(broadData.results[0]);
+    for (const q of queries) {
+      const query = encodeURIComponent(q);
+      const url = `https://rest.uniprot.org/uniprotkb/search?query=${query}&format=json&size=1`;
+      
+      console.log(`[UniProt] Trying query: ${q}`);
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          console.log(`[UniProt] Found match for ${cleanTarget} using query: ${q}`);
+          return parseUniProtEntry(data.results[0]);
         }
       }
-      return null;
     }
 
-    return parseUniProtEntry(data.results[0]);
+    console.log(`[UniProt] No results found for ${cleanTarget} after all attempts`);
+    return null;
   } catch (error) {
     console.error('Error fetching target metadata from UniProt:', error);
     return null;
