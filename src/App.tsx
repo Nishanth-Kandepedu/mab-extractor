@@ -929,6 +929,10 @@ function AppContent() {
             patentTitle: state.result?.patentTitle,
             chainType: chain.type,
             target: chain.target || '',
+            targetStandardName: mAb.targetMetadata?.standardName || '',
+            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
             fullSequence: chain.fullSequence,
             CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
             CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
@@ -2326,14 +2330,19 @@ function AppContent() {
                                 <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Standard Name</span>
                                 <div className="font-bold text-zinc-900 flex items-center gap-2">
                                   {mAb.targetMetadata.standardName}
-                                  <a 
-                                    href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-indigo-400 hover:text-indigo-600 transition-colors"
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                  </a>
+                                  <div className="flex items-center gap-1.5 ml-1">
+                                    <span className="text-[9px] bg-indigo-100 text-indigo-700 font-mono px-1.5 py-0.5 rounded uppercase">
+                                      {mAb.targetMetadata.uniprotId}
+                                    </span>
+                                    <a 
+                                      href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-indigo-400 hover:text-indigo-600 transition-colors"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  </div>
                                 </div>
                               </div>
                               <div>
