@@ -2384,10 +2384,13 @@ function AppContent() {
                                 const target = mAb.chains.find(c => c.target)?.target;
                                 if (target) {
                                   const meta = await fetchTargetMetadata(target);
-                                  if (meta && state.result) {
-                                    const newResult = { ...state.result };
-                                    newResult.antibodies[mAbIdx].targetMetadata = meta;
-                                    setState(prev => ({ ...prev, result: newResult }));
+                                  if (meta) {
+                                    setState(prev => {
+                                      if (!prev.result) return prev;
+                                      const newResult = { ...prev.result };
+                                      newResult.antibodies[mAbIdx].targetMetadata = meta;
+                                      return { ...prev, result: newResult };
+                                    });
                                   }
                                 }
                               }}
