@@ -922,29 +922,43 @@ function AppContent() {
 
       const rows: any[] = [];
       state.result.antibodies.forEach(mAb => {
-        mAb.chains.forEach(chain => {
-          const row = {
-            mAbName: mAb.mAbName,
-            patentId: state.result?.patentId,
-            patentTitle: state.result?.patentTitle,
-            chainType: chain.type,
-            target: chain.target || '',
-            targetStandardName: mAb.targetMetadata?.standardName || '',
-            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
-            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
-            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
-            fullSequence: chain.fullSequence,
-            CDR1: chain.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
-            CDR2: chain.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
-            CDR3: chain.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
-            confidence: mAb.confidence,
-            characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
-            evidenceLocation: mAb.evidenceLocation || '',
-            evidenceStatement: mAb.evidenceStatement || '',
-            summary: mAb.summary
-          };
-          rows.push(row);
-        });
+        const vhChain = mAb.chains.find(c => c.type === 'Heavy');
+        const vlChain = mAb.chains.find(c => c.type === 'Light');
+        
+        const row = {
+          mAbName: mAb.mAbName,
+          patentId: state.result?.patentId,
+          patentTitle: state.result?.patentTitle,
+          target: vhChain?.target || vlChain?.target || '',
+          targetStandardName: mAb.targetMetadata?.standardName || '',
+          targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+          targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+          targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+          
+          // Heavy Chain (VH) Data
+          VH_SeqID: vhChain?.seqId || '',
+          VH_FullSequence: vhChain?.fullSequence || '',
+          VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
+          VH_CDR2: vhChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
+          VH_CDR3: vhChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+          
+          // Light Chain (VL) Data
+          VL_SeqID: vlChain?.seqId || '',
+          VL_FullSequence: vlChain?.fullSequence || '',
+          VL_CDR1: vlChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
+          VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
+          VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+          
+          overallSeqID: mAb.seqId || '',
+          confidence: mAb.confidence,
+          needsReview: mAb.needsReview ? 'Yes' : 'No',
+          reviewRemarks: mAb.reviewReason || '',
+          characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
+          evidenceLocation: mAb.evidenceLocation || '',
+          evidenceStatement: mAb.evidenceStatement || '',
+          summary: mAb.summary
+        };
+        rows.push(row);
       });
 
       const csv = Papa.unparse(rows);
@@ -977,13 +991,15 @@ function AppContent() {
       try {
         const rows: any[] = [];
         state.result.antibodies.forEach(mAb => {
-          mAb.chains.forEach(chain => {
-            rows.push({
-              mAbName: mAb.mAbName,
-              chainType: chain.type,
-              target: chain.target || '',
-              fullSequence: chain.fullSequence
-            });
+          const vhChain = mAb.chains.find(c => c.type === 'Heavy');
+          const vlChain = mAb.chains.find(c => c.type === 'Light');
+          rows.push({
+            mAbName: mAb.mAbName,
+            VH_SeqID: vhChain?.seqId || '',
+            VL_SeqID: vlChain?.seqId || '',
+            target: vhChain?.target || vlChain?.target || '',
+            VH_Sequence: vhChain?.fullSequence || '',
+            VL_Sequence: vlChain?.fullSequence || ''
           });
         });
         const csv = Papa.unparse(rows);
