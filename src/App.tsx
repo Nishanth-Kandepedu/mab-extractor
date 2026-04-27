@@ -876,14 +876,22 @@ function AppContent() {
          };
 
          const fileData = await readFile(item.file);
+         
+         // Fix: Handle sequence listing if provided globally
+         let seqData = '';
+         if (sequenceListingFile) {
+           seqData = await readFile(sequenceListingFile);
+         }
+
          const itemStartTime = Date.now();
          
+         // Fix: Pass all parameters correctly matching extractWithLLM signature
          const result = await extractWithLLM(
            { data: fileData, mimeType: item.file.type }, 
            llmOptions, 
-           '', 
-           undefined, 
-           '' 
+           pageRange, 
+           sequenceListingFile ? { data: seqData, mimeType: sequenceListingFile.type } : undefined, 
+           prioritySeqIds 
          );
          
          const itemExtractionTime = Date.now() - itemStartTime;
