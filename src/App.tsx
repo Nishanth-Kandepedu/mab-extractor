@@ -841,9 +841,9 @@ function AppContent() {
     }));
 
     const items = [...state.batch.items];
+    const currentLlmOptions = { ...llmOptions };
     
     for (let i = 0; i < items.length; i++) {
-       // Update current index and status
        setState(prev => ({
          ...prev,
          batch: { 
@@ -854,19 +854,10 @@ function AppContent() {
        }));
 
        const item = items[i];
-       if (!item.file) {
-         setState(prev => ({
-           ...prev,
-           batch: {
-             ...prev.batch!,
-             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: 'No file reference found' } : it)
-           }
-         }));
-         continue;
-       }
+       if (!item.file) continue;
 
        try {
-         const readFile = (f: File): Promise<string> => {
+         const readFileData = (f: File): Promise<string> => {
            return new Promise((resolve, reject) => {
              const reader = new FileReader();
              reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
@@ -875,55 +866,21 @@ function AppContent() {
            });
          };
 
-         const fileData = await readFile(item.file);
-         
-         // Fix: Handle sequence listing if provided globally
-         let seqData = '';
-         if (sequenceListingFile) {
-           seqData = await readFile(sequenceListingFile);
-         }
-
+         const fileData = await readFileData(item.file);
          const itemStartTime = Date.now();
          
-         // Fix: Pass all parameters correctly matching extractWithLLM signature
+         // Fix: Batch should NOT leak parameters from Single Mode UI (pageRange, sequenceListingFile, prioritySeqIds)
+         // unless we explicitly expose them in the Batch tab. Currently they are invisible and shouldn't affect batch.
          const result = await extractWithLLM(
            { data: fileData, mimeType: item.file.type }, 
-           llmOptions, 
-           pageRange, 
-           sequenceListingFile ? { data: seqData, mimeType: sequenceListingFile.type } : undefined, 
-           prioritySeqIds 
+           currentLlmOptions, 
+           '', // No page range for batch
+           undefined, // No sequence listing for batch
+           '' // No priority IDs for batch
          );
          
          const itemExtractionTime = Date.now() - itemStartTime;
          result.extractionTime = itemExtractionTime;
-
-         // Enrichment
-         try {
-           const uniqueTargets = Array.from(new Set(
-             result.antibodies.flatMap(mAb => 
-               mAb.chains.map(c => (c as any).target).filter(Boolean) as string[]
-             )
-           ));
-
-           if (uniqueTargets.length > 0) {
-             const metaResults = await Promise.all(
-               uniqueTargets.map(async (t) => ({
-                 target: t,
-                 metadata: await fetchTargetMetadata(t)
-               }))
-             );
-             const targetMap = new Map();
-             metaResults.forEach(r => { if (r.metadata) targetMap.set(r.target.toLowerCase().trim(), r.metadata); });
-             for (const mAb of result.antibodies) {
-               const targetCounts: Record<string, number> = {};
-               mAb.chains.forEach(c => { if (c.target) { const t = c.target.toLowerCase().trim(); targetCounts[t] = (targetCounts[t] || 0) + 1; } });
-               const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
-               if (topTarget && targetMap.has(topTarget)) mAb.targetMetadata = targetMap.get(topTarget);
-             }
-           }
-         } catch (e) {
-           console.warn(`Enrichment failed for ${item.id}`, e);
-         }
 
          setState(prev => ({
            ...prev,
@@ -933,7 +890,6 @@ function AppContent() {
            }
          }));
 
-         // Log to firestore if user is authorized
          if (user && user.role !== 'guest') {
             const { id: _id, ...resultData } = result as any;
             await addDoc(collection(db, 'extractions'), {
@@ -962,7 +918,7 @@ function AppContent() {
       ...prev,
       batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length, endTime: Date.now() }
     }));
-  }, [state.batch, llmOptions, user]);
+  }, [llmOptions, user, state.batch?.items]);
 
   const handleBatchExportCsv = useCallback(async () => {
     if (!state.batch) return;
@@ -2676,8 +2632,11 @@ function AppContent() {
               )}
 
               {state.batch?.isProcessing && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-                  <div className="w-full max-w-2xl">
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-zinc-50 border border-zinc-200 rounded-2xl overflow-hidden relative">
+                  {/* Remove unwanted decorative dots/squares if any */}
+                  <div className="absolute inset-0 bg-[#f9fafb] opacity-50" />
+                  
+                  <div className="w-full max-w-2xl relative z-10">
                     <div className="flex flex-col items-center text-center mb-12">
                       <div className="relative mb-8">
                         <div className="w-24 h-24 border-4 border-indigo-50 border-t-indigo-600 rounded-full animate-spin" />
@@ -2734,17 +2693,17 @@ function AppContent() {
                       </div>
 
                       <div className="grid grid-cols-3 gap-6 mt-8">
-                        <div className="flex flex-col items-center p-4 bg-white rounded-2xl border border-zinc-100 shadow-sm">
+                        <div className="flex flex-col items-center p-4 bg-zinc-50/50 rounded-2xl border border-zinc-200 shadow-sm">
                           <Check className="w-5 h-5 text-emerald-500 mb-1" />
                           <p className="text-[9px] font-bold text-zinc-400 uppercase">Success</p>
                           <p className="text-lg font-black text-zinc-900">{state.batch.items.filter(i => i.status === 'completed').length}</p>
                         </div>
-                        <div className="flex flex-col items-center p-4 bg-white rounded-2xl border border-zinc-100 shadow-sm">
+                        <div className="flex flex-col items-center p-4 bg-zinc-50/50 rounded-2xl border border-zinc-200 shadow-sm">
                           <X className="w-5 h-5 text-red-500 mb-1" />
                           <p className="text-[9px] font-bold text-zinc-400 uppercase">Failed</p>
                           <p className="text-lg font-black text-zinc-900">{state.batch.items.filter(i => i.status === 'error').length}</p>
                         </div>
-                        <div className="flex flex-col items-center p-4 bg-white rounded-2xl border border-zinc-100 shadow-sm">
+                        <div className="flex flex-col items-center p-4 bg-zinc-50/50 rounded-2xl border border-zinc-200 shadow-sm">
                           <Clock className="w-5 h-5 text-indigo-500 mb-1" />
                           <p className="text-[9px] font-bold text-zinc-400 uppercase">Elapsed</p>
                           <p className="text-lg font-black text-zinc-900">{timer}s</p>
@@ -2756,7 +2715,7 @@ function AppContent() {
               )}
 
               {state.isExtracting && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-zinc-200 rounded-2xl">
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-zinc-50 border border-zinc-200 rounded-2xl">
                   <div className="relative mb-8">
                     <div className="w-24 h-24 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
                     <div className="absolute inset-0 flex items-center justify-center">
