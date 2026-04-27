@@ -1857,8 +1857,9 @@ function AppContent() {
                           setState(prev => ({
                             ...prev,
                             batch: {
-                              ...prev.batch!,
-                              items: newItems
+                              isProcessing: false,
+                              items: newItems,
+                              currentIndex: -1
                             }
                           }));
                         }}
@@ -1919,33 +1920,35 @@ function AppContent() {
                         ))}
                       </div>
 
-                      {(!state.batch.isProcessing && (state.batch.currentIndex === -1 || state.batch.currentIndex === state.batch.items.length)) ? (
-                        <button
-                          onClick={runBatch}
-                          className="w-full bg-indigo-600 text-white rounded-xl py-3 text-xs font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
-                        >
-                          <Beaker className="w-4 h-4" />
-                          START BATCH EXTRACTION
-                        </button>
-                      ) : (
-                        <div className="bg-white border-2 border-indigo-100 rounded-xl p-4 flex items-center justify-center gap-4">
-                          <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-[10px] font-bold text-indigo-900">PROCESSING QUEUE</p>
-                              <p className="text-[10px] font-bold text-indigo-400">
-                                {Math.max(0, state.batch.currentIndex + 1)} / {state.batch.items.length}
-                              </p>
-                            </div>
-                            <div className="w-full bg-zinc-100 h-1.5 rounded-full overflow-hidden">
-                              <div 
-                                className="bg-indigo-500 h-full transition-all duration-500"
-                                style={{ width: `${((state.batch.currentIndex + 1) / state.batch.items.length) * 100}%` }}
-                              />
+                        {(state.batch.isProcessing || (state.batch.currentIndex !== -1 && state.batch.currentIndex !== state.batch.items.length)) ? (
+                          <div className="bg-white border-2 border-indigo-100 rounded-xl p-4 flex items-center justify-center gap-4">
+                            <Loader2 className={cn("w-5 h-5 text-indigo-600", state.batch.isProcessing && "animate-spin")} />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-[10px] font-bold text-indigo-900">
+                                  {state.batch.isProcessing ? 'PROCESSING QUEUE' : 'BATCH READY'}
+                                </p>
+                                <p className="text-[10px] font-bold text-indigo-400">
+                                  {Math.max(0, (state.batch.currentIndex || 0) + 1)} / {state.batch.items.length}
+                                </p>
+                              </div>
+                              <div className="w-full bg-zinc-100 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-indigo-500 h-full transition-all duration-500"
+                                  style={{ width: `${((Math.max(0, (state.batch.currentIndex || 0) + 1)) / state.batch.items.length) * 100}%` }}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <button
+                            onClick={runBatch}
+                            className="w-full bg-indigo-600 text-white rounded-xl py-3 text-xs font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                          >
+                            <Beaker className="w-4 h-4" />
+                            START BATCH EXTRACTION
+                          </button>
+                        )}
                       
                       {state.batch.items.some(i => i.status === 'completed') && (
                         <button
