@@ -698,55 +698,6 @@ function AppContent() {
     }
   };
 
-  // Enrichment with UniProt Target Metadata Helper
-  const enrichResultsWithMetadata = async (result: ExtractionResult) => {
-    try {
-      console.log('[Enrichment] Initiating target metadata enrichment...');
-      const uniqueTargets = Array.from(new Set(
-        result.antibodies.flatMap(mAb => 
-          mAb.chains.map(c => c.target).filter(Boolean) as string[]
-        )
-      ));
-
-      if (uniqueTargets.length > 0) {
-        const metaResults = await Promise.all(
-          uniqueTargets.map(async (t) => ({
-            target: t,
-            metadata: await fetchTargetMetadata(t)
-          }))
-        );
-
-        const targetMap = new Map();
-        metaResults.forEach(r => {
-          if (r.metadata) {
-            targetMap.set(r.target.toLowerCase().trim(), r.metadata);
-          }
-        });
-
-        for (const mAb of result.antibodies) {
-          // Find the most frequent primary target for this antibody
-          const targetCounts: Record<string, number> = {};
-          mAb.chains.forEach(c => {
-            if (c.target) {
-              const t = c.target.toLowerCase().trim();
-              targetCounts[t] = (targetCounts[t] || 0) + 1;
-            }
-          });
-
-          const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
-          
-          if (topTarget && targetMap.has(topTarget)) {
-            mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${topTarget})`);
-          }
-        }
-      }
-    } catch (enrichError) {
-      console.error('[Enrichment] Failed to fetch or apply metadata:', enrichError);
-    }
-    return result;
-  };
-
   const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions) => {
     if (!file) return;
     const activeOptions = overrideOptions || llmOptions;
@@ -785,7 +736,50 @@ function AppContent() {
       result.extractionTime = Date.now() - startTime;
       
       // Enrichment with UniProt Target Metadata
-      await enrichResultsWithMetadata(result);
+      try {
+        console.log('[Enrichment] Initiating target metadata enrichment...');
+        const uniqueTargets = Array.from(new Set(
+          result.antibodies.flatMap(mAb => 
+            mAb.chains.map(c => (c as any).target).filter(Boolean) as string[]
+          )
+        ));
+
+        if (uniqueTargets.length > 0) {
+          const metaResults = await Promise.all(
+            uniqueTargets.map(async (t) => ({
+              target: t,
+              metadata: await fetchTargetMetadata(t)
+            }))
+          );
+
+          const targetMap = new Map();
+          metaResults.forEach(r => {
+            if (r.metadata) {
+              targetMap.set(r.target.toLowerCase().trim(), r.metadata);
+            }
+          });
+
+          for (const mAb of result.antibodies) {
+            // Find the most frequent primary target for this antibody
+            const targetCounts: Record<string, number> = {};
+            mAb.chains.forEach(c => {
+              if (c.target) {
+                const t = c.target.toLowerCase().trim();
+                targetCounts[t] = (targetCounts[t] || 0) + 1;
+              }
+            });
+
+            const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+            
+            if (topTarget && targetMap.has(topTarget)) {
+              mAb.targetMetadata = targetMap.get(topTarget);
+              console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${topTarget})`);
+            }
+          }
+        }
+      } catch (enrichError) {
+        console.error('[Enrichment] Failed to fetch target metadata:', enrichError);
+      }
 
       setState({ isExtracting: false, result, error: null });
       setShowHistory(false);
@@ -875,6 +869,8 @@ function AppContent() {
          const fileData = await readFileData(item.file);
          const itemStartTime = Date.now();
          
+         // Fix: Batch should NOT leak parameters from Single Mode UI (pageRange, sequenceListingFile, prioritySeqIds)
+         // unless we explicitly expose them in the Batch tab. Currently they are invisible and shouldn't affect batch.
          const result = await extractWithLLM(
            { data: fileData, mimeType: item.file.type }, 
            currentLlmOptions, 
@@ -887,7 +883,42 @@ function AppContent() {
          result.extractionTime = itemExtractionTime;
 
          // Enrichment for Batch Mode
-         await enrichResultsWithMetadata(result);
+         try {
+           const uniqueTargets = Array.from(new Set(
+             result.antibodies.flatMap(mAb => 
+               mAb.chains.map(c => c.target).filter(Boolean) as string[]
+             )
+           ));
+
+           if (uniqueTargets.length > 0) {
+             const metaResults = await Promise.all(
+               uniqueTargets.map(async (t) => ({
+                 target: t,
+                 metadata: await fetchTargetMetadata(t)
+               }))
+             );
+             const targetMap = new Map();
+             metaResults.forEach(r => { 
+               if (r.metadata) targetMap.set(r.target.toLowerCase().trim(), r.metadata); 
+             });
+             
+             for (const mAb of result.antibodies) {
+               const targetCounts: Record<string, number> = {};
+               mAb.chains.forEach(c => { 
+                 if (c.target) { 
+                   const t = c.target.toLowerCase().trim(); 
+                   targetCounts[t] = (targetCounts[t] || 0) + 1; 
+                 } 
+               });
+               const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+               if (topTarget && targetMap.has(topTarget)) {
+                 mAb.targetMetadata = targetMap.get(topTarget);
+               }
+             }
+           }
+         } catch (e) {
+           console.warn(`Batch enrichment failed for ${item.id}`, e);
+         }
 
          setState(prev => ({
            ...prev,
@@ -2459,31 +2490,26 @@ function AppContent() {
               )}
 
               {(state.batch && !state.batch.isProcessing && state.batch.currentIndex === state.batch.items.length && !state.result && !state.isExtracting) && (
-                <div className="h-full min-h-[800px] flex flex-col p-8 md:p-12 bg-white border border-zinc-200 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] relative overflow-y-auto custom-scrollbar">
-                  <div className="absolute top-0 right-0 p-8 z-10">
-                     <button 
-                       onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
-                       className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-900"
-                     >
-                       <X className="w-5 h-5" />
-                     </button>
-                  </div>
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-white border border-zinc-200 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] relative overflow-hidden">
+                  {/* Decorative Elements */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -mr-32 -mt-32" />
+                  <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-50/50 rounded-full blur-3xl -ml-32 -mb-32" />
 
-                  <div className="relative z-10 flex flex-col items-center w-full max-w-5xl mx-auto">
+                  <div className="relative z-10 flex flex-col items-center w-full max-w-4xl">
                     <motion.div 
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-100/50"
+                      className="w-20 h-20 bg-emerald-100 rounded-2xl flex items-center justify-center mb-8 shadow-xl shadow-emerald-100/50 rotate-3"
                     >
-                      <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                      <CheckCircle2 className="w-10 h-10 text-emerald-600" />
                     </motion.div>
                     
-                    <h3 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight text-center">Engine Run Complete</h3>
-                    <p className="text-zinc-500 mb-10 max-w-lg text-center font-medium leading-relaxed">
+                    <h3 className="text-3xl font-black text-zinc-900 mb-3 tracking-tight text-center">Engine Run Complete</h3>
+                    <p className="text-zinc-500 mb-12 max-w-lg text-center font-medium leading-relaxed">
                       Successfully processed {state.batch.items.filter(i => i.status === 'completed').length} patents. Total analysis metadata has been aggregated for your review.
                     </p>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-8">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mb-12">
                       <div className="bg-zinc-900 text-white p-6 rounded-3xl flex flex-col shadow-xl">
                         <Clock className="w-5 h-5 text-indigo-400 mb-4" />
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Total Duration</span>
@@ -2525,7 +2551,7 @@ function AppContent() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-12">
                       <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 flex items-center justify-between">
                          <div className="flex items-center gap-3">
                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
@@ -2565,7 +2591,7 @@ function AppContent() {
                       </div>
                     </div>
 
-                    <div className="w-full bg-white border border-zinc-200 rounded-3xl overflow-hidden mb-6 shadow-sm">
+                    <div className="w-full bg-white border border-zinc-200 rounded-3xl overflow-hidden mb-12 shadow-sm">
                       <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Table className="w-4 h-4 text-zinc-400" />
