@@ -882,44 +882,6 @@ function AppContent() {
          const itemExtractionTime = Date.now() - itemStartTime;
          result.extractionTime = itemExtractionTime;
 
-         // Enrichment for Batch Mode
-         try {
-           const uniqueTargets = Array.from(new Set(
-             result.antibodies.flatMap(mAb => 
-               mAb.chains.map(c => c.target).filter(Boolean) as string[]
-             )
-           ));
-
-           if (uniqueTargets.length > 0) {
-             const metaResults = await Promise.all(
-               uniqueTargets.map(async (t) => ({
-                 target: t,
-                 metadata: await fetchTargetMetadata(t)
-               }))
-             );
-             const targetMap = new Map();
-             metaResults.forEach(r => { 
-               if (r.metadata) targetMap.set(r.target.toLowerCase().trim(), r.metadata); 
-             });
-             
-             for (const mAb of result.antibodies) {
-               const targetCounts: Record<string, number> = {};
-               mAb.chains.forEach(c => { 
-                 if (c.target) { 
-                   const t = c.target.toLowerCase().trim(); 
-                   targetCounts[t] = (targetCounts[t] || 0) + 1; 
-                 } 
-               });
-               const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
-               if (topTarget && targetMap.has(topTarget)) {
-                 mAb.targetMetadata = targetMap.get(topTarget);
-               }
-             }
-           }
-         } catch (e) {
-           console.warn(`Batch enrichment failed for ${item.id}`, e);
-         }
-
          setState(prev => ({
            ...prev,
            batch: {
