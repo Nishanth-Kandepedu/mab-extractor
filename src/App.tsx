@@ -833,6 +833,7 @@ function AppContent() {
   const runBatch = useCallback(async () => {
     if (!state.batch || state.batch.items.length === 0) return;
     
+    setTimer(0);
     const batchStartTime = Date.now();
     setState(prev => ({
       ...prev,
@@ -2667,21 +2668,8 @@ function AppContent() {
               )}
 
               {state.batch?.isProcessing && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-white border border-zinc-200 rounded-2xl relative overflow-hidden">
-                  {/* Subtle Background Activity */}
-                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
-                    <div className="absolute inset-0 flex items-center justify-center scale-150 rotate-12">
-                      <div className="grid grid-cols-10 gap-4">
-                        {Array.from({ length: 100 }).map((_, i) => (
-                          <div key={i} className="w-12 h-12 border border-indigo-500 rounded-lg flex items-center justify-center font-mono text-[8px] text-indigo-500">
-                            {Math.random().toString(16).substring(2, 6).toUpperCase()}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative z-10 w-full max-w-2xl">
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+                  <div className="w-full max-w-2xl">
                     <div className="flex flex-col items-center text-center mb-12">
                       <div className="relative mb-8">
                         <div className="w-24 h-24 border-4 border-indigo-50 border-t-indigo-600 rounded-full animate-spin" />
@@ -2754,16 +2742,6 @@ function AppContent() {
                           <p className="text-lg font-black text-zinc-900">{timer}s</p>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="mt-12 flex flex-col items-center space-y-4">
-                      <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-full">
-                        <p className="text-[10px] text-indigo-700 font-bold uppercase tracking-widest flex items-center gap-2">
-                           <Activity className="w-3 h-3" />
-                           Real-time enrichment via Uniprot API active
-                        </p>
-                      </div>
-                      <p className="text-[11px] text-zinc-400 italic">Please maintain network connection for optimal speed</p>
                     </div>
                   </div>
                 </div>
