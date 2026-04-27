@@ -141,6 +141,7 @@ export interface BatchItem {
   error?: string;
   result?: ExtractionResult;
   progress?: number;
+  extractionTime?: number;
 }
 
 export interface AppState {
@@ -151,5 +152,7 @@ export interface AppState {
     isProcessing: boolean;
     items: BatchItem[];
     currentIndex: number;
+    startTime?: number;
+    endTime?: number;
   };
 }
