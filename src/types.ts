@@ -134,8 +134,22 @@ export interface ExtractionResult {
   modelUsed?: string;
 }
 
+export interface BatchItem {
+  id: string; // Patent ID or File Name
+  file?: File;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  error?: string;
+  result?: ExtractionResult;
+  progress?: number;
+}
+
 export interface AppState {
   isExtracting: boolean;
   result: ExtractionResult | null;
   error: string | null;
+  batch?: {
+    isProcessing: boolean;
+    items: BatchItem[];
+    currentIndex: number;
+  };
 }

@@ -71,7 +71,13 @@ function AppContent() {
     isExtracting: false,
     result: null,
     error: null,
+    batch: {
+      isProcessing: false,
+      items: [],
+      currentIndex: -1
+    }
   });
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
     provider: 'gemma',
     model: 'gemma-4',
@@ -820,9 +826,195 @@ function AppContent() {
       }
     } catch (err: any) {
       console.error('Final extraction error:', err);
-      setState({ isExtracting: false, result: null, error: err.message || String(err) });
+      setState({ isExtracting: false, result: null, error: err.message || String(err), batch: state.batch });
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
+
+  const runBatch = useCallback(async () => {
+    if (!state.batch || state.batch.items.length === 0) return;
+    
+    setState(prev => ({
+      ...prev,
+      batch: { ...prev.batch!, isProcessing: true, currentIndex: 0 }
+    }));
+
+    const items = [...state.batch.items];
+    
+    for (let i = 0; i < items.length; i++) {
+       // Update current index and status
+       setState(prev => ({
+         ...prev,
+         batch: { 
+           ...prev.batch!, 
+           currentIndex: i, 
+           items: prev.batch!.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
+         }
+       }));
+
+       const item = items[i];
+       if (!item.file) {
+         setState(prev => ({
+           ...prev,
+           batch: {
+             ...prev.batch!,
+             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: 'No file reference found' } : it)
+           }
+         }));
+         continue;
+       }
+
+       try {
+         const readFile = (f: File): Promise<string> => {
+           return new Promise((resolve, reject) => {
+             const reader = new FileReader();
+             reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
+             reader.onerror = reject;
+             reader.readAsDataURL(f);
+           });
+         };
+
+         const fileData = await readFile(item.file);
+         const startTime = Date.now();
+         
+         const result = await extractWithLLM(
+           { data: fileData, mimeType: item.file.type }, 
+           llmOptions, 
+           '', 
+           undefined, 
+           '' 
+         );
+         
+         result.extractionTime = Date.now() - startTime;
+
+         // Enrichment
+         try {
+           const uniqueTargets = Array.from(new Set(
+             result.antibodies.flatMap(mAb => 
+               mAb.chains.map(c => (c as any).target).filter(Boolean) as string[]
+             )
+           ));
+
+           if (uniqueTargets.length > 0) {
+             const metaResults = await Promise.all(
+               uniqueTargets.map(async (t) => ({
+                 target: t,
+                 metadata: await fetchTargetMetadata(t)
+               }))
+             );
+             const targetMap = new Map();
+             metaResults.forEach(r => { if (r.metadata) targetMap.set(r.target.toLowerCase().trim(), r.metadata); });
+             for (const mAb of result.antibodies) {
+               const targetCounts: Record<string, number> = {};
+               mAb.chains.forEach(c => { if (c.target) { const t = c.target.toLowerCase().trim(); targetCounts[t] = (targetCounts[t] || 0) + 1; } });
+               const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+               if (topTarget && targetMap.has(topTarget)) mAb.targetMetadata = targetMap.get(topTarget);
+             }
+           }
+         } catch (e) {
+           console.warn(`Enrichment failed for ${item.id}`, e);
+         }
+
+         setState(prev => ({
+           ...prev,
+           batch: {
+             ...prev.batch!,
+             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result } : it)
+           }
+         }));
+
+         // Log to firestore if user is authorized
+         if (user && user.role !== 'guest') {
+            const { id: _id, ...resultData } = result as any;
+            await addDoc(collection(db, 'extractions'), {
+              ...resultData,
+              userId: user.uid,
+              userDisplayName: user.displayName || 'Batch Processor',
+              createdAt: Timestamp.now(),
+              status: 'pending',
+              batchId: 'batch_' + Date.now()
+            });
+         }
+
+       } catch (error: any) {
+         console.error(`Batch item ${item.id} failed:`, error);
+         setState(prev => ({
+           ...prev,
+           batch: {
+             ...prev.batch!,
+             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
+           }
+         }));
+       }
+    }
+
+    setState(prev => ({
+      ...prev,
+      batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length }
+    }));
+  }, [state.batch, llmOptions, user]);
+
+  const handleBatchExportCsv = useCallback(async () => {
+    if (!state.batch) return;
+    
+    setIsExporting(true);
+    try {
+      const allRows: any[] = [];
+      const completedItems = state.batch.items.filter(i => i.status === 'completed' && i.result);
+      
+      completedItems.forEach(item => {
+        const result = item.result!;
+        result.antibodies.forEach(mAb => {
+          const vhChain = mAb.chains.find(c => c.type === 'Heavy');
+          const vlChain = mAb.chains.find(c => c.type === 'Light');
+          
+          allRows.push({
+            mAbName: mAb.mAbName,
+            patentId: result.patentId,
+            patentTitle: result.patentTitle,
+            target: vhChain?.target || vlChain?.target || '',
+            targetStandardName: mAb.targetMetadata?.standardName || '',
+            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+            VH_SeqID: vhChain?.seqId || '',
+            VH_FullSequence: vhChain?.fullSequence || '',
+            VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
+            VH_CDR2: vhChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
+            VH_CDR3: vhChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+            VL_SeqID: vlChain?.seqId || '',
+            VL_FullSequence: vlChain?.fullSequence || '',
+            VL_CDR1: vlChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
+            VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
+            VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
+            overallSeqID: mAb.seqId || '',
+            confidence: mAb.confidence,
+            needsReview: mAb.needsReview ? 'Yes' : 'No',
+            reviewRemarks: mAb.reviewReason || '',
+            characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
+            evidenceLocation: mAb.evidenceLocation || '',
+            evidenceStatement: mAb.evidenceStatement || '',
+            summary: mAb.summary
+          });
+        });
+      });
+
+      const csv = Papa.unparse(allRows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `abminer_batch_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
+      setIsExporting(false);
+    } catch (e) {
+      setIsExporting(false);
+      console.error(e);
+    }
+  }, [state.batch]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
@@ -1483,125 +1675,291 @@ function AppContent() {
           </div>
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm sticky top-24">
-            <div className="flex items-center gap-2 mb-6">
-              <FileUp className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-zinc-800">Input Patent Data</h2>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <FileUp className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-semibold text-zinc-800">
+                  {mode === 'single' ? 'Input Patent Data' : 'Batch Patent Processing'}
+                </h2>
+              </div>
+              <div className="flex bg-zinc-100 p-0.5 rounded-lg">
+                <button
+                  onClick={() => setMode('single')}
+                  className={cn(
+                    "px-3 py-1 text-[10px] font-bold rounded-md transition-all",
+                    mode === 'single' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                  )}
+                >
+                  SINGLE
+                </button>
+                <button
+                  onClick={() => setMode('batch')}
+                  className={cn(
+                    "px-3 py-1 text-[10px] font-bold rounded-md transition-all",
+                    mode === 'batch' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                  )}
+                >
+                  BATCH
+                </button>
+              </div>
             </div>
 
             <div className="space-y-6">
-              {/* Page Range Input */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    Target Page / Range / Section (Optional)
-                    <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
+              {mode === 'single' ? (
+                <>
+                  {/* Existing Single Mode UI */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Target Page / Range / Section (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
+                      </div>
+                    </label>
+                    <input
+                      type="text"
+                      value={pageRange}
+                      onChange={(e) => setPageRange(e.target.value)}
+                      placeholder="Focus on specific page, range, or table..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      disabled={state.isExtracting}
+                    />
                   </div>
-                </label>
-                <input
-                  type="text"
-                  value={pageRange}
-                  onChange={(e) => setPageRange(e.target.value)}
-                  placeholder="Focus on specific page, range, or table..."
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  disabled={state.isExtracting}
-                />
-              </div>
 
-              {/* Priority SEQ IDs / Clone Names Input */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    Priority SEQ IDs / Clone Names (Optional)
-                    <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Priority SEQ IDs / Clone Names (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
+                      </div>
+                    </label>
+                    <input
+                      type="text"
+                      value={prioritySeqIds}
+                      onChange={(e) => setPrioritySeqIds(e.target.value)}
+                      placeholder="Focus AI on specific SEQ IDs or Clone Names..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      disabled={state.isExtracting}
+                    />
                   </div>
-                </label>
-                <input
-                  type="text"
-                  value={prioritySeqIds}
-                  onChange={(e) => setPrioritySeqIds(e.target.value)}
-                  placeholder="Focus AI on specific SEQ IDs or Clone Names..."
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  disabled={state.isExtracting}
-                />
-              </div>
 
-              {/* Sequence Listing File Upload */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    Sequence Listing File (Optional)
-                    <span className="font-normal lowercase text-zinc-300 italic">(.txt, .xml)</span>
-                  </div>
-                  {sequenceListingFile && (
-                    <button 
-                      onClick={() => setSequenceListingFile(null)}
-                      className="text-red-500 hover:text-red-700 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".txt,.xml"
-                    onChange={(e) => setSequenceListingFile(e.target.files?.[0] || null)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    disabled={state.isExtracting}
-                  />
-                  <div className={cn(
-                    "border border-zinc-200 rounded-xl px-4 py-2 text-xs flex items-center gap-3 transition-all",
-                    sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-zinc-50 text-zinc-500 hover:border-indigo-300"
-                  )}>
-                    <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-400")} />
-                    <span className="truncate flex-1">
-                      {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing File..."}
-                    </span>
-                    {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                className="relative group"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleFileUpload(e as any);
-                }}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.txt"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  disabled={state.isExtracting}
-                />
-                <div className={cn(
-                  "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
-                  state.isExtracting && "opacity-50 pointer-events-none"
-                )}>
-                  {state.isExtracting ? (
-                    <div className="flex flex-col items-center">
-                      <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                      <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
-                      <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Sequence Listing File (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(.txt, .xml)</span>
+                      </div>
+                      {sequenceListingFile && (
+                        <button 
+                          onClick={() => setSequenceListingFile(null)}
+                          className="text-red-500 hover:text-red-700 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".txt,.xml"
+                        onChange={(e) => setSequenceListingFile(e.target.files?.[0] || null)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        disabled={state.isExtracting}
+                      />
+                      <div className={cn(
+                        "border border-zinc-200 rounded-xl px-4 py-2 text-xs flex items-center gap-3 transition-all",
+                        sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-zinc-50 text-zinc-500 hover:border-indigo-300"
+                      )}>
+                        <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-400")} />
+                        <span className="truncate flex-1">
+                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing File..."}
+                        </span>
+                        {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                      </div>
                     </div>
-                  ) : (
-                    <>
-                      <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
-                      <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
-                      <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
-                    </>
+                  </div>
+
+                  <div 
+                    className="relative group"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFileUpload(e as any);
+                    }}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.txt"
+                      onChange={handleFileUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      disabled={state.isExtracting}
+                    />
+                    <div className={cn(
+                      "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
+                      state.isExtracting && "opacity-50 pointer-events-none"
+                    )}>
+                      {state.isExtracting ? (
+                        <div className="flex flex-col items-center">
+                          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
+                          <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
+                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
+                          <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
+                          <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-6">
+                  {/* Batch Mode UI */}
+                  <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Clock className="w-4 h-4 text-indigo-600" />
+                      <p className="text-[11px] font-bold text-indigo-900 uppercase">Batch Processing Rules</p>
+                    </div>
+                    <ul className="text-[10px] text-indigo-700 space-y-1.5 list-disc pl-4 leading-relaxed">
+                      <li>Max 20 patents per batch.</li>
+                      <li>Extractions run sequentially to guarantee accuracy.</li>
+                      <li>Failed extractions are automatically skipped.</li>
+                      <li>Consolidated CSV generated upon completion.</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      Queue Patents (Upload Files)
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="file"
+                        accept=".pdf,.txt"
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []) as File[];
+                          if (files.length > 20) {
+                            alert("Maximum 20 patents allowed per batch.");
+                            return;
+                          }
+                          const newItems = files.map(f => ({
+                            id: f.name,
+                            file: f,
+                            status: 'pending' as const,
+                          }));
+                          setState(prev => ({
+                            ...prev,
+                            batch: {
+                              ...prev.batch!,
+                              items: newItems
+                            }
+                          }));
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        disabled={state.batch?.isProcessing}
+                      />
+                      <div className={cn(
+                        "border-2 border-dashed border-zinc-200 rounded-xl p-6 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
+                        state.batch?.isProcessing && "opacity-50 pointer-events-none"
+                      )}>
+                        <Upload className="w-6 h-6 text-zinc-400 mx-auto mb-2 group-hover:text-indigo-500 transition-colors" />
+                        <p className="text-xs font-medium text-zinc-700">Select Multiple PDF/TXT Files</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag and drop or click to choose</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {state.batch && state.batch.items.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                          Queue ({state.batch.items.length} Patents)
+                        </p>
+                        {state.batch.currentIndex === state.batch.items.length && (
+                          <button
+                            onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
+                            className="text-[9px] text-red-500 font-bold uppercase hover:underline"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      <div className="bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+                        {state.batch.items.map((item, idx) => (
+                          <div 
+                            key={idx} 
+                            className={cn(
+                              "px-3 py-2 border-b border-zinc-100 flex items-center justify-between last:border-0",
+                              state.batch?.currentIndex === idx && "bg-indigo-50"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                item.status === 'pending' ? "bg-zinc-300" :
+                                item.status === 'processing' ? "bg-indigo-500 animate-pulse" :
+                                item.status === 'completed' ? "bg-emerald-500" : "bg-red-500"
+                              )} />
+                              <span className="text-[11px] text-zinc-700 truncate max-w-[140px] font-medium">{item.id}</span>
+                            </div>
+                            <div className="text-[9px] font-bold uppercase">
+                              {item.status === 'pending' && <span className="text-zinc-400">Waiting</span>}
+                              {item.status === 'processing' && <span className="text-indigo-600">Running...</span>}
+                              {item.status === 'completed' && <span className="text-emerald-600 flex items-center gap-1"><Check className="w-2.5 h-2.5"/> Done</span>}
+                              {item.status === 'error' && <span className="text-red-500">Failed</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {(!state.batch.isProcessing && (state.batch.currentIndex === -1 || state.batch.currentIndex === state.batch.items.length)) ? (
+                        <button
+                          onClick={runBatch}
+                          className="w-full bg-indigo-600 text-white rounded-xl py-3 text-xs font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Beaker className="w-4 h-4" />
+                          START BATCH EXTRACTION
+                        </button>
+                      ) : (
+                        <div className="bg-white border-2 border-indigo-100 rounded-xl p-4 flex items-center justify-center gap-4">
+                          <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-[10px] font-bold text-indigo-900">PROCESSING QUEUE</p>
+                              <p className="text-[10px] font-bold text-indigo-400">
+                                {Math.max(0, state.batch.currentIndex + 1)} / {state.batch.items.length}
+                              </p>
+                            </div>
+                            <div className="w-full bg-zinc-100 h-1.5 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-indigo-500 h-full transition-all duration-500"
+                                style={{ width: `${((state.batch.currentIndex + 1) / state.batch.items.length) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {state.batch.items.some(i => i.status === 'completed') && (
+                        <button
+                          onClick={handleBatchExportCsv}
+                          className="w-full bg-emerald-600 text-white rounded-xl py-2.5 text-xs font-bold shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          EXPORT CONSOLIDATED CSV
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
-
+              )}
             </div>
           </div>
 
@@ -1698,10 +2056,10 @@ function AppContent() {
                     </div>
                   </div>
                 </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-        </div>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
 
         {/* Right Column: Results */}
         <div className="lg:col-span-8 space-y-8">
