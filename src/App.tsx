@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -2427,7 +2427,7 @@ function AppContent() {
             </div>
           ) : (
             <>
-              {!state.result && !state.isExtracting && (
+              {!state.result && !state.isExtracting && !state.batch?.isProcessing && (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-zinc-200 border-dashed rounded-2xl">
                   <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mb-4">
                     <FileText className="w-8 h-8 text-zinc-400" />
@@ -2436,6 +2436,112 @@ function AppContent() {
                   <p className="text-sm text-zinc-500 max-w-xs mt-2">
                     Upload a patent document or paste sequence text to begin the AI extraction process.
                   </p>
+                </div>
+              )}
+
+              {(state.batch && !state.batch.isProcessing && state.batch.currentIndex === state.batch.items.length && !state.result && !state.isExtracting) && (
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-indigo-100 rounded-2xl shadow-sm">
+                  <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-zinc-900 mb-2">Batch Complete!</h3>
+                  <p className="text-zinc-500 mb-8 max-w-sm">
+                    All patents in the queue have been processed. You can now download the consolidated data report.
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-4 w-full max-w-md mb-8">
+                    <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Success</p>
+                      <p className="text-2xl font-bold text-emerald-700">{state.batch.items.filter(i => i.status === 'completed').length}</p>
+                    </div>
+                    <div className="bg-red-50/50 p-4 rounded-2xl border border-red-100">
+                      <p className="text-[10px] font-bold text-red-600 uppercase mb-1">Errors</p>
+                      <p className="text-2xl font-bold text-red-700">{state.batch.items.filter(i => i.status === 'error').length}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleBatchExportCsv}
+                    className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download Consolidated CSV
+                  </button>
+                  
+                  <button
+                    onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
+                    className="mt-6 text-sm text-zinc-400 hover:text-zinc-600 font-medium transition-colors"
+                  >
+                    Clear Batch & Reset
+                  </button>
+                </div>
+              )}
+
+              {state.batch?.isProcessing && (
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-zinc-200 rounded-2xl">
+                  <div className="relative mb-10">
+                    <div className="w-32 h-32 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <Beaker className="w-10 h-10 text-indigo-600" />
+                    </div>
+                  </div>
+                  
+                  <div className="max-w-md w-full">
+                    <h3 className="text-xl font-bold text-zinc-900 mb-2">Batch Extraction in Progress</h3>
+                    <p className="text-sm text-zinc-500 mb-8">
+                      We are processing {state.batch.items.length} patents sequentially. Please keep this tab open.
+                    </p>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end mb-2">
+                        <div className="text-left">
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Currently Processing</p>
+                          <p className="text-sm font-semibold text-indigo-600 truncate max-w-[280px]">
+                            {state.batch.items[state.batch.currentIndex]?.id || 'Initializing...'}
+                          </p>
+                        </div>
+                        <p className="text-sm font-bold text-zinc-900">
+                          {Math.max(0, state.batch.currentIndex + 1)} <span className="text-zinc-300">/</span> {state.batch.items.length}
+                        </p>
+                      </div>
+                      
+                      <div className="w-full bg-zinc-100 h-3 rounded-full overflow-hidden p-0.5 border border-zinc-200">
+                        <div 
+                          className="bg-indigo-600 h-full rounded-full transition-all duration-500 shadow-sm"
+                          style={{ width: `${Math.max(0, ((state.batch.currentIndex + 1) / state.batch.items.length) * 100)}%` }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 pt-6">
+                        <div className="bg-zinc-50 rounded-xl p-3 border border-zinc-100">
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase mb-1">Completed</p>
+                          <p className="text-lg font-bold text-emerald-600">
+                            {state.batch.items.filter(i => i.status === 'completed').length}
+                          </p>
+                        </div>
+                        <div className="bg-zinc-50 rounded-xl p-3 border border-zinc-100">
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase mb-1">Failed</p>
+                          <p className="text-lg font-bold text-red-500">
+                            {state.batch.items.filter(i => i.status === 'error').length}
+                          </p>
+                        </div>
+                        <div className="bg-zinc-50 rounded-xl p-3 border border-zinc-100">
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase mb-1">Queue</p>
+                          <p className="text-lg font-bold text-zinc-700">
+                            {state.batch.items.filter(i => i.status === 'pending').length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-12 flex flex-col items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+                        <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">Neural Engine Active</p>
+                      </div>
+                      <p className="text-[10px] text-zinc-300 italic">This may take a few minutes depending on patent length</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
