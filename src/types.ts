@@ -152,6 +152,7 @@ export interface AppState {
     isProcessing: boolean;
     items: BatchItem[];
     currentIndex: number;
+    cooldownRemaining?: number;
     startTime?: number;
     endTime?: number;
   };
