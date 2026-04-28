@@ -1090,7 +1090,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < items.length - 1) {
-         const COOLDOWN_SECONDS = 5;
+         const COOLDOWN_SECONDS = 15;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
@@ -1824,17 +1824,13 @@ function AppContent() {
             </div>
             
             {(llmOptions.model === 'gemma-4') && (
-              <div className="p-4 rounded-xl border bg-amber-50 border-amber-100">
+              <div className="p-4 rounded-xl border border-zinc-100 bg-white shadow-sm">
                 <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full animate-pulse bg-amber-500" />
-                  <span className="text-xs font-medium text-amber-700">
-                    Gemma 4 High-Thinking Engine
+                  <div className="w-2 h-2 rounded-full animate-pulse bg-indigo-500" />
+                  <span className="text-xs font-black text-indigo-600 uppercase tracking-widest">
+                    Neural Engine Active
                   </span>
                 </div>
-                <p className="text-[10px] mt-2 leading-relaxed text-amber-600/80">
-                  Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy. 
-                  <span className="block mt-1 font-bold">Note: 256k token limit per document. Use Gemini 3.1 Pro for large patents.</span>
-                </p>
               </div>
             )}
 

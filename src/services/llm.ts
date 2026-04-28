@@ -4,7 +4,12 @@ import { getPdfPages } from "../lib/pdf";
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
-IMPORTANT EXTRACTION RULES:
+CORE QUALITY MANIFESTO:
+1. VERBATIM IS KING: Every amino acid must match the source exactly. No summaries.
+2. J-MOTIF TRUNCATION: You MUST truncate sequences after VTVSS (VH) or VEIK/VFGXG (VL). DO NOT include constant regions.
+3. EXHAUSTIVE MINING: If an antibody is in Table 1, 3, or 6, it MUST be extracted. 
+
+EXTRACTION RULES:
 
 1. Antibody Naming:
    - Main antibodies: "2419", "3125", etc.
@@ -75,31 +80,21 @@ IMPORTANT EXTRACTION RULES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
-19. METADATA EXTRACTION:
-    For each antibody, you MUST extract:
-    - "epitope": The specific region or residues on the target antigen that the antibody binds to (if mentioned, e.g., "extracellular domain", "D3", "residues 20-40").
-    - "originSpecies": The animal species the antibody was derived from (e.g., "Human", "Mouse", "Rabbit", "Macaca fascicularis").
-    - "generationSource": The technology used to discover or generate the antibody (e.g., "Phage display", "Hybridoma", "Humanized", "Transgenic Mouse (HuMab)").
+19. Metadata Extraction (Per Clone):
+   - "epitope": Target region (e.g., "D3 domain").
+   - "originSpecies": Host species (e.g., "Human").
+   - "generationSource": Discovery method (e.g., "Hybridoma").
+   - Leave empty if not found.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
-20. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
-    For each antibody clone, you MUST extract the following properties into the "experimentalData" array, categorized strictly:
-    
-    - "In Vitro": Target or cell line centric activity/potency/affinity. (e.g., Kd, IC50, EC50, binding by ELISA/FACS/SPR, neutralization).
-    - "PK": Pharmacokinetics (e.g., half-life, clearance, Vd, Cmax, AUC). Specify species (Cyno, Mouse, Human).
-    - "ADMET": Absorption, Distribution, Metabolism, Excretion, and Toxicity-related data (e.g., stability in serum, solubility, viscosity, immunogenicity).
-    - "In Vivo": Efficacy in animal models (e.g., Tumor Growth Inhibition (TGI), survival rates, dose-response in xenografts).
-    - "Physical": Biophysical properties (e.g., Tm (melting temperature), Tagg, aggregation %, pI, purity, hydrophobicity).
-    - "Other": Any other critical pharmaceutical property mentioned.
-
-    Association: Every entry MUST include:
-    - category: One of the 6 strings above.
-    - property: The name of the parameter (e.g., "IC50", "Half-life").
-    - value: The exact numerical value or range.
-    - unit: The unit of measurement (e.g., "nM", "days", "°C").
-    - condition: The specific assay or experimental context (e.g., "in human PD-L1 ELISA", "in MC38 tumor bearing mice, 10mg/kg").
-    - evidence: The page or table number where this value was found.
+20. SAR DATA CATEGORIES:
+    - "In Vitro": Affinity (Kd/IC50).
+    - "PK": PK (t1/2).
+    - "ADMET": Biophysical/Stability.
+    - "In Vivo": Efficacy (TGI).
+    - "Physical": Tm/pI. 
+    Field requirements: category, property, value, unit, condition, evidence.
 `;
 
 export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
