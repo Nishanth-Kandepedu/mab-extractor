@@ -80,12 +80,11 @@ EXTRACTION RULES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
-19. Metadata Extraction (MANDATORY):
-   - For EVERY antibody clone, you MUST extract the following three fields.
-   - "epitope": The specific region or residues the mAb binds to (e.g. "Loop 3", "extracellular domain"). Use "" if not found.
-   - "originSpecies": The host species (e.g. "Human", "Mouse", "Cynomolgus"). Use "" if not found.
-   - "generationSource": The discovery/generation method (e.g. "Hybridoma", "Phage display", "Humanization"). Use "" if not found.
-   - CRITICAL: These fields are REQUIRED in the JSON schema. Do not skip them.
+19. Metadata (Optional but Priority):
+   - "epitope": Binding region (e.g. "D3", "residues 20-40").
+   - "originSpecies": Host species (e.g. "Human").
+   - "generationSource": Discovery method (e.g. "Phage display").
+   - Only extract if explicitly mentioned near the sequence or in summary tables. If not found, use "".
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -352,7 +351,7 @@ export async function extractWithLLM(
                 }
               } : undefined
             },
-            required: ["mAbName", "chains", "confidence", "summary", "epitope", "originSpecies", "generationSource"],
+            required: ["mAbName", "chains", "confidence", "summary"],
           },
         },
       },
