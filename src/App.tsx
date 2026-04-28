@@ -37,12 +37,11 @@ const AntibodyIcon = ({ className }: { className?: string }) => (
 
 const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, timer: number, batchProgress?: { current: number, total: number } }) => {
   const steps = [
-    "Initializing Neural Engine",
     "Identifying Variable Patterns",
     "Processing Multimodal Signals",
     "Validating Verbatim Integrity",
     "Synchronizing CDR Coordinates",
-    "Generating Neural Summary"
+    "Generating Extraction Summary"
   ];
 
   return (
@@ -58,7 +57,7 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
       </div>
       
       <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
-        Neural Extraction in Progress
+        Antibody Extraction in Progress
       </h2>
       
       <div className="mb-10">
@@ -1090,7 +1089,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < items.length - 1) {
-         const COOLDOWN_SECONDS = 15;
+         const COOLDOWN_SECONDS = 2;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
@@ -1659,7 +1658,7 @@ function AppContent() {
                   System Phase
                 </span>
                 <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                  {state.batch.isProcessing ? 'Neural Extraction Engine' : 'Batch Complete'}
+                  {state.batch.isProcessing ? 'Extraction Engine' : 'Batch Complete'}
                 </span>
               </div>
             </div>
@@ -1945,39 +1944,41 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               {mode === 'single' ? (
                 <>
-                  {/* Existing Single Mode UI */}
-                  <div className="space-y-1.5">
-                    <label className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Target Page / Range</span>
-                      <span className="text-[9px] text-zinc-300 font-medium italic">e.g., "Page 42", "Table 5"</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={pageRange}
-                      onChange={(e) => setPageRange(e.target.value)}
-                      placeholder="Focus extraction on specific content..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-                      disabled={state.isExtracting}
-                    />
-                  </div>
+                  {/* Single Mode UI */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Page Context</span>
+                          <span className="text-[9px] text-zinc-400 font-medium italic">e.g. "Table 1"</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={pageRange}
+                          onChange={(e) => setPageRange(e.target.value)}
+                          placeholder="Optional range..."
+                          className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                          disabled={state.isExtracting}
+                        />
+                      </div>
 
-                  <div className="space-y-1.5">
-                    <label className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Priority Clone Names</span>
-                      <span className="text-[9px] text-zinc-300 font-medium italic">e.g., "7", "mab1"</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={prioritySeqIds}
-                      onChange={(e) => setPrioritySeqIds(e.target.value)}
-                      placeholder="List priority IDs or names..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-                      disabled={state.isExtracting}
-                    />
-                  </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Priority IDs</span>
+                          <span className="text-[9px] text-zinc-400 font-medium italic">e.g. "7, mab1"</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={prioritySeqIds}
+                          onChange={(e) => setPrioritySeqIds(e.target.value)}
+                          placeholder="Priority IDs..."
+                          className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                          disabled={state.isExtracting}
+                        />
+                      </div>
+                    </div>
 
                   <div className="space-y-1.5">
                     <label className="flex items-center justify-between">
@@ -3263,7 +3264,7 @@ function AppContent() {
       <div className="flex gap-8">
         <div className="flex flex-col">
           <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
-          <span className="text-xs font-medium">Neural Sequence Analysis</span>
+          <span className="text-xs font-medium">Antibody Sequence Analysis</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
