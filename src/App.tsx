@@ -1824,13 +1824,8 @@ function AppContent() {
             </div>
             
             {(llmOptions.model === 'gemma-4') && (
-              <div className="p-4 rounded-xl border border-zinc-100 bg-white shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full animate-pulse bg-indigo-500" />
-                  <span className="text-xs font-black text-indigo-600 uppercase tracking-widest">
-                    Neural Engine Active
-                  </span>
-                </div>
+              <div className="hidden">
+                 {/* Removed redundant banner */}
               </div>
             )}
 
@@ -1960,55 +1955,55 @@ function AppContent() {
               {mode === 'single' ? (
                 <>
                   {/* Existing Single Mode UI */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Target Page / Range / Section (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
-                      </div>
-                    </label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                        Target Page / Range
+                      </label>
+                      <span className="text-[9px] text-zinc-300 font-medium">e.g., "Page 42", "Table 1"</span>
+                    </div>
                     <input
                       type="text"
                       value={pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
-                      placeholder="Focus on specific page, range, or table..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      placeholder="Focus extraction on specific pages..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Priority SEQ IDs / Clone Names (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
-                      </div>
-                    </label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                        Priority Clone Names
+                      </label>
+                      <span className="text-[9px] text-zinc-300 font-medium">e.g., "7", "mab1"</span>
+                    </div>
                     <input
                       type="text"
                       value={prioritySeqIds}
                       onChange={(e) => setPrioritySeqIds(e.target.value)}
-                      placeholder="Focus AI on specific SEQ IDs or Clone Names..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      placeholder="List priority SEQ IDs or clone names..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Sequence Listing File (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(.txt, .xml)</span>
-                      </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                        Sequence Listing File
+                      </label>
+                      <span className="text-[9px] text-zinc-300 font-medium whitespace-nowrap">.txt, .xml</span>
                       {sequenceListingFile && (
                         <button 
                           onClick={() => setSequenceListingFile(null)}
-                          className="text-red-500 hover:text-red-700 transition-colors"
+                          className="ml-2 text-red-400 hover:text-red-600 transition-colors"
                         >
                           <X className="w-3 h-3" />
                         </button>
                       )}
-                    </label>
+                    </div>
                     <div className="relative">
                       <input
                         type="file"
