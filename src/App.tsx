@@ -1809,7 +1809,7 @@ function AppContent() {
 
           {/* Model Selection */}
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-indigo-600" />
                 <h2 className="font-semibold text-zinc-800">
@@ -1823,13 +1823,7 @@ function AppContent() {
               )}
             </div>
             
-            {(llmOptions.model === 'gemma-4') && (
-              <div className="hidden">
-                 {/* Removed redundant banner */}
-              </div>
-            )}
-
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="grid grid-cols-4 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                   const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
@@ -1955,55 +1949,51 @@ function AppContent() {
               {mode === 'single' ? (
                 <>
                   {/* Existing Single Mode UI */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                        Target Page / Range
-                      </label>
-                      <span className="text-[9px] text-zinc-300 font-medium">e.g., "Page 42", "Table 1"</span>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Target Page / Range</span>
+                      <span className="text-[9px] text-zinc-300 font-medium italic">e.g., "Page 42", "Table 5"</span>
+                    </label>
                     <input
                       type="text"
                       value={pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
-                      placeholder="Focus extraction on specific pages..."
+                      placeholder="Focus extraction on specific content..."
                       className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                        Priority Clone Names
-                      </label>
-                      <span className="text-[9px] text-zinc-300 font-medium">e.g., "7", "mab1"</span>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Priority Clone Names</span>
+                      <span className="text-[9px] text-zinc-300 font-medium italic">e.g., "7", "mab1"</span>
+                    </label>
                     <input
                       type="text"
                       value={prioritySeqIds}
                       onChange={(e) => setPrioritySeqIds(e.target.value)}
-                      placeholder="List priority SEQ IDs or clone names..."
+                      placeholder="List priority IDs or names..."
                       className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                        Sequence Listing File
-                      </label>
-                      <span className="text-[9px] text-zinc-300 font-medium whitespace-nowrap">.txt, .xml</span>
-                      {sequenceListingFile && (
-                        <button 
-                          onClick={() => setSequenceListingFile(null)}
-                          className="ml-2 text-red-400 hover:text-red-600 transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sequence Listing File</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-zinc-300 font-medium italic">.txt, .xml</span>
+                        {sequenceListingFile && (
+                          <button 
+                            onClick={() => setSequenceListingFile(null)}
+                            className="text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </label>
                     <div className="relative">
                       <input
                         type="file"
