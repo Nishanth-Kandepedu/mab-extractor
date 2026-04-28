@@ -146,6 +146,7 @@ export interface BatchItem {
 
 export interface AppState {
   isExtracting: boolean;
+  extractingStatus?: string;
   result: ExtractionResult | null;
   error: string | null;
   batch?: {

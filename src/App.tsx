@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+// Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
 import { fetchTargetMetadata } from './services/uniprot';
@@ -33,6 +34,49 @@ const AntibodyIcon = ({ className }: { className?: string }) => (
     <circle cx="12" cy="12" r="1" fill="currentColor" />
   </svg>
 );
+
+const LoadingScreen = ({ status, timer }: { status?: string, timer: number }) => {
+  const steps = [
+    "Scanning for variable region patterns...",
+    "Identifying CDR motifs...",
+    "Validating multiple antibody entries..."
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center bg-white p-8">
+      <div className="relative mb-8">
+        <div className="w-24 h-24 rounded-full border-4 border-indigo-50 border-t-indigo-600 animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Database className="w-8 h-8 text-indigo-600" />
+        </div>
+      </div>
+      
+      <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
+        Analyzing Patent Data
+      </h2>
+      
+      <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 rounded-full mb-8">
+        <span className="text-sm font-bold text-indigo-600 font-mono tabular-nums">
+          {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+        </span>
+      </div>
+      
+      <div className="flex flex-col gap-3 text-center">
+        {steps.map((step, i) => (
+          <p 
+            key={i} 
+            className={cn(
+              "text-xs font-mono tracking-wide transition-all duration-500",
+              status === step ? "text-indigo-600 font-bold" : "text-zinc-300"
+            )}
+          >
+            {step}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<any, any> {
@@ -547,6 +591,40 @@ function AppContent() {
     }
   };
 
+  const updateExtractionStatus = async (id: string, newStatus: 'validated' | 'rejected' | 'pending') => {
+    try {
+      const docRef = doc(db, 'extractions', id);
+      await updateDoc(docRef, { status: newStatus });
+      setHistory(prev => prev.map(item => item.id === id ? { ...item, status: newStatus } : item));
+      
+      // Log validation action
+      if (user) {
+        await addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          accountId: (user as any).accountId,
+          userDisplayName: user.displayName,
+          action: `extraction_${newStatus}`,
+          extractionId: id,
+          timestamp: Timestamp.now()
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert('Failed to update status. Check permissions.');
+    }
+  };
+
+  const deleteExtraction = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this extraction record?')) return;
+    try {
+      await deleteDoc(doc(db, 'extractions', id));
+      setHistory(prev => prev.filter(item => item.id !== id));
+    } catch (err) {
+      console.error('Failed to delete extraction:', err);
+      alert('Delete failed.');
+    }
+  };
+
   // History & Activity Listener
   useEffect(() => {
     if (!user) {
@@ -764,7 +842,7 @@ function AppContent() {
     const activeOptions = overrideOptions || llmOptions;
     console.log('Running extraction:', file.name, 'with range:', pageRange, 'Model:', activeOptions.model);
 
-    setState(prev => ({ ...prev, isExtracting: true, result: null, error: null }));
+    setState(prev => ({ ...prev, isExtracting: true, extractingStatus: "Scanning for variable region patterns...", result: null, error: null }));
     
     try {
       const readFile = (f: File): Promise<string> => {
@@ -786,6 +864,16 @@ function AppContent() {
       }
       
       const startTime = Date.now();
+      
+      // Update status periodically
+      const statusTimer = setTimeout(() => {
+        setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+      }, 30000);
+
+      const statusTimer2 = setTimeout(() => {
+        setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+      }, 60000);
+
       const result = await extractWithLLM(
         { data: fileData, mimeType: file.type }, 
         activeOptions, 
@@ -794,6 +882,8 @@ function AppContent() {
         prioritySeqIds
       );
 
+      clearTimeout(statusTimer);
+      clearTimeout(statusTimer2);
       result.extractionTime = Date.now() - startTime;
       
       // Enrichment with UniProt Target Metadata
@@ -814,7 +904,7 @@ function AppContent() {
         value: result.antibodies.length
       });
 
-      if (user && user.role !== 'admin' && user.role !== 'guest') {
+      if (user && user.role !== 'guest') {
         const { id: _id, ...resultData } = result as any;
         const docData = {
           ...resultData,
@@ -875,6 +965,7 @@ function AppContent() {
        if (!item.file) continue;
 
        try {
+         setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
          const readFileData = (f: File): Promise<string> => {
            return new Promise((resolve, reject) => {
              const reader = new FileReader();
@@ -895,6 +986,15 @@ function AppContent() {
 
          const itemStartTime = Date.now();
          
+         // Update status periodically for batch items too
+         const statusTimer = setTimeout(() => {
+           setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+         }, 30000);
+
+         const statusTimer2 = setTimeout(() => {
+           setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+         }, 60000);
+
          const result = await extractWithLLM(
            { data: fileData, mimeType: item.file.type }, 
            currentLlmOptions, 
@@ -903,6 +1003,8 @@ function AppContent() {
            prioritySeqIds
          );
          
+         clearTimeout(statusTimer);
+         clearTimeout(statusTimer2);
          const itemExtractionTime = Date.now() - itemStartTime;
          result.extractionTime = itemExtractionTime;
 
@@ -926,7 +1028,8 @@ function AppContent() {
               userDisplayName: user.displayName || 'Batch Processor',
               createdAt: Timestamp.now(),
               status: 'pending',
-              batchId: 'batch_' + batchStartTime
+              batchId: 'batch_' + batchStartTime,
+              autoSaved: true
             });
          }
 
@@ -1082,22 +1185,6 @@ function AppContent() {
       handleFirestoreError(error, OperationType.CREATE, 'extractions');
     }
   }, [state.result, user]);
-
-  const updateStatus = useCallback(async (id: string, status: 'validated' | 'rejected') => {
-    try {
-      await updateDoc(doc(db, 'extractions', id), { status });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `extractions/${id}`);
-    }
-  }, []);
-
-  const deleteExtraction = useCallback(async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'extractions', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `extractions/${id}`);
-    }
-  }, []);
 
   const handleExportCsv = useCallback(async () => {
     if (!state.result) return;
@@ -2313,36 +2400,86 @@ function AppContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                      {history.slice(0, 10).map((item) => (
-                        <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-zinc-600">
-                            {item.userId === user.uid ? 'You (Admin)' : 'Guest User'}
+                      {history.slice(0, 50).map((item) => (
+                        <tr key={item.id} className="hover:bg-zinc-50 transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-zinc-900">{(item as any).userDisplayName || (item.userId === user.uid ? 'You' : 'Guest')}</span>
+                              <span className="text-[10px] text-zinc-400 font-mono">{(item as any).accountId || 'ID: ' + item.userId?.slice(0, 8)}</span>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="font-bold truncate max-w-[200px]">{item.patentTitle}</p>
-                            <p className="text-[10px] text-zinc-400 font-mono">{item.patentId}</p>
+                            <p className="font-bold truncate max-w-[200px] text-zinc-900">{item.patentTitle}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-[10px] text-zinc-500 font-mono">{item.patentId}</p>
+                              {item.modelUsed && <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1 rounded font-mono">{item.modelUsed}</span>}
+                            </div>
                           </td>
-                          <td className="px-6 py-4 text-zinc-500 font-mono">{item.antibodies.length}</td>
+                          <td className="px-6 py-4">
+                             <div className="flex flex-col">
+                               <span className="font-mono text-zinc-900">{item.antibodies.length} mAbs</span>
+                               <span className="text-[10px] text-zinc-400 capitalize">{item.tier || 'standard'}</span>
+                             </div>
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="text-zinc-600 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</span>
-                              {item.usageMetadata && (item.usageMetadata.totalTokenCount - item.usageMetadata.promptTokenCount > item.usageMetadata.candidatesTokenCount) && (
-                                <span className="text-[9px] text-amber-500 font-mono">
-                                  incl. {(item.usageMetadata.totalTokenCount - item.usageMetadata.promptTokenCount - item.usageMetadata.candidatesTokenCount).toLocaleString()} thinking
-                                </span>
-                              )}
+                               <span className="text-[10px] text-zinc-400">{getEstCost(item.usageMetadata, item.modelUsed || '')}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-zinc-500 font-mono">{((item.extractionTime || 0) / 1000).toFixed(1)}s</td>
                           <td className="px-6 py-4">
-                            <span className={cn(
-                              "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                              item.status === 'validated' ? "bg-emerald-100 text-emerald-700" :
-                              item.status === 'rejected' ? "bg-red-100 text-red-700" :
-                              "bg-amber-100 text-amber-700"
-                            )}>
-                              {item.status}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-zinc-900 font-mono">{((item.extractionTime || 0) / 1000).toFixed(1)}s</span>
+                              <span className="text-[10px] text-zinc-400 font-mono">{item.createdAt ? new Date((item.createdAt as any).seconds * 1000).toLocaleDateString() : '-'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-2">
+                               <div className="flex items-center gap-1">
+                                <span className={cn(
+                                  "text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                                  item.status === 'validated' ? "bg-emerald-100 text-emerald-700" :
+                                  item.status === 'rejected' ? "bg-red-100 text-red-700" :
+                                  "bg-amber-100 text-amber-700"
+                                )}>
+                                  {item.status}
+                                </span>
+                               </div>
+                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button 
+                                    onClick={() => {
+                                      setState(prev => ({ ...prev, result: item, isExtracting: false }));
+                                      setShowAdminDashboard(false);
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    title="View Result"
+                                    className="p-1 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-all"
+                                  >
+                                    <Search className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button 
+                                    onClick={() => updateExtractionStatus(item.id!, 'validated')}
+                                    title="Validate"
+                                    className="p-1 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button 
+                                    onClick={() => updateExtractionStatus(item.id!, 'rejected')}
+                                    title="Reject"
+                                    className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteExtraction(item.id!)}
+                                    title="Delete"
+                                    className="p-1 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded transition-all"
+                                  >
+                                    <X className="w-3.5 h-3.5 opacity-50" />
+                                  </button>
+                               </div>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2595,47 +2732,17 @@ function AppContent() {
           ) : (
             <>
               {!state.result && (state.isExtracting || state.batch?.isProcessing) && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-zinc-50 border border-zinc-200 rounded-3xl relative overflow-hidden">
-                  <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px]" />
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div className="relative mb-10">
-                      <div className="w-32 h-32 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-16 h-16 bg-white rounded-3xl shadow-xl flex items-center justify-center animate-pulse">
-                          <Activity className="w-8 h-8 text-indigo-600" />
-                        </div>
-                      </div>
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-12 bg-white border border-zinc-200 rounded-3xl relative overflow-hidden">
+                  <LoadingScreen status={state.extractingStatus} timer={timer} />
+                  
+                  {state.batch && state.batch.isProcessing && (
+                    <div className="mt-8 px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl text-center min-w-[120px] z-10">
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Queue Meta</p>
+                      <p className="text-2xl font-black font-mono text-white">
+                         {state.batch.currentIndex + 1}/{state.batch.items.length}
+                      </p>
                     </div>
-                    
-                    <h3 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight uppercase">Neural Extraction Engaged</h3>
-                    <p className="text-zinc-500 font-medium max-w-sm mb-8 leading-relaxed">
-                      Deep AI inference is active. Scanning sequence variable regions and distilling biological metadata.
-                    </p>
-                    
-                    <div className="flex items-center gap-4">
-                      <div className="px-6 py-3 bg-white border border-zinc-200 rounded-2xl shadow-sm text-center min-w-[120px]">
-                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Elapsed Time</p>
-                        <p className="text-2xl font-black font-mono text-zinc-900">
-                           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-                        </p>
-                      </div>
-                      
-                      {state.batch && (
-                        <div className="px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl text-center min-w-[120px]">
-                          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Queue Meta</p>
-                          <p className="text-2xl font-black font-mono text-white">
-                             {state.batch.currentIndex + 1}/{state.batch.items.length}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="mt-12 flex gap-3">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className={`w-2 h-2 rounded-full bg-indigo-500/20 animate-bounce`} style={{ animationDelay: `${i * 150}ms` }} />
-                      ))}
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -2648,28 +2755,6 @@ function AppContent() {
                   <p className="text-sm text-zinc-500 max-w-xs mt-2">
                     Upload a patent document or paste sequence text to begin the AI extraction process.
                   </p>
-                </div>
-              )}
-              {state.isExtracting && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-zinc-50 border border-zinc-200 rounded-2xl">
-                  <div className="relative mb-8">
-                    <div className="w-24 h-24 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Database className="w-8 h-8 text-indigo-600" />
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-zinc-900">Analyzing Patent Data</h3>
-                  <div className="mt-2 mb-6">
-                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-xl font-mono font-bold border border-indigo-100">
-                      {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse">Scanning for variable region patterns...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-75">Identifying CDR motifs...</p>
-                    <p className="text-xs font-mono text-zinc-400 animate-pulse delay-150">Validating multiple antibody entries...</p>
-                  </div>
                 </div>
               )}
 
@@ -2782,13 +2867,13 @@ function AppContent() {
                         {state.result.id && (
                           <div className="flex gap-2">
                             <button 
-                              onClick={() => updateStatus(state.result!.id!, 'validated')}
+                              onClick={() => updateExtractionStatus(state.result!.id!, 'validated')}
                               className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg text-[10px] font-bold uppercase hover:bg-emerald-600/30 transition-all"
                             >
                               Validate
                             </button>
                             <button 
-                              onClick={() => updateStatus(state.result!.id!, 'rejected')}
+                              onClick={() => updateExtractionStatus(state.result!.id!, 'rejected')}
                               className="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg text-[10px] font-bold uppercase hover:bg-red-600/30 transition-all"
                             >
                               Reject

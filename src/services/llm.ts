@@ -34,7 +34,10 @@ IMPORTANT EXTRACTION RULES:
     - Capture the exact page number and table ID (if applicable) for every sequence.
     - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
-6. Target Identification: Every antibody sequence has a primary target (antigen) (e.g., HER2, PD-L1, CD20). Extract this target and include it as "target" in every chain object.
+6. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
+    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules or transcription factors (e.g., STAT1, SMAD). 
+    - You must extract the antigen that the antibody is designed to bind to. 
+    - Include this target and include it as "target" in every chain object.
 7. ID-Mapping & Cross-Referencing Strategy: 
     - First, identify every unique mAb ID (e.g., "mAb 1", "2419") from the tables. You MUST extract sequences for every ID found.
     - CROSS-REFERENCE: Many antibodies have multiple names (e.g., "mAb 1" is "REGN7075"). You MUST map these names together in the "mAbName" field (e.g., "mAb 1 (REGN7075)") or ensure both are mentioned in the summary.
