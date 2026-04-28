@@ -701,7 +701,7 @@ function AppContent() {
   // Enrichment with UniProt Target Metadata Helper
   const enrichResultsWithMetadata = async (result: ExtractionResult) => {
     try {
-      console.log('[Enrichment] Initiating target metadata enrichment...');
+      console.log(`[Enrichment] Initiating target metadata enrichment for patent: ${result.patentId}`);
       const uniqueTargets = Array.from(new Set(
         result.antibodies.flatMap(mAb => 
           mAb.chains.map(c => c.target).filter(Boolean) as string[]
@@ -709,11 +709,17 @@ function AppContent() {
       ));
 
       if (uniqueTargets.length > 0) {
+        console.log(`[Enrichment] Found unique targets: ${uniqueTargets.join(', ')}`);
         const metaResults = await Promise.all(
-          uniqueTargets.map(async (t) => ({
-            target: t,
-            metadata: await fetchTargetMetadata(t)
-          }))
+          uniqueTargets.map(async (t) => {
+            try {
+              const meta = await fetchTargetMetadata(t);
+              return { target: t, metadata: meta };
+            } catch (e) {
+              console.warn(`[Enrichment] UniProt fetch failed for target: ${t}`, e);
+              return { target: t, metadata: null };
+            }
+          })
         );
 
         const targetMap = new Map();
@@ -733,16 +739,22 @@ function AppContent() {
             }
           });
 
-          const topTarget = Object.entries(targetCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+          // Sort targets by frequency
+          const sortedTargets = Object.entries(targetCounts).sort((a,b) => b[1] - a[1]);
+          const topTarget = sortedTargets[0]?.[0];
           
           if (topTarget && targetMap.has(topTarget)) {
             mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Target: ${topTarget})`);
+            console.log(`[Enrichment] Successfully applied UniProt metadata for ${mAb.mAbName} (Target: ${topTarget}, UniProtId: ${mAb.targetMetadata?.uniprotId})`);
+          } else if (topTarget) {
+            console.log(`[Enrichment] No UniProt match found for top target "${topTarget}" of ${mAb.mAbName}`);
           }
         }
+      } else {
+        console.log(`[Enrichment] No targets found to enrich for patent: ${result.patentId}`);
       }
     } catch (enrichError) {
-      console.error('[Enrichment] Failed to fetch or apply metadata:', enrichError);
+      console.error('[Enrichment] Critical failure in enrichment helper:', enrichError);
     }
     return result;
   };
@@ -873,14 +885,22 @@ function AppContent() {
          };
 
          const fileData = await readFileData(item.file);
+         
+         let listingData: string | undefined;
+         let listingMimeType: string | undefined;
+         if (sequenceListingFile) {
+           listingData = await readFileData(sequenceListingFile);
+           listingMimeType = sequenceListingFile.type;
+         }
+
          const itemStartTime = Date.now();
          
          const result = await extractWithLLM(
            { data: fileData, mimeType: item.file.type }, 
            currentLlmOptions, 
-           '', // No page range for batch
-           undefined, // No sequence listing for batch
-           '' // No priority IDs for batch
+           pageRange, 
+           listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+           prioritySeqIds
          );
          
          const itemExtractionTime = Date.now() - itemStartTime;
@@ -2459,35 +2479,35 @@ function AppContent() {
               )}
 
               {(state.batch && !state.batch.isProcessing && state.batch.currentIndex === state.batch.items.length && !state.result && !state.isExtracting) && (
-                <div className="h-full min-h-[800px] flex flex-col p-8 md:p-12 bg-white border border-zinc-200 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] relative overflow-y-auto custom-scrollbar">
+                <div className="h-full min-h-[700px] flex flex-col items-center justify-start p-8 md:p-12 bg-zinc-50/50 border border-zinc-200 rounded-[32px] relative overflow-y-auto custom-scrollbar">
                   <div className="absolute top-0 right-0 p-8 z-10">
                      <button 
                        onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
-                       className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-900"
+                       className="p-2 hover:bg-zinc-100 rounded-full transition-all text-zinc-400 hover:text-zinc-900 border border-transparent hover:border-zinc-200"
                      >
-                       <X className="w-5 h-5" />
+                       <X className="w-6 h-6" />
                      </button>
                   </div>
 
-                  <div className="relative z-10 flex flex-col items-center w-full max-w-5xl mx-auto">
+                  <div className="relative z-10 flex flex-col items-center w-full max-w-4xl mx-auto pt-6">
                     <motion.div 
-                      initial={{ scale: 0.9, opacity: 0 }}
+                      initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-100/50"
+                      className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/20"
                     >
-                      <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                      <CheckCircle2 className="w-8 h-8 text-white" />
                     </motion.div>
                     
-                    <h3 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight text-center">Engine Run Complete</h3>
+                    <h3 className="text-4xl font-black text-zinc-900 mb-2 tracking-tight text-center">Batch Processing Complete</h3>
                     <p className="text-zinc-500 mb-10 max-w-lg text-center font-medium leading-relaxed">
-                      Successfully processed {state.batch.items.filter(i => i.status === 'completed').length} patents. Total analysis metadata has been aggregated for your review.
+                      Successfully analyzed <span className="text-zinc-900 font-bold">{state.batch.items.filter(i => i.status === 'completed').length}</span> patents. A consolidated dataset has been generated for your discovery pipeline.
                     </p>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full mb-8">
-                      <div className="bg-zinc-900 text-white p-6 rounded-3xl flex flex-col shadow-xl">
-                        <Clock className="w-5 h-5 text-indigo-400 mb-4" />
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Total Duration</span>
-                        <span className="text-2xl font-black">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mb-8">
+                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
+                        <Clock className="w-5 h-5 text-indigo-500 mb-4" />
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Duration</span>
+                        <span className="text-2xl font-black text-zinc-900">
                           {state.batch.endTime && state.batch.startTime ? 
                             `${((state.batch.endTime - state.batch.startTime) / 1000).toFixed(1)}s` : 
                             '--'
@@ -2495,17 +2515,17 @@ function AppContent() {
                         </span>
                       </div>
 
-                      <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl flex flex-col">
-                        <Activity className="w-5 h-5 text-emerald-600 mb-4" />
-                        <span className="text-[10px] font-bold text-emerald-800/40 uppercase tracking-widest mb-1">Reliability</span>
+                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
+                        <Activity className="w-5 h-5 text-emerald-500 mb-4" />
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Success</span>
                         <span className="text-2xl font-black text-emerald-600">
                           {Math.round((state.batch.items.filter(i => i.status === 'completed').length / state.batch.items.length) * 100)}%
                         </span>
                       </div>
 
-                      <div className="bg-white border border-zinc-100 p-6 rounded-3xl flex flex-col shadow-sm">
+                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
                         <Search className="w-5 h-5 text-amber-500 mb-4" />
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Avg Analysis</span>
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Avg Time</span>
                         <span className="text-2xl font-black text-zinc-900">
                           {(() => {
                              const successful = state.batch.items.filter(i => i.extractionTime);
@@ -2516,9 +2536,9 @@ function AppContent() {
                         </span>
                       </div>
 
-                      <div className="bg-indigo-600 text-white p-6 rounded-3xl flex flex-col shadow-xl shadow-indigo-100">
-                        <Database className="w-5 h-5 text-indigo-200 mb-4" />
-                        <span className="text-[10px] font-bold text-indigo-200/50 uppercase tracking-widest mb-1">Total mAbs</span>
+                      <div className="bg-indigo-600 text-white p-6 rounded-3xl flex flex-col shadow-xl shadow-indigo-200">
+                        <Database className="w-5 h-5 text-indigo-100 mb-4" />
+                        <span className="text-[10px] font-bold text-indigo-100/50 uppercase tracking-widest mb-1">Total mAbs</span>
                         <span className="text-2xl font-black">
                           {state.batch.items.reduce((acc, i) => acc + (i.result?.antibodies.length || 0), 0)}
                         </span>
