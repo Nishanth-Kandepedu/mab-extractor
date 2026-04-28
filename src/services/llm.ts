@@ -17,10 +17,11 @@ IMPORTANT EXTRACTION RULES:
    - If VL appears incomplete, check the next page or table.
 
 3. Validation & Domain Boundary:
-   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif.
-   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif.
-   - VARIABLE DOMAIN ONLY: You MUST only extract the Variable Domain (Fv). Do NOT include the Constant Region (CH1, CL, etc.).
-   - If the source (e.g., Sequence Listing) contains the full chain, you MUST truncate it to include ONLY the variable domain, terminating immediately after the J-segment (Framework 4) motifs mentioned above.
+   - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif (Framework 4).
+   - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif (Framework 4).
+   - VARIABLE DOMAIN ONLY (Fv): You MUST only extract the Variable Domain. Do NOT include the Constant Region (CH1, CH2, CH3, CL, or Hinges).
+   - DISCARD CONSERVED REGIONS: Sequences starting with "ASTKGP..." (CH1) or "RTVAAP..." (CL) are CONSTANT REGIONS and must be excluded. Truncate the sequence immediately after the J-segment (e.g., after ...VTVSS for VH or ...VEIK for VL).
+   - If the source contains the full chain, you MUST truncate it for the variable domain result.
 
 4. Table Structure & Coverage:
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
@@ -478,6 +479,15 @@ export async function extractWithLLM(
 
     mAb.chains = mAb.chains.map(chain => {
       let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+
+      // Constant region detection (CH1 / CL common starts)
+      const isCH1 = seq.startsWith("ASTKGP") || seq.includes("ASTKGPSVFPLAP");
+      const isCL = seq.startsWith("RTVAAP") || seq.includes("RTVAAPSVFIFPPS");
+      
+      if (isCH1 || isCL) {
+        needsReview = true;
+        reviewReason += ` [Potential Constant Region Detected: ${isCH1 ? 'CH1' : 'CL'}]`;
+      }
       
       // Re-calculate CDR indices to ensure they sync with the full sequence
       // This is more robust than relying on LLM-generated indices which are often off-by-one or hallucinated.

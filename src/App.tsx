@@ -45,31 +45,29 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-white p-8">
       <div className="relative mb-10">
-        <div className="w-32 h-32 rounded-full border-4 border-zinc-50 border-t-indigo-600 animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-16 h-16 bg-white rounded-3xl shadow-xl flex items-center justify-center">
-            <Database className="w-8 h-8 text-indigo-600" />
-          </div>
+        <div className="w-24 h-24 rounded-full border-4 border-indigo-100/30 flex items-center justify-center relative">
+          <div className="absolute inset-0 rounded-full border-4 border-t-indigo-600 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+          <Database className="w-8 h-8 text-indigo-600" />
         </div>
       </div>
       
-      <h2 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight uppercase">
+      <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">
         Analyzing Patent Data
       </h2>
       
-      <div className="inline-flex items-center gap-2 px-6 py-2 bg-indigo-50 rounded-full mb-10 border border-indigo-100/50">
-        <span className="text-lg font-black text-indigo-600 font-mono tabular-nums">
+      <div className="inline-flex items-center gap-2 px-5 py-1.5 bg-indigo-50/50 rounded-full mb-8">
+        <span className="text-sm font-bold text-indigo-600 font-mono tabular-nums">
           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
         </span>
       </div>
       
-      <div className="flex flex-col gap-4 text-center mb-12">
+      <div className="flex flex-col gap-2.5 text-center mb-10">
         {steps.map((step, i) => (
           <p 
             key={i} 
             className={cn(
-              "text-xs font-mono tracking-widest transition-all duration-700",
-              status === step ? "text-indigo-600 font-bold opacity-100" : "text-zinc-300 opacity-40 font-medium"
+              "text-xs font-medium tracking-wide transition-all duration-700",
+              status === step ? "text-zinc-400 font-bold" : "text-zinc-200"
             )}
           >
             {step}
@@ -81,12 +79,12 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="px-10 py-5 bg-zinc-900 border border-zinc-800 rounded-[32px] shadow-2xl text-center min-w-[200px]"
+          className="px-6 py-3 bg-zinc-900 rounded-2xl shadow-xl text-center min-w-[120px]"
         >
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2 leading-none">
+          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1 leading-none">
             Queue Meta
           </p>
-          <p className="text-4xl font-black font-mono text-white tracking-tighter">
+          <p className="text-2xl font-black font-mono text-white">
              {batchProgress.current}<span className="text-white/20 mx-1">/</span>{batchProgress.total}
           </p>
         </motion.div>
@@ -417,7 +415,7 @@ function AppContent() {
       } else {
         intendedRoleRef.current = null;
         setUser(null);
-        setState({ isExtracting: false, result: null, error: null });
+        setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
         setPageRange('');
         setShowAdminDashboard(false);
         setShowHistory(false);
@@ -599,7 +597,7 @@ function AppContent() {
       console.error('Logout failed:', err);
     } finally {
       setUser(null);
-      setState({ isExtracting: false, result: null, error: null });
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
       setPageRange('');
       setShowAdminDashboard(false);
       setShowHistory(false);
@@ -906,7 +904,7 @@ function AppContent() {
       // Enrichment with UniProt Target Metadata
       await enrichResultsWithMetadata(result);
 
-      setState({ isExtracting: false, result, error: null });
+      setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractingStatus: undefined }));
       setShowHistory(false);
 
       if (fileInputRef.current) {
@@ -951,7 +949,7 @@ function AppContent() {
       }
     } catch (err: any) {
       console.error('Final extraction error:', err);
-      setState({ isExtracting: false, result: null, error: err.message || String(err), batch: state.batch });
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: err.message || String(err) }));
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
 
@@ -1160,7 +1158,7 @@ function AppContent() {
   }, [runExtraction]);
 
   const handleReset = () => {
-    setState({ isExtracting: false, result: null, error: null });
+    setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
     setPageRange('');
     setPrioritySeqIds('');
     setSequenceListingFile(null);
@@ -2721,7 +2719,7 @@ function AppContent() {
                       </div>
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => setState({ isExtracting: false, result: item, error: null })}
+                          onClick={() => setState(prev => ({ ...prev, isExtracting: false, result: item, error: null }))}
                           className="px-4 py-2 bg-zinc-100 text-zinc-700 rounded-xl text-xs font-medium hover:bg-zinc-200 transition-colors"
                         >
                           View Details
