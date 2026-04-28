@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Info, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -1129,6 +1129,9 @@ function AppContent() {
             targetUniProtId: mAb.targetMetadata?.uniprotId || '',
             targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
             targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+            epitope: mAb.epitope || '',
+            originSpecies: mAb.originSpecies || '',
+            generationSource: mAb.generationSource || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
@@ -1263,6 +1266,9 @@ function AppContent() {
           targetUniProtId: mAb.targetMetadata?.uniprotId || '',
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
           targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+          epitope: mAb.epitope || '',
+          originSpecies: mAb.originSpecies || '',
+          generationSource: mAb.generationSource || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -3134,6 +3140,42 @@ function AppContent() {
                               <RotateCcw className="w-3 h-3" />
                               Fetch UniProt Metadata for {mAb.chains.find(c => c.target)?.target}
                             </button>
+                          </div>
+                        )}
+                        
+                        {/* Clonal Metadata (Epitope, Species, Source) */}
+                        {(mAb.epitope || mAb.originSpecies || mAb.generationSource) && (
+                          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-xs">
+                             <div className="flex items-center gap-2 mb-3">
+                              <Info className="w-4 h-4 text-zinc-400" />
+                              <span className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">Clonal Metadata</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {mAb.epitope && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Epitope</span>
+                                  <div className="font-medium text-zinc-900 leading-relaxed capitalize-first">
+                                    {mAb.epitope}
+                                  </div>
+                                </div>
+                              )}
+                              {mAb.originSpecies && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Species of Origin</span>
+                                  <div className="font-medium text-zinc-900 leading-relaxed">
+                                    {mAb.originSpecies}
+                                  </div>
+                                </div>
+                              )}
+                              {mAb.generationSource && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Discovery Source</span>
+                                  <div className="font-medium text-zinc-900 leading-relaxed">
+                                    {mAb.generationSource}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                         

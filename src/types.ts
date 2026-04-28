@@ -65,6 +65,9 @@ export interface Antibody {
   chains: Chain[];
   confidence: number;
   summary: string;
+  epitope?: string;
+  originSpecies?: string;
+  generationSource?: string;
   properties?: AntibodyProperties;
   experimentalData?: AssayData[]; // New field for detailed properties
   needsReview?: boolean;

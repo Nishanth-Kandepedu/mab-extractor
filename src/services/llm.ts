@@ -74,10 +74,16 @@ IMPORTANT EXTRACTION RULES:
 18. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
+
+19. METADATA EXTRACTION:
+    For each antibody, you MUST extract:
+    - "epitope": The specific region or residues on the target antigen that the antibody binds to (if mentioned, e.g., "extracellular domain", "D3", "residues 20-40").
+    - "originSpecies": The animal species the antibody was derived from (e.g., "Human", "Mouse", "Rabbit", "Macaca fascicularis").
+    - "generationSource": The technology used to discover or generate the antibody (e.g., "Phage display", "Hybridoma", "Humanized", "Transgenic Mouse (HuMab)").
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
-19. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
+20. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
     For each antibody clone, you MUST extract the following properties into the "experimentalData" array, categorized strictly:
     
     - "In Vitro": Target or cell line centric activity/potency/affinity. (e.g., Kd, IC50, EC50, binding by ELISA/FACS/SPR, neutralization).
@@ -297,6 +303,9 @@ export async function extractWithLLM(
             type: "OBJECT",
             properties: {
               mAbName: { type: "STRING" },
+              epitope: { type: "STRING" },
+              originSpecies: { type: "STRING" },
+              generationSource: { type: "STRING" },
               chains: {
                 type: "ARRAY",
                 items: {
