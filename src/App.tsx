@@ -1944,22 +1944,21 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               {mode === 'single' ? (
-                <>
-                  {/* Single Mode UI */}
-                  <div className="space-y-4">
+                <div className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Page Context</span>
+                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Target Context</span>
                         <span className="text-[9px] text-zinc-400 font-medium italic">e.g. "Table 1"</span>
                       </label>
                       <input
                         type="text"
                         value={pageRange}
                         onChange={(e) => setPageRange(e.target.value)}
-                        placeholder="Optional target range..."
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                        placeholder="Optional range..."
+                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                         disabled={state.isExtracting}
                       />
                     </div>
@@ -1973,16 +1972,16 @@ function AppContent() {
                         type="text"
                         value={prioritySeqIds}
                         onChange={(e) => setPrioritySeqIds(e.target.value)}
-                        placeholder="List priority IDs or names..."
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
+                        placeholder="Priority IDs..."
+                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                         disabled={state.isExtracting}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sequence Listing File</span>
+                    <label className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sequence Listing</span>
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] text-zinc-300 font-medium italic">.txt, .xml</span>
                         {sequenceListingFile && (
@@ -2009,7 +2008,7 @@ function AppContent() {
                       )}>
                         <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-400")} />
                         <span className="truncate flex-1">
-                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing File..."}
+                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing..."}
                         </span>
                         {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
                       </div>
@@ -2043,8 +2042,8 @@ function AppContent() {
                       {state.isExtracting ? (
                         <div className="flex flex-col items-center">
                           <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                          <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
-                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                          <p className="text-sm font-medium text-indigo-600">Extracting Data...</p>
+                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Content</p>
                         </div>
                       ) : (
                         <>
@@ -2055,7 +2054,7 @@ function AppContent() {
                       )}
                     </div>
                   </div>
-                </>
+                </div>
               ) : (
                 <div className="space-y-6">
                   {/* Batch Mode UI */}

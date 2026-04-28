@@ -80,11 +80,11 @@ EXTRACTION RULES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
-19. Metadata (Optional but Priority):
-   - "epitope": Binding region (e.g. "D3", "residues 20-40").
-   - "originSpecies": Host species (e.g. "Human").
-   - "generationSource": Discovery method (e.g. "Phage display").
-   - Only extract if explicitly mentioned near the sequence or in summary tables. If not found, use "".
+19. Metadata Extraction (SPEED OPTIMIZED):
+   - Extract "epitope", "originSpecies", "generationSource" for every clone.
+   - Use "" if not in summary tables. DO NOT search the whole document text for metadata.
+   - Capture only if found on the same page as sequences or in the main characterization table.
+20. VERBOSITY: Keep "summary" under 40 words. Metadata items MUST be <5 words.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -351,7 +351,7 @@ export async function extractWithLLM(
                 }
               } : undefined
             },
-            required: ["mAbName", "chains", "confidence", "summary"],
+            required: ["mAbName", "chains", "confidence", "summary", "epitope", "originSpecies", "generationSource"],
           },
         },
       },
@@ -363,7 +363,7 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: activeInstruction,
-      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
+      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "MINIMAL" : undefined,
       responseSchema: responseSchema,
     });
 
