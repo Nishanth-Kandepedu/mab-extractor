@@ -37,11 +37,12 @@ const AntibodyIcon = ({ className }: { className?: string }) => (
 
 const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, timer: number, batchProgress?: { current: number, total: number } }) => {
   const steps = [
+    "Initializing Neural Engine",
     "Identifying Variable Patterns",
     "Processing Multimodal Signals",
     "Validating Verbatim Integrity",
     "Synchronizing CDR Coordinates",
-    "Generating Extraction Summary"
+    "Generating Neural Summary"
   ];
 
   return (
@@ -57,7 +58,7 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
       </div>
       
       <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
-        Antibody Extraction in Progress
+        Neural Extraction in Progress
       </h2>
       
       <div className="mb-10">
@@ -67,30 +68,27 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
       </div>
       
       <div className="flex flex-col gap-3 text-center mb-10">
-        <div className="flex flex-col gap-2">
-          {steps.map((step, i) => (
+        {status ? (
+          <motion.p 
+            key={status}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-sm font-bold text-indigo-600 uppercase tracking-[0.2em]"
+          >
+            {status}
+          </motion.p>
+        ) : (
+          steps.map((step, i) => (
             <p 
               key={i} 
               className={cn(
-                "text-[11px] font-bold tracking-[0.2em] uppercase transition-all duration-700",
-                i === Math.floor((timer / 5) % steps.length) ? "text-indigo-600 opacity-100 scale-105" : "text-zinc-200 opacity-40"
+                "text-sm font-medium tracking-wide transition-all duration-500",
+                i === Math.floor((timer / 10) % steps.length) ? "text-indigo-600 font-bold" : "text-zinc-300"
               )}
             >
               {step}
             </p>
-          ))}
-        </div>
-
-        {status && (
-          <motion.div
-            key={status}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mt-6 px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-full inline-flex items-center gap-2 self-center shadow-sm"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">{status}</span>
-          </motion.div>
+          ))
         )}
       </div>
 
@@ -817,8 +815,8 @@ function AppContent() {
     }
   };
 
-  // Enrichment with UniProt Target Metadata Helper (Memoized)
-  const enrichResultsWithMetadata = useCallback(async (result: ExtractionResult) => {
+  // Enrichment with UniProt Target Metadata Helper
+  const enrichResultsWithMetadata = async (result: ExtractionResult) => {
     try {
       console.log(`[Enrichment] Initiating target metadata enrichment for patent: ${result.patentId}`);
       const uniqueTargets = Array.from(new Set(
@@ -876,7 +874,7 @@ function AppContent() {
       console.error('[Enrichment] Critical failure in enrichment helper:', enrichError);
     }
     return result;
-  }, []);
+  };
 
   const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions) => {
     if (!file) return;
@@ -995,13 +993,11 @@ function AppContent() {
     for (let i = 0; i < items.length; i++) {
        setState(prev => ({
          ...prev,
-         isExtracting: true,
-         result: null,
-         batch: prev.batch ? { 
-           ...prev.batch, 
+         batch: { 
+           ...prev.batch!, 
            currentIndex: i, 
-           items: prev.batch.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
-         } : undefined
+           items: prev.batch!.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
+         }
        }));
 
        const item = items[i];
@@ -1089,7 +1085,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < items.length - 1) {
-         const COOLDOWN_SECONDS = 2;
+         const COOLDOWN_SECONDS = 30;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
@@ -1106,8 +1102,7 @@ function AppContent() {
 
     setState(prev => ({
       ...prev,
-      isExtracting: false,
-      batch: prev.batch ? { ...prev.batch, isProcessing: false, currentIndex: items.length, endTime: Date.now() } : undefined
+      batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length, endTime: Date.now() }
     }));
   }, [llmOptions, user, state.batch?.items, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
 
@@ -1335,12 +1330,9 @@ function AppContent() {
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           rows.push({
             mAbName: mAb.mAbName,
-            target: vhChain?.target || vlChain?.target || '',
-            epitope: mAb.epitope || '',
-            originSpecies: mAb.originSpecies || '',
-            generationSource: mAb.generationSource || '',
             VH_SeqID: vhChain?.seqId || '',
             VL_SeqID: vlChain?.seqId || '',
+            target: vhChain?.target || vlChain?.target || '',
             VH_Sequence: vhChain?.fullSequence || '',
             VL_Sequence: vlChain?.fullSequence || ''
           });
@@ -1658,7 +1650,7 @@ function AppContent() {
                   System Phase
                 </span>
                 <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                  {state.batch.isProcessing ? 'Extraction Engine' : 'Batch Complete'}
+                  {state.batch.isProcessing ? 'Neural Extraction Engine' : 'Batch Complete'}
                 </span>
               </div>
             </div>
@@ -1808,7 +1800,7 @@ function AppContent() {
 
           {/* Model Selection */}
           <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-indigo-600" />
                 <h2 className="font-semibold text-zinc-800">
@@ -1822,7 +1814,22 @@ function AppContent() {
               )}
             </div>
             
-            <div className="space-y-6">
+            {(llmOptions.model === 'gemma-4') && (
+              <div className="p-4 rounded-xl border bg-amber-50 border-amber-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full animate-pulse bg-amber-500" />
+                  <span className="text-xs font-medium text-amber-700">
+                    Gemma 4 High-Thinking Engine
+                  </span>
+                </div>
+                <p className="text-[10px] mt-2 leading-relaxed text-amber-600/80">
+                  Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy. 
+                  <span className="block mt-1 font-bold">Note: 256k token limit per document. Use Gemini 3.1 Pro for large patents.</span>
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-4">
               <div className="grid grid-cols-4 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                   const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
@@ -1946,53 +1953,56 @@ function AppContent() {
 
             <div className="space-y-6">
               {mode === 'single' ? (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Target Context</span>
-                        <span className="text-[9px] text-zinc-400 font-medium italic">e.g. "Table 1"</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={pageRange}
-                        onChange={(e) => setPageRange(e.target.value)}
-                        placeholder="Optional range..."
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-                        disabled={state.isExtracting}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Priority IDs</span>
-                        <span className="text-[9px] text-zinc-400 font-medium italic">e.g. "7, mab1"</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={prioritySeqIds}
-                        onChange={(e) => setPrioritySeqIds(e.target.value)}
-                        placeholder="Priority IDs..."
-                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
-                        disabled={state.isExtracting}
-                      />
-                    </div>
+                <>
+                  {/* Existing Single Mode UI */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Target Page / Range / Section (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
+                      </div>
+                    </label>
+                    <input
+                      type="text"
+                      value={pageRange}
+                      onChange={(e) => setPageRange(e.target.value)}
+                      placeholder="Focus on specific page, range, or table..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      disabled={state.isExtracting}
+                    />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sequence Listing</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-zinc-300 font-medium italic">.txt, .xml</span>
-                        {sequenceListingFile && (
-                          <button 
-                            onClick={() => setSequenceListingFile(null)}
-                            className="text-red-400 hover:text-red-600 transition-colors"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Priority SEQ IDs / Clone Names (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
                       </div>
+                    </label>
+                    <input
+                      type="text"
+                      value={prioritySeqIds}
+                      onChange={(e) => setPrioritySeqIds(e.target.value)}
+                      placeholder="Focus AI on specific SEQ IDs or Clone Names..."
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      disabled={state.isExtracting}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        Sequence Listing File (Optional)
+                        <span className="font-normal lowercase text-zinc-300 italic">(.txt, .xml)</span>
+                      </div>
+                      {sequenceListingFile && (
+                        <button 
+                          onClick={() => setSequenceListingFile(null)}
+                          className="text-red-500 hover:text-red-700 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </label>
                     <div className="relative">
                       <input
@@ -2008,7 +2018,7 @@ function AppContent() {
                       )}>
                         <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-400")} />
                         <span className="truncate flex-1">
-                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing..."}
+                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing File..."}
                         </span>
                         {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
                       </div>
@@ -2042,8 +2052,8 @@ function AppContent() {
                       {state.isExtracting ? (
                         <div className="flex flex-col items-center">
                           <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                          <p className="text-sm font-medium text-indigo-600">Extracting Data...</p>
-                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Content</p>
+                          <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
+                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
                         </div>
                       ) : (
                         <>
@@ -2054,7 +2064,7 @@ function AppContent() {
                       )}
                     </div>
                   </div>
-                </div>
+                </>
               ) : (
                 <div className="space-y-6">
                   {/* Batch Mode UI */}
@@ -3263,7 +3273,7 @@ function AppContent() {
       <div className="flex gap-8">
         <div className="flex flex-col">
           <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
-          <span className="text-xs font-medium">Antibody Sequence Analysis</span>
+          <span className="text-xs font-medium">Neural Sequence Analysis</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
