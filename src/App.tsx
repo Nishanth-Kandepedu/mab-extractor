@@ -996,12 +996,13 @@ function AppContent() {
     for (let i = 0; i < items.length; i++) {
        setState(prev => ({
          ...prev,
+         isExtracting: true,
          result: null,
-         batch: { 
-           ...prev.batch!, 
+         batch: prev.batch ? { 
+           ...prev.batch, 
            currentIndex: i, 
-           items: prev.batch!.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
-         }
+           items: prev.batch.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
+         } : undefined
        }));
 
        const item = items[i];
@@ -1089,7 +1090,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < items.length - 1) {
-         const COOLDOWN_SECONDS = 30;
+         const COOLDOWN_SECONDS = 5;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
@@ -1106,7 +1107,8 @@ function AppContent() {
 
     setState(prev => ({
       ...prev,
-      batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length, endTime: Date.now() }
+      isExtracting: false,
+      batch: prev.batch ? { ...prev.batch, isProcessing: false, currentIndex: items.length, endTime: Date.now() } : undefined
     }));
   }, [llmOptions, user, state.batch?.items, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
 
@@ -1334,9 +1336,12 @@ function AppContent() {
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           rows.push({
             mAbName: mAb.mAbName,
+            target: vhChain?.target || vlChain?.target || '',
+            epitope: mAb.epitope || '',
+            originSpecies: mAb.originSpecies || '',
+            generationSource: mAb.generationSource || '',
             VH_SeqID: vhChain?.seqId || '',
             VL_SeqID: vlChain?.seqId || '',
-            target: vhChain?.target || vlChain?.target || '',
             VH_Sequence: vhChain?.fullSequence || '',
             VL_Sequence: vlChain?.fullSequence || ''
           });
