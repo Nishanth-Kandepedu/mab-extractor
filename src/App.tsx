@@ -1500,7 +1500,7 @@ function AppContent() {
       </header>
 
       {state.batch && (
-        <div className="bg-zinc-900 text-white px-8 py-3 flex items-center justify-between border-b border-white/5 relative z-[60]">
+        <div className="bg-zinc-900 text-white px-8 py-3 flex items-center justify-between border-b border-white/5 sticky top-0 z-[60] shadow-2xl backdrop-blur-md bg-zinc-900/95">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
               {(state.batch.isProcessing || state.batch.cooldownRemaining) ? (
@@ -1549,6 +1549,15 @@ function AppContent() {
 
                <div className="flex flex-col">
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 leading-none mb-1">
+                  Elapsed Time
+                </span>
+                <div className="text-[11px] font-bold text-white font-mono tabular-nums">
+                  {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                </div>
+              </div>
+
+               <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 leading-none mb-1">
                   Total Progress
                 </span>
                 <div className="flex items-center gap-3">
@@ -1566,6 +1575,7 @@ function AppContent() {
               </div>
             </div>
           </div>
+
 
           <div className="flex items-center gap-4">
             {!state.batch.isProcessing && !state.batch.cooldownRemaining && (
@@ -2066,31 +2076,31 @@ function AppContent() {
                         ))}
                       </div>
 
-                        {(state.batch.isProcessing || (state.batch.currentIndex !== -1 && state.batch.currentIndex !== state.batch.items.length)) ? (
-                          <div className="bg-[#050505] rounded-2xl p-5 shadow-xl shadow-zinc-200 border border-white/5">
+                        {(state.batch.currentIndex !== -1 && state.batch.currentIndex !== state.batch.items.length) ? (
+                          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                                   <Loader2 className={cn("w-4 h-4 text-indigo-400", state.batch.isProcessing && "animate-spin")} />
                                 </div>
                                 <div className="flex flex-col">
-                                  <p className="text-[10px] font-black text-white uppercase tracking-widest">
-                                    {state.batch.isProcessing ? 'Processing Active' : 'Batch Ready'}
+                                  <p className="text-[10px] font-black text-zinc-900 uppercase tracking-widest">
+                                    Queue Status
                                   </p>
                                   <p className="text-[9px] text-zinc-400">
-                                    Phase {Math.max(0, (state.batch.currentIndex || 0) + 1)} of {state.batch.items.length} Analysed
+                                    Phase {Math.max(0, (state.batch.currentIndex || 0) + 1)} of {state.batch.items.length}
                                   </p>
                                 </div>
                               </div>
-                              <p className="text-lg font-black text-indigo-400">
+                              <p className="text-lg font-black text-indigo-600">
                                 {Math.round(((Math.max(0, (state.batch.currentIndex || 0) + 1)) / state.batch.items.length) * 100)}%
                               </p>
                             </div>
-                            <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden p-0.5">
+                            <div className="w-full bg-zinc-100 h-2 rounded-full overflow-hidden p-0.5">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${((Math.max(0, (state.batch.currentIndex || 0) + 1)) / state.batch.items.length) * 100}%` }}
-                                className="bg-indigo-500 h-full rounded-full transition-all duration-700 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
+                                className="bg-indigo-500 h-full rounded-full transition-all duration-700 shadow-[0_0_12px_rgba(99,102,241,0.2)]"
                               />
                             </div>
                           </div>
