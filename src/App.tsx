@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2 } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
@@ -945,7 +945,7 @@ function AppContent() {
       ...prev,
       batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length, endTime: Date.now() }
     }));
-  }, [llmOptions, user, state.batch?.items]);
+  }, [llmOptions, user, state.batch?.items, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
 
   const handleBatchExportCsv = useCallback(async () => {
     if (!state.batch) return;
@@ -2478,36 +2478,40 @@ function AppContent() {
                 </div>
               )}
 
-              {(state.batch && !state.batch.isProcessing && state.batch.currentIndex === state.batch.items.length && !state.result && !state.isExtracting) && (
-                <div className="h-full min-h-[700px] flex flex-col items-center justify-start p-8 md:p-12 bg-zinc-50/50 border border-zinc-200 rounded-[32px] relative overflow-y-auto custom-scrollbar">
-                  <div className="absolute top-0 right-0 p-8 z-10">
-                     <button 
-                       onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
-                       className="p-2 hover:bg-zinc-100 rounded-full transition-all text-zinc-400 hover:text-zinc-900 border border-transparent hover:border-zinc-200"
-                     >
-                       <X className="w-6 h-6" />
-                     </button>
-                  </div>
+              {state.batch && !state.batch.isProcessing && state.batch.currentIndex === state.batch.items.length && !state.result && !state.isExtracting && (
+                <div className="h-full w-full flex items-center justify-center p-4">
+                  <div className="w-full max-w-5xl bg-white border border-zinc-200 rounded-[40px] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.1)] relative overflow-hidden flex flex-col max-h-[95vh]">
+                    <div className="absolute top-0 right-0 p-8 z-20">
+                       <button 
+                         onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
+                         className="p-3 bg-white border border-zinc-200 rounded-full shadow-sm hover:shadow-md hover:bg-zinc-50 transition-all text-zinc-400 hover:text-zinc-900 group"
+                       >
+                         <X className="w-5 h-5 transition-transform group-hover:rotate-90" />
+                       </button>
+                    </div>
 
-                  <div className="relative z-10 flex flex-col items-center w-full max-w-4xl mx-auto pt-6">
-                    <motion.div 
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/20"
-                    >
-                      <CheckCircle2 className="w-8 h-8 text-white" />
-                    </motion.div>
-                    
-                    <h3 className="text-4xl font-black text-zinc-900 mb-2 tracking-tight text-center">Batch Processing Complete</h3>
-                    <p className="text-zinc-500 mb-10 max-w-lg text-center font-medium leading-relaxed">
-                      Successfully analyzed <span className="text-zinc-900 font-bold">{state.batch.items.filter(i => i.status === 'completed').length}</span> patents. A consolidated dataset has been generated for your discovery pipeline.
-                    </p>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mb-8">
-                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
-                        <Clock className="w-5 h-5 text-indigo-500 mb-4" />
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Duration</span>
-                        <span className="text-2xl font-black text-zinc-900">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-12">
+                      <div className="relative z-10 flex flex-col items-center w-full max-w-4xl mx-auto">
+                        <motion.div 
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="w-20 h-20 bg-emerald-500 rounded-3xl flex items-center justify-center mb-8 shadow-2xl shadow-emerald-500/20 ring-4 ring-emerald-50"
+                        >
+                          <CheckCircle2 className="w-10 h-10 text-white" />
+                        </motion.div>
+                        
+                        <h3 className="text-5xl font-black text-zinc-900 mb-2 tracking-tighter text-center">Batch Complete</h3>
+                        <p className="text-zinc-500 mb-12 text-lg text-center font-medium leading-relaxed max-w-xl italic">
+                          "Your consolidated discovery dataset is ready for analysis."
+                        </p>
+                        
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 w-full mb-12">
+                      <div className="bg-white border border-zinc-200 p-8 rounded-[32px] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                          <Clock className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Total Duration</span>
+                        <span className="text-3xl font-black text-zinc-900">
                           {state.batch.endTime && state.batch.startTime ? 
                             `${((state.batch.endTime - state.batch.startTime) / 1000).toFixed(1)}s` : 
                             '--'
@@ -2515,125 +2519,132 @@ function AppContent() {
                         </span>
                       </div>
 
-                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
-                        <Activity className="w-5 h-5 text-emerald-500 mb-4" />
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Success</span>
-                        <span className="text-2xl font-black text-emerald-600">
-                          {Math.round((state.batch.items.filter(i => i.status === 'completed').length / state.batch.items.length) * 100)}%
+                      <div className="bg-white border border-zinc-200 p-8 rounded-[32px] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4">
+                          <Activity className="w-6 h-6 text-emerald-600" />
+                        </div>
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Success Rate</span>
+                        <span className="text-3xl font-black text-emerald-600">
+                          {state.batch.items.length > 0 ? Math.round((state.batch.items.filter(i => i.status === 'completed').length / state.batch.items.length) * 100) : 0}%
                         </span>
                       </div>
 
-                      <div className="bg-white border border-zinc-200 p-6 rounded-3xl flex flex-col shadow-sm">
-                        <Search className="w-5 h-5 text-amber-500 mb-4" />
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Avg Time</span>
-                        <span className="text-2xl font-black text-zinc-900">
+                      <div className="bg-white border border-zinc-200 p-8 rounded-[32px] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
+                          <Zap className="w-6 h-6 text-amber-600" />
+                        </div>
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Avg Extraction</span>
+                        <span className="text-3xl font-black text-zinc-900">
                           {(() => {
                              const successful = state.batch.items.filter(i => i.extractionTime);
                              if (successful.length === 0) return '0s';
-                             const avg = successful.reduce((acc, i) => acc + (i.extractionTime || 0), 0) / successful.length;
-                             return `${(avg / 1000).toFixed(1)}s`;
+                             const total = successful.reduce((acc, i) => acc + (i.extractionTime || 0), 0);
+                             return `${(total / successful.length / 1000).toFixed(1)}s`;
                           })()}
                         </span>
                       </div>
 
-                      <div className="bg-indigo-600 text-white p-6 rounded-3xl flex flex-col shadow-xl shadow-indigo-200">
-                        <Database className="w-5 h-5 text-indigo-100 mb-4" />
-                        <span className="text-[10px] font-bold text-indigo-100/50 uppercase tracking-widest mb-1">Total mAbs</span>
-                        <span className="text-2xl font-black">
+                      <div className="bg-zinc-900 p-8 rounded-[32px] flex flex-col items-center text-center shadow-xl">
+                        <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-4">
+                          <Database className="w-6 h-6 text-white" />
+                        </div>
+                        <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-1">mAbs Extracted</span>
+                        <span className="text-3xl font-black text-white">
                           {state.batch.items.reduce((acc, i) => acc + (i.result?.antibodies.length || 0), 0)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8">
-                      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 flex items-center justify-between">
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                             <ArrowUpRight className="w-5 h-5 text-zinc-400" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                         <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-[28px] flex items-center justify-between">
+                           <div className="flex items-center gap-4">
+                             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                               <CircleDollarSign className="w-6 h-6 text-emerald-500" />
+                             </div>
+                             <div>
+                               <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Est. Compute Cost</p>
+                               <p className="text-xl font-bold text-zinc-900">
+                                 ${(state.batch.items.reduce((acc, i) => acc + (i.result?.usageMetadata?.totalTokenCount || 0), 0) * 0.00000015).toFixed(4)}
+                               </p>
+                             </div>
                            </div>
-                           <div>
+                           <div className="text-right">
                              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Aggregate Tokens</p>
-                             <p className="text-lg font-bold text-zinc-900">
+                             <p className="text-xl font-bold text-zinc-900">
                                {state.batch.items.reduce((acc, i) => acc + (i.result?.usageMetadata?.totalTokenCount || 0), 0).toLocaleString()}
                              </p>
                            </div>
                          </div>
-                         <div className="text-right">
-                           <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Est. Compute Cost</p>
-                           <p className="text-sm font-black text-indigo-600">
-                             ${(state.batch.items.reduce((acc, i) => acc + (i.result?.usageMetadata?.totalTokenCount || 0), 0) * 0.00000015).toFixed(4)}
-                           </p>
+                         
+                         <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-[28px] flex items-center gap-4">
+                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                              <Layers className="w-6 h-6 text-indigo-500" />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Processing Mode</p>
+                              <p className="text-xl font-bold text-zinc-900">Neural Parallel Sync</p>
+                            </div>
                          </div>
                       </div>
-                      
-                      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 flex items-center justify-between">
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                             <FileUp className="w-5 h-5 text-zinc-400" />
-                           </div>
-                           <div>
-                             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Volume</p>
-                             <p className="text-lg font-bold text-zinc-900">
-                               {state.batch.items.length} Patents
-                             </p>
-                           </div>
-                         </div>
-                         <div className="text-right">
-                           <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Extraction Quality</p>
-                           <p className="text-sm font-black text-emerald-600">High Resolution</p>
-                         </div>
-                      </div>
-                    </div>
 
-                    <div className="w-full bg-white border border-zinc-200 rounded-3xl overflow-hidden mb-6 shadow-sm">
-                      <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Table className="w-4 h-4 text-zinc-400" />
-                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Consolidated Dataset View</p>
-                        </div>
-                        <div className="flex gap-4">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] text-zinc-600 font-bold">SUCCESS: {state.batch.items.filter(i => i.status === 'completed').length}</span>
+                      <div className="bg-white border border-zinc-200 rounded-[32px] overflow-hidden shadow-sm flex flex-col mb-12 text-left w-full">
+                        <div className="px-8 py-6 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                              <Table className="w-4 h-4 text-zinc-500" />
+                            </div>
+                            <h4 className="font-bold text-zinc-900 uppercase text-[10px] tracking-widest">Consolidated Registry</h4>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-red-500" />
-                            <span className="text-[10px] text-zinc-600 font-bold">FAIL: {state.batch.items.filter(i => i.status === 'error').length}</span>
+                          <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
+                             <span className="flex items-center gap-1.5 text-emerald-600">
+                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                               {state.batch.items.filter(i => i.status === 'completed').length} Success
+                             </span>
+                             <span className="flex items-center gap-1.5 text-red-500">
+                               <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                               {state.batch.items.filter(i => i.status === 'error').length} Fail
+                             </span>
                           </div>
                         </div>
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                      <div className="overflow-x-auto overflow-y-auto max-h-[350px] custom-scrollbar">
                         <table className="w-full text-left">
-                          <thead className="bg-zinc-50/50 text-zinc-400 text-[9px] font-black uppercase sticky top-0 backdrop-blur-md z-10">
+                          <thead className="sticky top-0 bg-white border-b border-zinc-100 z-10">
                             <tr>
-                              <th className="px-6 py-3 tracking-widest">Document Registry</th>
-                              <th className="px-6 py-3 tracking-widest text-center">Processing Status</th>
-                              <th className="px-6 py-3 tracking-widest text-right">Run Time</th>
-                              <th className="px-6 py-3 tracking-widest text-right">Yield (mAbs)</th>
+                              <th className="px-8 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Document</th>
+                              <th className="px-8 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center">Status</th>
+                              <th className="px-8 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-right">Yield (mAbs)</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100 text-[11px]">
+                          <tbody className="divide-y divide-zinc-50">
                             {state.batch.items.map((item, idx) => (
-                              <tr key={idx} className="hover:bg-indigo-50/30 transition-colors group">
-                                <td className="px-6 py-4 font-bold text-zinc-700 max-w-[240px] truncate">{item.id}</td>
-                                <td className="px-6 py-4 text-center">
-                                  <span className={cn(
-                                    "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter",
-                                    item.status === 'completed' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-red-50 text-red-600 border border-red-100"
-                                  )}>
+                              <tr key={idx} className="hover:bg-zinc-50 transition-colors group">
+                                <td className="px-8 py-4">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">{item.file.name}</span>
+                                    <span className="text-[10px] font-medium text-zinc-400 tabular-nums uppercase">
+                                      Time: {item.extractionTime ? `${(item.extractionTime / 1000).toFixed(1)}s` : '--'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-4 text-center">
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    item.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'
+                                  }`}>
+                                    <div className={`w-1 h-1 rounded-full ${item.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                                     {item.status}
                                   </span>
                                 </td>
-                                <td className="px-6 py-4 text-right font-mono text-zinc-400 group-hover:text-zinc-900 transition-colors uppercase">
-                                  {item.extractionTime ? `${(item.extractionTime / 1000).toFixed(1)}s` : '--'}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                  <span className={cn(
-                                    "font-black text-sm",
-                                    (item.result?.antibodies.length || 0) > 0 ? "text-indigo-600" : "text-zinc-300"
-                                  )}>
-                                    {item.result?.antibodies.length || 0}
-                                  </span>
+                                <td className="px-8 py-4 text-right">
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-lg font-black text-zinc-900 tabular-nums">
+                                      {item.result?.antibodies.length || 0}
+                                    </span>
+                                    {item.error && (
+                                      <span className="text-[9px] text-red-500 font-medium max-w-[150px] truncate" title={item.error}>
+                                        {item.error}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -2642,29 +2653,29 @@ function AppContent() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-6 w-full justify-center">
-                      <button
-                        onClick={handleBatchExportCsv}
-                        className="w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-[#050505] text-white rounded-[24px] font-black text-sm hover:bg-zinc-800 transition-all shadow-2xl shadow-zinc-200 group active:scale-95"
-                      >
-                        <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-                        DOWNLOAD CONSOLIDATED CSV
-                      </button>
-                      
-                      <button
-                        onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
-                        className="w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-white border border-zinc-200 text-zinc-500 rounded-[24px] font-black text-sm hover:bg-zinc-50 hover:text-zinc-900 transition-all active:scale-95"
-                      >
-                        <RotateCcw className="w-5 h-5" />
-                        PURGE & NEW BATCH
-                      </button>
+                      <div className="flex flex-col sm:flex-row items-center gap-6 w-full justify-center mt-4">
+                        <button
+                           onClick={handleBatchExportCsv}
+                           className="px-12 py-5 bg-zinc-900 text-white rounded-[24px] font-bold flex items-center gap-3 hover:bg-zinc-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl shadow-zinc-200"
+                         >
+                           <Download className="w-5 h-5" />
+                           Download Master CSV Report
+                         </button>
+                         <button
+                           onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
+                           className="px-12 py-5 bg-white border border-zinc-200 text-zinc-900 rounded-[24px] font-bold hover:bg-zinc-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                         >
+                           Start New Session
+                         </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {state.batch?.isProcessing && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-zinc-50 border border-zinc-200 rounded-2xl overflow-hidden relative">
+            {state.batch?.isProcessing && (
+              <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-8 bg-zinc-50 border border-zinc-200 rounded-2xl overflow-hidden relative">
                   {/* Remove unwanted decorative dots/squares if any */}
                   <div className="absolute inset-0 bg-[#f9fafb] opacity-50" />
                   
@@ -3152,25 +3163,25 @@ function AppContent() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-2 text-zinc-400">
-          <Database className="w-4 h-4" />
-          <span className="text-xs font-mono">SECURE BIOTECH EXTRACTION ENGINE</span>
+    {/* Footer */}
+    <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="flex items-center gap-2 text-zinc-400">
+        <Database className="w-4 h-4" />
+        <span className="text-xs font-mono">SECURE BIOTECH EXTRACTION ENGINE</span>
+      </div>
+      <div className="flex gap-8">
+        <div className="flex flex-col">
+          <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
+          <span className="text-xs font-medium">Neural Sequence Analysis</span>
         </div>
-        <div className="flex gap-8">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
-            <span className="text-xs font-medium">Neural Sequence Analysis</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
-            <span className="text-xs font-medium">Encrypted Session</span>
-          </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
+          <span className="text-xs font-medium">Encrypted Session</span>
         </div>
-      </footer>
-    </div>
-  );
+      </div>
+    </footer>
+  </div>
+);
 }
 
 export default function App() {
