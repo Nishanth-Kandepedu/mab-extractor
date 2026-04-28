@@ -2004,11 +2004,18 @@ function AppContent() {
                       
                       <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100 shadow-sm max-h-[400px] overflow-y-auto overflow-x-hidden custom-scrollbar">
                         {state.batch.items.map((item, idx) => (
-                          <div 
+                          <button 
                             key={idx} 
+                            onClick={() => {
+                              if (item.result) {
+                                setState(prev => ({ ...prev, result: item.result }));
+                              }
+                            }}
+                            disabled={!item.result}
                             className={cn(
-                              "px-4 py-3 flex items-center justify-between transition-colors",
-                              state.batch?.currentIndex === idx && item.status !== 'completed' ? "bg-indigo-50/50" : "hover:bg-zinc-50/50"
+                              "w-full px-4 py-3 flex items-center justify-between transition-colors text-left disabled:cursor-default",
+                              (state.batch?.currentIndex === idx && item.status !== 'completed') ? "bg-indigo-50/50" : 
+                              (state.result && item.result && state.result.patentId === item.result.patentId) ? "bg-indigo-100/50" : "hover:bg-zinc-50/50"
                             )}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
@@ -2055,7 +2062,7 @@ function AppContent() {
                                 </div>
                               )}
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
 
@@ -2577,6 +2584,51 @@ function AppContent() {
             </div>
           ) : (
             <>
+              {!state.result && (state.isExtracting || state.batch?.isProcessing) && (
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-zinc-50 border border-zinc-200 rounded-3xl relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px]" />
+                  <div className="relative z-10 flex flex-col items-center">
+                    <div className="relative mb-10">
+                      <div className="w-32 h-32 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-16 h-16 bg-white rounded-3xl shadow-xl flex items-center justify-center animate-pulse">
+                          <Activity className="w-8 h-8 text-indigo-600" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <h3 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight uppercase">Neural Extraction Engaged</h3>
+                    <p className="text-zinc-500 font-medium max-w-sm mb-8 leading-relaxed">
+                      Deep AI inference is active. Scanning sequence variable regions and distilling biological metadata.
+                    </p>
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="px-6 py-3 bg-white border border-zinc-200 rounded-2xl shadow-sm text-center min-w-[120px]">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Elapsed Time</p>
+                        <p className="text-2xl font-black font-mono text-zinc-900">
+                           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                        </p>
+                      </div>
+                      
+                      {state.batch && (
+                        <div className="px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl text-center min-w-[120px]">
+                          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Queue Meta</p>
+                          <p className="text-2xl font-black font-mono text-white">
+                             {state.batch.currentIndex + 1}/{state.batch.items.length}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="mt-12 flex gap-3">
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className={`w-2 h-2 rounded-full bg-indigo-500/20 animate-bounce`} style={{ animationDelay: `${i * 150}ms` }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {!state.result && !state.isExtracting && !state.batch?.isProcessing && (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-zinc-200 border-dashed rounded-2xl">
                   <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mb-4">
@@ -2666,7 +2718,40 @@ function AppContent() {
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        {state.batch && state.batch.items.some(i => i.status === 'completed') && (
+                          <div className="flex items-center bg-zinc-800 rounded-xl p-1 border border-white/5 mr-2">
+                            <button
+                              onClick={() => {
+                                const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
+                                if (currentIndex > 0) {
+                                  const prevItem = state.batch!.items.slice(0, currentIndex).reverse().find(i => i.status === 'completed');
+                                  if (prevItem?.result) setState(prev => ({ ...prev, result: prevItem.result }));
+                                }
+                              }}
+                              disabled={!state.batch.items.slice(0, state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId)).some(i => i.status === 'completed')}
+                              className="p-2 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                              title="Previous Patent"
+                            >
+                              <ChevronRight className="w-4 h-4 rotate-180" />
+                            </button>
+                            <div className="h-4 w-px bg-white/10 mx-1" />
+                            <button
+                              onClick={() => {
+                                const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
+                                if (currentIndex < state.batch!.items.length - 1) {
+                                  const nextItem = state.batch!.items.slice(currentIndex + 1).find(i => i.status === 'completed');
+                                  if (nextItem?.result) setState(prev => ({ ...prev, result: nextItem.result }));
+                                }
+                              }}
+                              disabled={!state.batch.items.slice(state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId) + 1).some(i => i.status === 'completed')}
+                              className="p-2 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                              title="Next Patent"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                         {user && !state.result.id && (
                           <button 
                             onClick={saveToFirestore}
