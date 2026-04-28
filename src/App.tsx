@@ -68,27 +68,30 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
       </div>
       
       <div className="flex flex-col gap-3 text-center mb-10">
-        {status ? (
-          <motion.p 
-            key={status}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-sm font-bold text-indigo-600 uppercase tracking-[0.2em]"
-          >
-            {status}
-          </motion.p>
-        ) : (
-          steps.map((step, i) => (
+        <div className="flex flex-col gap-2">
+          {steps.map((step, i) => (
             <p 
               key={i} 
               className={cn(
-                "text-sm font-medium tracking-wide transition-all duration-500",
-                i === Math.floor((timer / 10) % steps.length) ? "text-indigo-600 font-bold" : "text-zinc-300"
+                "text-[11px] font-bold tracking-[0.2em] uppercase transition-all duration-700",
+                i === Math.floor((timer / 5) % steps.length) ? "text-indigo-600 opacity-100 scale-105" : "text-zinc-200 opacity-40"
               )}
             >
               {step}
             </p>
-          ))
+          ))}
+        </div>
+
+        {status && (
+          <motion.div
+            key={status}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mt-6 px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-full inline-flex items-center gap-2 self-center shadow-sm"
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">{status}</span>
+          </motion.div>
         )}
       </div>
 
@@ -815,8 +818,8 @@ function AppContent() {
     }
   };
 
-  // Enrichment with UniProt Target Metadata Helper
-  const enrichResultsWithMetadata = async (result: ExtractionResult) => {
+  // Enrichment with UniProt Target Metadata Helper (Memoized)
+  const enrichResultsWithMetadata = useCallback(async (result: ExtractionResult) => {
     try {
       console.log(`[Enrichment] Initiating target metadata enrichment for patent: ${result.patentId}`);
       const uniqueTargets = Array.from(new Set(
@@ -874,7 +877,7 @@ function AppContent() {
       console.error('[Enrichment] Critical failure in enrichment helper:', enrichError);
     }
     return result;
-  };
+  }, []);
 
   const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions) => {
     if (!file) return;
@@ -993,6 +996,7 @@ function AppContent() {
     for (let i = 0; i < items.length; i++) {
        setState(prev => ({
          ...prev,
+         result: null,
          batch: { 
            ...prev.batch!, 
            currentIndex: i, 
