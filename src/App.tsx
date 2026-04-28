@@ -35,7 +35,7 @@ const AntibodyIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const LoadingScreen = ({ status, timer }: { status?: string, timer: number }) => {
+const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, timer: number, batchProgress?: { current: number, total: number } }) => {
   const steps = [
     "Scanning for variable region patterns...",
     "Identifying CDR motifs...",
@@ -44,36 +44,53 @@ const LoadingScreen = ({ status, timer }: { status?: string, timer: number }) =>
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-white p-8">
-      <div className="relative mb-8">
-        <div className="w-24 h-24 rounded-full border-4 border-indigo-50 border-t-indigo-600 animate-spin" />
+      <div className="relative mb-10">
+        <div className="w-32 h-32 rounded-full border-4 border-zinc-50 border-t-indigo-600 animate-spin" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <Database className="w-8 h-8 text-indigo-600" />
+          <div className="w-16 h-16 bg-white rounded-3xl shadow-xl flex items-center justify-center">
+            <Database className="w-8 h-8 text-indigo-600" />
+          </div>
         </div>
       </div>
       
-      <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
+      <h2 className="text-3xl font-black text-zinc-900 mb-2 tracking-tight uppercase">
         Analyzing Patent Data
       </h2>
       
-      <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 rounded-full mb-8">
-        <span className="text-sm font-bold text-indigo-600 font-mono tabular-nums">
+      <div className="inline-flex items-center gap-2 px-6 py-2 bg-indigo-50 rounded-full mb-10 border border-indigo-100/50">
+        <span className="text-lg font-black text-indigo-600 font-mono tabular-nums">
           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
         </span>
       </div>
       
-      <div className="flex flex-col gap-3 text-center">
+      <div className="flex flex-col gap-4 text-center mb-12">
         {steps.map((step, i) => (
           <p 
             key={i} 
             className={cn(
-              "text-xs font-mono tracking-wide transition-all duration-500",
-              status === step ? "text-indigo-600 font-bold" : "text-zinc-300"
+              "text-xs font-mono tracking-widest transition-all duration-700",
+              status === step ? "text-indigo-600 font-bold opacity-100" : "text-zinc-300 opacity-40 font-medium"
             )}
           >
             {step}
           </p>
         ))}
       </div>
+
+      {batchProgress && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-10 py-5 bg-zinc-900 border border-zinc-800 rounded-[32px] shadow-2xl text-center min-w-[200px]"
+        >
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2 leading-none">
+            Queue Meta
+          </p>
+          <p className="text-4xl font-black font-mono text-white tracking-tighter">
+             {batchProgress.current}<span className="text-white/20 mx-1">/</span>{batchProgress.total}
+          </p>
+        </motion.div>
+      )}
     </div>
   );
 };
@@ -2733,16 +2750,14 @@ function AppContent() {
             <>
               {!state.result && (state.isExtracting || state.batch?.isProcessing) && (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-12 bg-white border border-zinc-200 rounded-3xl relative overflow-hidden">
-                  <LoadingScreen status={state.extractingStatus} timer={timer} />
-                  
-                  {state.batch && state.batch.isProcessing && (
-                    <div className="mt-8 px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl text-center min-w-[120px] z-10">
-                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Queue Meta</p>
-                      <p className="text-2xl font-black font-mono text-white">
-                         {state.batch.currentIndex + 1}/{state.batch.items.length}
-                      </p>
-                    </div>
-                  )}
+                  <LoadingScreen 
+                    status={state.extractingStatus} 
+                    timer={timer} 
+                    batchProgress={state.batch?.isProcessing ? {
+                      current: state.batch.currentIndex + 1,
+                      total: state.batch.items.length
+                    } : undefined}
+                  />
                 </div>
               )}
 
