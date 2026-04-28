@@ -20,8 +20,12 @@ IMPORTANT EXTRACTION RULES:
    - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif (Framework 4).
    - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif (Framework 4).
    - VARIABLE DOMAIN ONLY (Fv): You MUST only extract the Variable Domain. Do NOT include the Constant Region (CH1, CH2, CH3, CL, or Hinges).
-   - DISCARD CONSERVED REGIONS: Sequences starting with "ASTKGP..." (CH1) or "RTVAAP..." (CL) are CONSTANT REGIONS and must be excluded. Truncate the sequence immediately after the J-segment (e.g., after ...VTVSS for VH or ...VEIK for VL).
-   - If the source contains the full chain, you MUST truncate it for the variable domain result.
+   - DISCARD CONSERVED REGIONS: Sequences starting with "ASTKGP..." (CH1) or "RTVAAP..." (CL) are CONSTANT REGIONS and must be excluded. 
+   - TRUNCATION RULE: Truncate the sequence immediately after the J-segment motifs:
+     * VH: Ends after ...VTVSS or ...WGXG.
+     * VL (Kappa/Lambda): Ends after ...VEIK, ...VFGXG, or ...FGGGTK.
+   - If the source contains the full chain, you MUST truncate it to the variable domain (max ~130 AA). Anything beyond the J-motif (VTVSS/VEIK) is a constant region and MUST be deleted from the extracted sequence. Extract ONLY the Fv.
+   - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
 
 4. Table Structure & Coverage:
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
@@ -36,7 +40,8 @@ IMPORTANT EXTRACTION RULES:
     - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
 6. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
-    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules or transcription factors (e.g., STAT1, SMAD). 
+    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules, transcription factors, or readout proteins (e.g., STAT1, SMAD, luciferase, pSTAT1). 
+    - Example: If an antibody blocks "IFN-gamma signaling" and the patent measures "STAT1 phosphorylation", the target is "IFN-gamma", NOT "STAT1".
     - You must extract the antigen that the antibody is designed to bind to. 
     - Include this target and include it as "target" in every chain object.
 7. ID-Mapping & Cross-Referencing Strategy: 
@@ -487,6 +492,62 @@ export async function extractWithLLM(
       if (isCH1 || isCL) {
         needsReview = true;
         reviewReason += ` [Potential Constant Region Detected: ${isCH1 ? 'CH1' : 'CL'}]`;
+      }
+
+      // Hard Truncation for Variable Domains 
+      // J-Region motifs often indicate the end of the variable domain.
+      // VH usually ends with VTVSS. VL usually ends with VEIK or similar.
+      const jMotifs = [
+        /VTVSS[A-Z]*/,           // VH standard
+        /VTVSA[A-Z]*/,           // VH variant
+        /VEIK[A-Z]*/,            // VL Kappa standard
+        /LEIK[A-Z]*/,            // VL Kappa variant
+        /VFG[A-Z]GTK[A-Z]*/,     // VL motif
+        /FGGGTK[A-Z]*/          // VL variant
+      ];
+
+      // If sequence is suspiciously long or constant region is detected, find J-motif and truncate
+      if (seq.length > 135 || isCH1 || isCL) {
+        let bestIndex = -1;
+        let matchedMotif = "";
+        
+        // Find the earliest occurrence of any J-motif that is at a reasonable position (>90 AA)
+        for (const motif of jMotifs) {
+          const match = seq.match(motif);
+          if (match && match.index !== undefined) {
+            // We look for VTVSS/VEIK which should be between 100-130 usually
+            if (match.index > 90 && (bestIndex === -1 || match.index < bestIndex)) {
+              // Extract the base motif length (e.g., VTVSS is 5)
+              // match[0] might include trailing stuff because of the regex, 
+              // but we only want to truncate AFTER the conserved part.
+              // VTVSS is index 0-4, so we truncate at index 5.
+              const baseMotifLength = motif.source.split('[')[0].length;
+              bestIndex = match.index + baseMotifLength;
+              matchedMotif = match[0].substring(0, baseMotifLength);
+            }
+          }
+        }
+
+        if (bestIndex !== -1) {
+          const originalLength = seq.length;
+          seq = seq.substring(0, bestIndex);
+          if (originalLength > bestIndex + 5) {
+            needsReview = true;
+            reviewReason += ` [Auto-truncated at ${matchedMotif}]`;
+          }
+        } else if (seq.length > 140) {
+          // If no motif found but still long, and it contains common constant region starts, truncate there
+          const cStarts = ["ASTKGP", "RTVAAP", "RTVAAPSVF"];
+          for (const start of cStarts) {
+            const cIndex = seq.indexOf(start);
+            if (cIndex > 90) {
+              seq = seq.substring(0, cIndex);
+              needsReview = true;
+              reviewReason += ` [Truncated at found Constant Region start: ${start}]`;
+              break;
+            }
+          }
+        }
       }
       
       // Re-calculate CDR indices to ensure they sync with the full sequence

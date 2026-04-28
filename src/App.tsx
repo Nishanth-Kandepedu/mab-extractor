@@ -37,56 +37,80 @@ const AntibodyIcon = ({ className }: { className?: string }) => (
 
 const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, timer: number, batchProgress?: { current: number, total: number } }) => {
   const steps = [
-    "Scanning for variable region patterns...",
-    "Identifying CDR motifs...",
-    "Validating multiple antibody entries..."
+    "Initializing Neural Engine",
+    "Identifying Variable Patterns",
+    "Processing Multimodal Signals",
+    "Validating Verbatim Integrity",
+    "Synchronizing CDR Coordinates",
+    "Generating Neural Summary"
   ];
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-white p-8">
-      <div className="relative mb-10">
-        <div className="w-24 h-24 rounded-full border-4 border-indigo-100/30 flex items-center justify-center relative">
-          <div className="absolute inset-0 rounded-full border-4 border-t-indigo-600 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
-          <Database className="w-8 h-8 text-indigo-600" />
+      <div className="relative mb-12">
+        {/* Modern Loader Ring - Simple and Clean per screenshot */}
+        <div className="w-32 h-32 rounded-full border-4 border-indigo-50 relative flex items-center justify-center">
+          <div 
+            className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 border-r-indigo-600 border-b-indigo-600 animate-spin" 
+          />
+          <Database className="w-10 h-10 text-indigo-600" />
         </div>
       </div>
       
-      <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">
-        Analyzing Patent Data
+      <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
+        Neural Extraction in Progress
       </h2>
       
-      <div className="inline-flex items-center gap-2 px-5 py-1.5 bg-indigo-50/50 rounded-full mb-8">
-        <span className="text-sm font-bold text-indigo-600 font-mono tabular-nums">
+      <div className="mb-10">
+        <span className="px-5 py-1.5 bg-zinc-900 text-white rounded-full text-lg font-bold font-mono tracking-tight shadow-lg">
           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
         </span>
       </div>
       
-      <div className="flex flex-col gap-2.5 text-center mb-10">
-        {steps.map((step, i) => (
-          <p 
-            key={i} 
-            className={cn(
-              "text-xs font-medium tracking-wide transition-all duration-700",
-              status === step ? "text-zinc-400 font-bold" : "text-zinc-200"
-            )}
+      <div className="flex flex-col gap-3 text-center mb-10">
+        {status ? (
+          <motion.p 
+            key={status}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-sm font-bold text-indigo-600 uppercase tracking-[0.2em]"
           >
-            {step}
-          </p>
-        ))}
+            {status}
+          </motion.p>
+        ) : (
+          steps.map((step, i) => (
+            <p 
+              key={i} 
+              className={cn(
+                "text-sm font-medium tracking-wide transition-all duration-500",
+                i === Math.floor((timer / 10) % steps.length) ? "text-indigo-600 font-bold" : "text-zinc-300"
+              )}
+            >
+              {step}
+            </p>
+          ))
+        )}
       </div>
 
       {batchProgress && (
         <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-6 py-3 bg-zinc-900 rounded-2xl shadow-xl text-center min-w-[120px]"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="px-10 py-5 bg-zinc-900 rounded-[32px] shadow-2xl text-center border border-white/5"
         >
-          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1 leading-none">
-            Queue Meta
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2 leading-none">
+            Queue Progress
           </p>
-          <p className="text-2xl font-black font-mono text-white">
-             {batchProgress.current}<span className="text-white/20 mx-1">/</span>{batchProgress.total}
+          <p className="text-4xl font-black font-mono text-white tracking-tighter">
+             {batchProgress.current}<span className="text-white/20 mx-1 text-2xl">/</span>{batchProgress.total}
           </p>
+          <div className="w-full h-1.5 bg-white/10 rounded-full mt-4 overflow-hidden">
+            <motion.div 
+              className="h-full bg-indigo-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+            />
+          </div>
         </motion.div>
       )}
     </div>
@@ -3026,11 +3050,22 @@ function AppContent() {
                         </div>
                         
                         {mAb.needsReview && mAb.reviewReason && (
-                          <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-xs text-red-700 flex items-start gap-3">
-                            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <div className="bg-white border-2 border-red-500 rounded-xl p-4 text-xs text-red-700 flex items-start gap-3 shadow-sm">
+                            <div className="bg-red-50 p-1.5 rounded-lg">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                            </div>
                             <div>
-                              <span className="font-bold block mb-1">Review Reason:</span>
-                              {mAb.reviewReason}
+                              <span className="font-black text-red-600 uppercase tracking-wider text-[10px] block mb-1">
+                                Critical Extraction Alert
+                              </span>
+                              <div className="space-y-1 font-medium leading-relaxed">
+                                {mAb.reviewReason.split(']').filter(Boolean).map((reason, i) => (
+                                  <p key={i} className="flex items-center gap-2">
+                                    <span className="w-1 h-1 rounded-full bg-red-400" />
+                                    {reason.replace('[', '').trim()}
+                                  </p>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         )}
