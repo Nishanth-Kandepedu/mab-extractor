@@ -212,7 +212,7 @@ function repairAndParseJson(jsonStr: string): any {
   }
 }
 
-async function _extractWithLLM(
+export async function extractWithLLM(
   input: string | { data: string; mimeType: string },
   options: LLMOptions,
   pageContext?: string,
@@ -661,30 +661,4 @@ async function _extractWithLLM(
     }
     throw e;
   }
-}
-
-export async function extractWithLLM(
-  input: string | { data: string; mimeType: string },
-  options: LLMOptions,
-  pageContext?: string,
-  sequenceListing?: { data: string; mimeType: string },
-  prioritySeqIds?: string
-): Promise<ExtractionResult> {
-  let attempts = 0;
-  const maxRetries = 1;
-  let lastError: any;
-
-  while (attempts <= maxRetries) {
-    try {
-      return await _extractWithLLM(input, options, pageContext, sequenceListing, prioritySeqIds);
-    } catch (err: any) {
-      lastError = err;
-      attempts++;
-      if (attempts <= maxRetries) {
-        console.warn(`[Extraction] Overall job effort failed (Attempt ${attempts}/${maxRetries + 1}). Retrying in 3s... Error: ${err.message}`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-    }
-  }
-  throw lastError;
 }

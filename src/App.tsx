@@ -156,7 +156,11 @@ function AppContent() {
     isExtracting: false,
     result: null,
     error: null,
-    batch: undefined
+    batch: {
+      isProcessing: false,
+      items: [],
+      currentIndex: -1
+    }
   });
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
@@ -619,16 +623,8 @@ function AppContent() {
       console.error('Logout failed:', err);
     } finally {
       setUser(null);
-      setState({
-        isExtracting: false,
-        result: null,
-        error: null,
-        batch: undefined
-      });
-      setTimer(0);
+      setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
       setPageRange('');
-      setPrioritySeqIds('');
-      setSequenceListingFile(null);
       setShowAdminDashboard(false);
       setShowHistory(false);
       setHistory([]);
@@ -1031,92 +1027,69 @@ function AppContent() {
            listingMimeType = sequenceListingFile.type;
          }
 
-          let result: ExtractionResult | undefined;
-          let itemError: any = null;
-          const ATTEMPTS = 2;
+         const itemStartTime = Date.now();
+         
+         // Update status periodically for batch items too
+         const statusTimer = setTimeout(() => {
+           setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+         }, 30000);
 
-          for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-            try {
-              const itemStartTime = Date.now();
-              
-              // Update status periodically for batch items too
-              const statusTimer = setTimeout(() => {
-                setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
-              }, 30000);
+         const statusTimer2 = setTimeout(() => {
+           setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+         }, 60000);
 
-              const statusTimer2 = setTimeout(() => {
-                setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
-              }, 60000);
+         const result = await extractWithLLM(
+           { data: fileData, mimeType: item.file.type }, 
+           currentLlmOptions, 
+           pageRange, 
+           listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+           prioritySeqIds
+         );
+         
+         clearTimeout(statusTimer);
+         clearTimeout(statusTimer2);
+         const itemExtractionTime = Date.now() - itemStartTime;
+         result.extractionTime = itemExtractionTime;
 
-              result = await extractWithLLM(
-                { data: fileData, mimeType: item.file.type }, 
-                currentLlmOptions, 
-                pageRange, 
-                listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-                prioritySeqIds
-              );
-              
-              clearTimeout(statusTimer);
-              clearTimeout(statusTimer2);
-              
-              if (result) {
-                const itemExtractionTime = Date.now() - itemStartTime;
-                result.extractionTime = itemExtractionTime;
+         // Enrichment for Batch Mode
+         await enrichResultsWithMetadata(result);
 
-                // Enrichment for Batch Mode
-                await enrichResultsWithMetadata(result);
+         setState(prev => ({
+           ...prev,
+           result: result,
+           batch: {
+             ...prev.batch!,
+             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result, extractionTime: itemExtractionTime } : it)
+           }
+         }));
 
-                setState(prev => ({
-                  ...prev,
-                  result: result!,
-                  batch: {
-                    ...prev.batch!,
-                    items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result: result!, extractionTime: itemExtractionTime } : it)
-                  }
-                }));
+         if (user && user.role !== 'guest') {
+            const { id: _id, ...resultData } = result as any;
+            await addDoc(collection(db, 'extractions'), {
+              ...resultData,
+              userId: user.uid,
+              userDisplayName: user.displayName || 'Batch Processor',
+              createdAt: Timestamp.now(),
+              status: 'pending',
+              batchId: 'batch_' + batchStartTime,
+              autoSaved: true
+            });
+         }
 
-                if (user && user.role !== 'guest') {
-                  const { id: _id, ...resultData } = result as any;
-                  await addDoc(collection(db, 'extractions'), {
-                    ...resultData,
-                    userId: user.uid,
-                    userDisplayName: user.displayName || 'Batch Processor',
-                    createdAt: Timestamp.now(),
-                    status: 'pending',
-                    batchId: 'batch_' + batchStartTime,
-                    autoSaved: true
-                  });
-                }
-                itemError = null;
-                break; // SUCCESS
-              }
-            } catch (error: any) {
-              itemError = error;
-              console.warn(`Batch item ${item.id} failed (Attempt ${attempt}/${ATTEMPTS}):`, error);
-              if (attempt < ATTEMPTS) {
-                setState(prev => ({ ...prev, extractingStatus: `Retrying patent ${i + 1} (${attempt}/${ATTEMPTS})...` }));
-                await new Promise(resolve => setTimeout(resolve, 5000));
-              }
-            }
-          }
-
-          if (itemError) {
-            setState(prev => ({
-              ...prev,
-              batch: {
-                ...prev.batch!,
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: itemError.message || String(itemError) } : it)
-              }
-            }));
-          }
-
-          } catch (error: any) {
-            console.error(`Batch item setup error:`, error);
-          }
+       } catch (error: any) {
+         console.error(`Batch item ${item.id} failed:`, error);
+         setState(prev => ({
+           ...prev,
+           batch: {
+             ...prev.batch!,
+             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
+           }
+         }));
+       }
 
        // Cooldown period between patents
        if (i < items.length - 1) {
-         const COOLDOWN_SECONDS = 30;
+         const COOLDOWN_SECONDS = 2;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
@@ -1731,18 +1704,12 @@ function AppContent() {
                   <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ 
-                        width: (state.batch && state.batch.items.length > 0)
-                          ? `${(state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100}%` 
-                          : "0%" 
-                      }}
+                      animate={{ width: `${(state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100}%` }}
                       className="h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"
                     />
                   </div>
                   <span className="text-[10px] font-mono text-zinc-400">
-                    {state.batch && state.batch.items.length > 0 
-                      ? Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100) 
-                      : 0}%
+                    {Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100)}%
                   </span>
                 </div>
               </div>
@@ -2158,7 +2125,7 @@ function AppContent() {
                         </div>
                         {state.batch.currentIndex === state.batch.items.length && (
                           <button
-                            onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
+                            onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
                             className="text-[9px] text-zinc-400 font-bold uppercase hover:text-red-500 transition-colors flex items-center gap-1"
                           >
                             <RotateCcw className="w-3 h-3" />
