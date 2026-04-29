@@ -919,16 +919,29 @@ function AppContent() {
         setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
       }, 60000);
 
-      const result = await extractWithLLM(
-        { data: fileData, mimeType: file.type }, 
-        activeOptions, 
-        pageRange,
-        listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-        prioritySeqIds
+      const statusTimer3 = setTimeout(() => {
+        setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
+      }, 180000);
+
+      // Hard 5-minute timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Extraction timed out after 5 minutes")), 300000)
       );
+
+      const result = await Promise.race([
+        extractWithLLM(
+          { data: fileData, mimeType: file.type }, 
+          activeOptions, 
+          pageRange,
+          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+          prioritySeqIds
+        ),
+        timeoutPromise
+      ]) as ExtractionResult;
 
       clearTimeout(statusTimer);
       clearTimeout(statusTimer2);
+      clearTimeout(statusTimer3);
       result.extractionTime = Date.now() - startTime;
       
       // Enrichment with UniProt Target Metadata
@@ -1033,79 +1046,80 @@ function AppContent() {
 
           let result: ExtractionResult | undefined;
           let itemError: any = null;
-          const ATTEMPTS = 2;
 
-          for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-            try {
-              const itemStartTime = Date.now();
-              
-              // Update status periodically for batch items too
-              const statusTimer = setTimeout(() => {
-                setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
-              }, 30000);
+          try {
+            const itemStartTime = Date.now();
+            
+            // Update status periodically for batch items too
+            const statusTimer1 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+            }, 30000);
 
-              const statusTimer2 = setTimeout(() => {
-                setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
-              }, 60000);
+            const statusTimer2 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+            }, 60000);
 
-              result = await extractWithLLM(
+            const statusTimer3 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
+            }, 180000);
+
+            // Hard 5-minute timeout for a single patent
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Patent extraction timed out after 5 minutes")), 300000)
+            );
+
+            result = await Promise.race([
+              extractWithLLM(
                 { data: fileData, mimeType: item.file.type }, 
                 currentLlmOptions, 
                 pageRange, 
                 listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
                 prioritySeqIds
-              );
-              
-              clearTimeout(statusTimer);
-              clearTimeout(statusTimer2);
-              
-              if (result) {
-                const itemExtractionTime = Date.now() - itemStartTime;
-                result.extractionTime = itemExtractionTime;
+              ),
+              timeoutPromise
+            ]) as ExtractionResult;
+            
+            clearTimeout(statusTimer1);
+            clearTimeout(statusTimer2);
+            clearTimeout(statusTimer3);
+            
+            if (result) {
+              const itemExtractionTime = Date.now() - itemStartTime;
+              result.extractionTime = itemExtractionTime;
 
-                // Enrichment for Batch Mode
-                await enrichResultsWithMetadata(result);
+              // Enrichment for Batch Mode
+              await enrichResultsWithMetadata(result);
 
-                setState(prev => ({
-                  ...prev,
-                  result: result!,
-                  batch: {
-                    ...prev.batch!,
-                    items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result: result!, extractionTime: itemExtractionTime } : it)
-                  }
-                }));
-
-                if (user && user.role !== 'guest') {
-                  const { id: _id, ...resultData } = result as any;
-                  await addDoc(collection(db, 'extractions'), {
-                    ...resultData,
-                    userId: user.uid,
-                    userDisplayName: user.displayName || 'Batch Processor',
-                    createdAt: Timestamp.now(),
-                    status: 'pending',
-                    batchId: 'batch_' + batchStartTime,
-                    autoSaved: true
-                  });
+              setState(prev => ({
+                ...prev,
+                result: result!,
+                batch: {
+                  ...prev.batch!,
+                  items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result: result!, extractionTime: itemExtractionTime } : it)
                 }
-                itemError = null;
-                break; // SUCCESS
-              }
-            } catch (error: any) {
-              itemError = error;
-              console.warn(`Batch item ${item.id} failed (Attempt ${attempt}/${ATTEMPTS}):`, error);
-              if (attempt < ATTEMPTS) {
-                setState(prev => ({ ...prev, extractingStatus: `Retrying patent ${i + 1} (${attempt}/${ATTEMPTS})...` }));
-                await new Promise(resolve => setTimeout(resolve, 5000));
+              }));
+
+              if (user && user.role !== 'guest') {
+                const { id: _id, ...resultData } = result as any;
+                await addDoc(collection(db, 'extractions'), {
+                  ...resultData,
+                  userId: user.uid,
+                  userDisplayName: user.displayName || 'Batch Processor',
+                  createdAt: Timestamp.now(),
+                  status: 'pending',
+                  batchId: 'batch_' + batchStartTime,
+                  autoSaved: true
+                });
               }
             }
-          }
-
-          if (itemError) {
+          } catch (error: any) {
+            itemError = error;
+            console.error(`Batch item ${item.id} failed:`, error);
             setState(prev => ({
               ...prev,
               batch: {
                 ...prev.batch!,
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: itemError.message || String(itemError) } : it)
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
               }
             }));
           }
@@ -1120,6 +1134,7 @@ function AppContent() {
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
+             extractingStatus: `Cooldown: Waiting ${seconds}s for next patent...`,
              batch: { ...prev.batch!, cooldownRemaining: seconds }
            }));
            await new Promise(resolve => setTimeout(resolve, 1000));

@@ -409,7 +409,7 @@ async function _extractWithLLM(
     // 2. Poll for results
     let result: ExtractionResult | null = null;
     let attempts = 0;
-    const maxAttempts = 120; // 10 minutes (5s intervals)
+    const maxAttempts = 72; // 6 minutes (5s intervals)
 
     const baseUrl = window.location.origin;
 
