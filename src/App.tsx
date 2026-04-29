@@ -156,11 +156,7 @@ function AppContent() {
     isExtracting: false,
     result: null,
     error: null,
-    batch: {
-      isProcessing: false,
-      items: [],
-      currentIndex: -1
-    }
+    batch: undefined
   });
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
@@ -623,8 +619,16 @@ function AppContent() {
       console.error('Logout failed:', err);
     } finally {
       setUser(null);
-      setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
+      setState({
+        isExtracting: false,
+        result: null,
+        error: null,
+        batch: undefined
+      });
+      setTimer(0);
       setPageRange('');
+      setPrioritySeqIds('');
+      setSequenceListingFile(null);
       setShowAdminDashboard(false);
       setShowHistory(false);
       setHistory([]);
@@ -2125,7 +2129,7 @@ function AppContent() {
                         </div>
                         {state.batch.currentIndex === state.batch.items.length && (
                           <button
-                            onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
+                            onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
                             className="text-[9px] text-zinc-400 font-bold uppercase hover:text-red-500 transition-colors flex items-center gap-1"
                           >
                             <RotateCcw className="w-3 h-3" />
