@@ -1274,9 +1274,9 @@ function AppContent() {
           targetUniProtId: mAb.targetMetadata?.uniprotId || '',
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
           targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
-          biologicalSource: mAb.biologicalSource || '',
-          antibodyOrigin: mAb.antibodyOrigin || '',
-          epitope: mAb.epitope || '',
+          'Target Species (Standardized)': mAb.targetSpecies || '',
+          'Antibody Origin/Generation': mAb.antibodyOrigin || '',
+          'Epitope Residues': mAb.epitope || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -1341,9 +1341,9 @@ function AppContent() {
             VH_SeqID: vhChain?.seqId || '',
             VL_SeqID: vlChain?.seqId || '',
             target: vhChain?.target || vlChain?.target || '',
-            biologicalSource: mAb.biologicalSource || '',
-            antibodyOrigin: mAb.antibodyOrigin || '',
-            epitope: mAb.epitope || '',
+            'Target Species (Standardized)': mAb.targetSpecies || '',
+            'Antibody Origin/Generation': mAb.antibodyOrigin || '',
+            'Epitope Residues': mAb.epitope || '',
             VH_Sequence: vhChain?.fullSequence || '',
             VL_Sequence: vlChain?.fullSequence || ''
           });
@@ -3057,16 +3057,16 @@ function AppContent() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3 mt-1 flex-wrap justify-center">
-                              {mAb.biologicalSource && (
+                              {mAb.targetSpecies && (
                                 <div className="flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-bold uppercase tracking-wider">
                                   <Activity className="w-2.5 h-2.5" />
-                                  {mAb.biologicalSource}
+                                  Target: {mAb.targetSpecies}
                                 </div>
                               )}
                               {mAb.antibodyOrigin && (
                                 <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-100 font-bold uppercase tracking-wider">
                                   <Fingerprint className="w-2.5 h-2.5" />
-                                  {mAb.antibodyOrigin}
+                                  Origin: {mAb.antibodyOrigin}
                                 </div>
                               )}
                               {mAb.epitope && (

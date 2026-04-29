@@ -76,7 +76,7 @@ export interface Antibody {
   tableId?: string;
   targetMetadata?: TargetMetadata;
   epitope?: string;
-  biologicalSource?: string;
+  targetSpecies?: string;
   antibodyOrigin?: string;
 }
 
