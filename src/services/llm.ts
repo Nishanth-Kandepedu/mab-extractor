@@ -363,8 +363,7 @@ async function _extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: activeInstruction,
-      // Use BALANCED thinking instead of HIGH to prevent excessive latency in batch jobs
-      thinkingLevel: (model?.includes('-pro') || isGemma4) ? "BALANCED" : undefined,
+      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
       responseSchema: responseSchema,
     });
 
@@ -410,7 +409,7 @@ async function _extractWithLLM(
     // 2. Poll for results
     let result: ExtractionResult | null = null;
     let attempts = 0;
-    const maxAttempts = 240; // 20 minutes (5s intervals)
+    const maxAttempts = 120; // 10 minutes (5s intervals)
 
     const baseUrl = window.location.origin;
 
@@ -424,10 +423,7 @@ async function _extractWithLLM(
         });
         if (!statusResponse.ok) {
           console.error(`[Extraction] Status check failed: ${statusResponse.status} ${statusResponse.statusText}`);
-          // Add a small delay and retry status check instead of failing immediately on transient network errors
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          attempts++;
-          continue;
+          throw new Error(`Failed to check job status: ${statusResponse.status}`);
         }
 
         const job = await statusResponse.json();
@@ -467,7 +463,7 @@ async function _extractWithLLM(
     }
 
     if (!result) {
-      throw new Error(`Extraction timed out after ${Math.round((maxAttempts * 5) / 60)} minutes.`);
+      throw new Error("Extraction timed out after 10 minutes.");
     }
   
   // Post-processing and Validation

@@ -919,39 +919,16 @@ function AppContent() {
         setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
       }, 60000);
 
-      const statusTimer3 = setTimeout(() => {
-        setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
-      }, 180000);
-
-      const statusTimer4 = setTimeout(() => {
-        setState(prev => ({ ...prev, extractingStatus: "Synthesizing full chain alignments..." }));
-      }, 300000);
-
-      const statusTimer5 = setTimeout(() => {
-        setState(prev => ({ ...prev, extractingStatus: "Cross-referencing sequence coordinates..." }));
-      }, 600000);
-
-      // Hard 25-minute timeout
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Extraction timed out after 25 minutes")), 1500000)
+      const result = await extractWithLLM(
+        { data: fileData, mimeType: file.type }, 
+        activeOptions, 
+        pageRange,
+        listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+        prioritySeqIds
       );
-
-      const result = await Promise.race([
-        extractWithLLM(
-          { data: fileData, mimeType: file.type }, 
-          activeOptions, 
-          pageRange,
-          listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-          prioritySeqIds
-        ),
-        timeoutPromise
-      ]) as ExtractionResult;
 
       clearTimeout(statusTimer);
       clearTimeout(statusTimer2);
-      clearTimeout(statusTimer3);
-      clearTimeout(statusTimer4);
-      clearTimeout(statusTimer5);
       result.extractionTime = Date.now() - startTime;
       
       // Enrichment with UniProt Target Metadata
@@ -1007,7 +984,7 @@ function AppContent() {
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
 
   const runBatch = useCallback(async () => {
-    if (!state.batch || state.batch.items.length === 0 || state.batch.isProcessing) return;
+    if (!state.batch || state.batch.items.length === 0) return;
     
     setTimer(0);
     const batchStartTime = Date.now();
@@ -1056,97 +1033,79 @@ function AppContent() {
 
           let result: ExtractionResult | undefined;
           let itemError: any = null;
+          const ATTEMPTS = 2;
 
-          try {
-            const itemStartTime = Date.now();
-            
-            // Update status periodically for batch items too
-            const statusTimer1 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
-            }, 30000);
+          for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+            try {
+              const itemStartTime = Date.now();
+              
+              // Update status periodically for batch items too
+              const statusTimer = setTimeout(() => {
+                setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+              }, 30000);
 
-            const statusTimer2 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
-            }, 60000);
+              const statusTimer2 = setTimeout(() => {
+                setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+              }, 60000);
 
-            const statusTimer3 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
-            }, 180000);
-
-            const statusTimer4 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: "Synthesizing full chain alignments..." }));
-            }, 300000);
-
-            const statusTimer5 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: "Cross-referencing sequence coordinates..." }));
-            }, 600000);
-
-            // Hard 25-minute timeout for a single patent
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Patent extraction timed out after 25 minutes")), 1500000)
-            );
-
-            result = await Promise.race([
-              extractWithLLM(
+              result = await extractWithLLM(
                 { data: fileData, mimeType: item.file.type }, 
                 currentLlmOptions, 
                 pageRange, 
                 listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
                 prioritySeqIds
-              ),
-              timeoutPromise
-            ]) as ExtractionResult;
-            
-            clearTimeout(statusTimer1);
-            clearTimeout(statusTimer2);
-            clearTimeout(statusTimer3);
-            clearTimeout(statusTimer4);
-            clearTimeout(statusTimer5);
-            
-            if (result) {
-              const itemExtractionTime = Date.now() - itemStartTime;
-              result.extractionTime = itemExtractionTime;
+              );
+              
+              clearTimeout(statusTimer);
+              clearTimeout(statusTimer2);
+              
+              if (result) {
+                const itemExtractionTime = Date.now() - itemStartTime;
+                result.extractionTime = itemExtractionTime;
 
-              // Enrichment for Batch Mode (with 60s safety timeout to prevent stalling entire batch)
-              try {
-                const enrichmentPromise = enrichResultsWithMetadata(result);
-                const enrichmentTimeout = new Promise(resolve => setTimeout(() => resolve('timeout'), 60000));
-                const res = await Promise.race([enrichmentPromise, enrichmentTimeout]);
-                if (res === 'timeout') console.warn(`[Batch] Enrichment timed out for ${item.id}`);
-              } catch (enrichErr) {
-                console.warn(`[Batch] Enrichment error for ${item.id}:`, enrichErr);
-              }
+                // Enrichment for Batch Mode
+                await enrichResultsWithMetadata(result);
 
-              setState(prev => ({
-                ...prev,
-                result: result!,
-                batch: {
-                  ...prev.batch!,
-                  items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result: result!, extractionTime: itemExtractionTime } : it)
+                setState(prev => ({
+                  ...prev,
+                  result: result!,
+                  batch: {
+                    ...prev.batch!,
+                    items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result: result!, extractionTime: itemExtractionTime } : it)
+                  }
+                }));
+
+                if (user && user.role !== 'guest') {
+                  const { id: _id, ...resultData } = result as any;
+                  await addDoc(collection(db, 'extractions'), {
+                    ...resultData,
+                    userId: user.uid,
+                    userDisplayName: user.displayName || 'Batch Processor',
+                    createdAt: Timestamp.now(),
+                    status: 'pending',
+                    batchId: 'batch_' + batchStartTime,
+                    autoSaved: true
+                  });
                 }
-              }));
-
-              if (user && user.role !== 'guest') {
-                const { id: _id, ...resultData } = result as any;
-                await addDoc(collection(db, 'extractions'), {
-                  ...resultData,
-                  userId: user.uid,
-                  userDisplayName: user.displayName || 'Batch Processor',
-                  createdAt: Timestamp.now(),
-                  status: 'pending',
-                  batchId: 'batch_' + batchStartTime,
-                  autoSaved: true
-                });
+                itemError = null;
+                break; // SUCCESS
+              }
+            } catch (error: any) {
+              itemError = error;
+              console.warn(`Batch item ${item.id} failed (Attempt ${attempt}/${ATTEMPTS}):`, error);
+              if (attempt < ATTEMPTS) {
+                setState(prev => ({ ...prev, extractingStatus: `Retrying patent ${i + 1} (${attempt}/${ATTEMPTS})...` }));
+                await new Promise(resolve => setTimeout(resolve, 5000));
               }
             }
-          } catch (error: any) {
-            itemError = error;
-            console.error(`Batch item ${item.id} failed:`, error);
+          }
+
+          if (itemError) {
             setState(prev => ({
               ...prev,
               batch: {
                 ...prev.batch!,
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: itemError.message || String(itemError) } : it)
               }
             }));
           }
@@ -1161,7 +1120,6 @@ function AppContent() {
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
-             extractingStatus: `Cooldown: Waiting ${seconds}s for next patent...`,
              batch: { ...prev.batch!, cooldownRemaining: seconds }
            }));
            await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1910,7 +1868,7 @@ function AppContent() {
                       onClick={() => setLlmOptions(prev => ({ 
                         ...prev, 
                         provider: p, 
-                        model: p === 'gemini' ? 'gemini-2.0-flash' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                        model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
                         "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
@@ -1932,9 +1890,9 @@ function AppContent() {
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fastest)</option>
-                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Balanced)</option>
-                    <option value="gemini-2.0-flash-thinking-exp">Gemini 2.0 Thinking (Deep)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
                   </>
                 )}
                 {llmOptions.provider === 'gemma' && (
