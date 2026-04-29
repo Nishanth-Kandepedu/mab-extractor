@@ -1140,10 +1140,6 @@ function AppContent() {
             targetUniProtId: mAb.targetMetadata?.uniprotId || '',
             targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
             targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
-            epitope: mAb.epitopeInfo || '',
-            antigenOrigin: mAb.antigenOrigin || '',
-            antibodyOrigin: mAb.antibodyOrigin || '',
-            developmentalTechnology: mAb.developmentalTechnology || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
@@ -1278,10 +1274,6 @@ function AppContent() {
           targetUniProtId: mAb.targetMetadata?.uniprotId || '',
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
           targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
-          epitope: mAb.epitopeInfo || '',
-          antigenOrigin: mAb.antigenOrigin || '',
-          antibodyOrigin: mAb.antibodyOrigin || '',
-          developmentalTechnology: mAb.developmentalTechnology || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -3033,26 +3025,6 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
-                              {mAb.epitopeInfo && (
-                                <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100" title="Epitope Information">
-                                  {mAb.epitopeInfo}
-                                </span>
-                              )}
-                              {mAb.antigenOrigin && (
-                                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100" title="Antigen Origin">
-                                  {mAb.antigenOrigin}
-                                </span>
-                              )}
-                              {mAb.antibodyOrigin && (
-                                <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-100" title="Antibody Origin">
-                                  {mAb.antibodyOrigin}
-                                </span>
-                              )}
-                              {mAb.developmentalTechnology && (
-                                <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded border border-purple-100" title="Developmental Technology">
-                                  {mAb.developmentalTechnology}
-                                </span>
-                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}

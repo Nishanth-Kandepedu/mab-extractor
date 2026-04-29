@@ -62,10 +62,6 @@ export interface TargetMetadata {
 
 export interface Antibody {
   mAbName: string;
-  epitopeInfo?: string;
-  antigenOrigin?: string;
-  antibodyOrigin?: string;
-  developmentalTechnology?: string;
   chains: Chain[];
   confidence: number;
   summary: string;
