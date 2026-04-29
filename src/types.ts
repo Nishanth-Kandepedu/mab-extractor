@@ -15,7 +15,6 @@ export interface Chain {
   hasNonStandardAminoAcids?: boolean;
   nonStandardAminoAcids?: string[];
   target?: string;
-  targetMetadata?: TargetMetadata;
 }
 
 export type ExtractionTier = 'fast' | 'balanced' | 'extended';
@@ -109,7 +108,6 @@ export interface UserProfile {
   createdAt?: any;
   disabled?: boolean;
   lastActive?: any;
-  webhookUrl?: string;
 }
 
 export interface ActivityLog {
@@ -138,7 +136,6 @@ export interface ExtractionResult {
   tier?: ExtractionTier;
   modelUsed?: string;
   isSarMode?: boolean;
-  targetMetadataMap?: Record<string, TargetMetadata>;
 }
 
 export interface BatchItem {

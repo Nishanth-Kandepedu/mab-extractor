@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -11,7 +11,6 @@ import { auth, signIn, logout, db, handleFirestoreError, OperationType } from '.
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
 import Papa from 'papaparse';
-import { generateSqlDump } from './lib/sqlExport';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -180,14 +179,10 @@ function AppContent() {
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [forceLoadHistory, setForceLoadHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [requestAccessForm, setRequestAccessForm] = useState({ name: '', email: '', message: '' });
@@ -383,11 +378,9 @@ function AppContent() {
               photoURL: u.photoURL,
               role: userData.role || (u.isAnonymous ? 'guest' : 'user'),
               isAnonymous: u.isAnonymous,
-              createdAt: userData.createdAt,
-              webhookUrl: userData.webhookUrl || ''
+              createdAt: userData.createdAt
             };
             setUser(profile);
-            setWebhookUrl(userData.webhookUrl || '');
             
             // Check if account is disabled
             if (profile.accountId) {
@@ -415,8 +408,7 @@ function AppContent() {
               photoURL: u.photoURL || null,
               role: role,
               isAnonymous: u.isAnonymous,
-              createdAt: Timestamp.now(),
-              webhookUrl: ''
+              createdAt: Timestamp.now()
             };
             
             // Only create doc if not anonymous or if we want to persist guest info
@@ -441,8 +433,7 @@ function AppContent() {
             displayName: u.displayName || (role === 'admin' ? 'Admin' : u.isAnonymous ? 'Guest Researcher' : 'User'),
             photoURL: u.photoURL,
             role: role,
-            isAnonymous: u.isAnonymous,
-            webhookUrl: ''
+            isAnonymous: u.isAnonymous
           });
         }
       } else {
@@ -866,22 +857,8 @@ function AppContent() {
           }
         });
 
-        // Store the global map in the result
-        result.targetMetadataMap = Object.fromEntries(targetMap);
-
         for (const mAb of result.antibodies) {
-          // 1. Assign metadata to each chain independently based on its own target
-          mAb.chains.forEach(chain => {
-            if (chain.target) {
-              const t = chain.target.toLowerCase().trim();
-              if (targetMap.has(t)) {
-                chain.targetMetadata = targetMap.get(t);
-              }
-            }
-          });
-
-          // 2. For the overall mAb, pick the non-CD3 target as primary if it's a bispecific,
-          // or just the most frequent one otherwise.
+          // Find the most frequent primary target for this antibody
           const targetCounts: Record<string, number> = {};
           mAb.chains.forEach(c => {
             if (c.target) {
@@ -890,20 +867,15 @@ function AppContent() {
             }
           });
 
-          const uniqueTargetsForMab = Object.keys(targetCounts);
-          let topTarget: string | undefined;
-
-          if (uniqueTargetsForMab.length > 1) {
-            // Bispecific logic: Prefer the "payload" or "antigen" target over the CD3 recruiter
-            topTarget = uniqueTargetsForMab.find(t => !t.includes('cd3'));
-            if (!topTarget) topTarget = uniqueTargetsForMab[0];
-          } else {
-            topTarget = uniqueTargetsForMab[0];
-          }
+          // Sort targets by frequency
+          const sortedTargets = Object.entries(targetCounts).sort((a,b) => b[1] - a[1]);
+          const topTarget = sortedTargets[0]?.[0];
           
           if (topTarget && targetMap.has(topTarget)) {
             mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Primary: ${topTarget})`);
+            console.log(`[Enrichment] Successfully applied UniProt metadata for ${mAb.mAbName} (Target: ${topTarget}, UniProtId: ${mAb.targetMetadata?.uniprotId})`);
+          } else if (topTarget) {
+            console.log(`[Enrichment] No UniProt match found for top target "${topTarget}" of ${mAb.mAbName}`);
           }
         }
       } else {
@@ -1159,17 +1131,15 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
-          const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
-
           const row: any = {
             mAbName: mAb.mAbName,
             patentId: result.patentId,
             patentTitle: result.patentTitle,
             target: vhChain?.target || vlChain?.target || '',
-            targetStandardName: targetMeta?.standardName || '',
-            targetUniProtId: targetMeta?.uniprotId || '',
-            targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-            targetSynonyms: targetMeta?.synonyms.join(', ') || '',
+            targetStandardName: mAb.targetMetadata?.standardName || '',
+            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
             'Target Species (Standardized)': mAb.targetSpecies || '',
             'Antibody Origin/Generation': mAb.antibodyOrigin || '',
             'Epitope Residues': mAb.epitope || '',
@@ -1217,38 +1187,6 @@ function AppContent() {
     } catch (e) {
       setIsExporting(false);
       console.error(e);
-    }
-  }, [state.batch]);
-
-  const handleBatchExportSql = useCallback(async () => {
-    if (!state.batch) return;
-    
-    setIsExporting(true);
-    try {
-      const completedResults = state.batch.items
-        .filter(i => i.status === 'completed' && i.result)
-        .map(i => i.result!);
-      
-      if (completedResults.length === 0) {
-        setIsExporting(false);
-        return;
-      }
-
-      const sqlContent = generateSqlDump(completedResults);
-      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', `abminer_batch_export_${new Date().toISOString().split('T')[0]}.sql`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setSqlExportSuccess(true);
-      setTimeout(() => setSqlExportSuccess(false), 3000);
-      setIsExporting(false);
-    } catch (e) {
-      setIsExporting(false);
-      console.error("[Batch Export] SQL failed:", e);
     }
   }, [state.batch]);
 
@@ -1337,18 +1275,15 @@ function AppContent() {
         const vhChain = mAb.chains.find(c => c.type === 'Heavy');
         const vlChain = mAb.chains.find(c => c.type === 'Light');
         
-        // Pick metadata from the heavy chain's target if available, or the light chain, or the mAb overall
-        const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
-
         const row: any = {
           mAbName: mAb.mAbName,
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           target: vhChain?.target || vlChain?.target || '',
-          targetStandardName: targetMeta?.standardName || '',
-          targetUniProtId: targetMeta?.uniprotId || '',
-          targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-          targetSynonyms: targetMeta?.synonyms.join(', ') || '',
+          targetStandardName: mAb.targetMetadata?.standardName || '',
+          targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+          targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+          targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
           'Target Species (Standardized)': mAb.targetSpecies || '',
           'Antibody Origin/Generation': mAb.antibodyOrigin || '',
           'Epitope Residues': mAb.epitope || '',
@@ -1437,119 +1372,6 @@ function AppContent() {
       }
     }
   }, [state.result]);
-
-  const [sqlExportSuccess, setSqlExportSuccess] = useState(false);
-
-  const handleExportSql = useCallback(async () => {
-    if (!state.result) return;
-    
-    setIsExporting(true);
-    try {
-      // Track download event
-      ReactGA.event({
-        category: 'Export',
-        action: 'Download SQL',
-        label: state.result.patentId
-      });
-      // Log download activity
-      if (user) {
-        addDoc(collection(db, 'activity_logs'), {
-          userId: user.uid,
-          accountId: user.accountId || '',
-          userDisplayName: user.displayName || 'Anonymous Guest',
-          action: 'download_sql' as any,
-          patentId: state.result.patentId,
-          patentTitle: state.result.patentTitle,
-          timestamp: Timestamp.now()
-        }).catch(err => console.error('Failed to log activity:', err));
-      }
-
-      const sqlContent = generateSqlDump(state.result);
-      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      const safeId = (state.result.patentId || 'result').replace(/[^a-z0-9]/gi, '_');
-      link.setAttribute('download', `mAb-extraction-${safeId}.sql`);
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setIsExporting(false);
-        setSqlExportSuccess(true);
-        setTimeout(() => setSqlExportSuccess(false), 2000);
-      }, 100);
-    } catch (e) {
-      console.error("[Export] SQL failed:", e);
-      setIsExporting(false);
-      setState(prev => ({ ...prev, error: 'Failed to generate SQL dump.' }));
-    }
-  }, [state.result, user]);
-
-  const handleWebhookSync = useCallback(async () => {
-    if (!state.result || !user?.webhookUrl) return;
-    setIsSyncing(true);
-    setSyncSuccess(false);
-
-    try {
-      const response = await fetch(user.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...state.result,
-          syncedAt: new Date().toISOString(),
-          syncedBy: user.email
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Sync failed: ${response.statusText}`);
-      }
-
-      setSyncSuccess(true);
-      setTimeout(() => setSyncSuccess(false), 3000);
-      
-      // Log activity
-      if (user) {
-        try {
-          await addDoc(collection(db, 'activity_logs'), {
-            userId: user.uid,
-            accountId: user.accountId || '',
-            userDisplayName: user.displayName || 'Anonymous Guest',
-            action: 'webhook_sync',
-            patentId: state.result.patentId,
-            timestamp: Timestamp.now()
-          });
-        } catch(e) {}
-      }
-    } catch (e: any) {
-      console.error("[Sync] Webhook failed:", e);
-      setState(prev => ({ ...prev, error: `Webhook Sync Error: ${e.message}` }));
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [state.result, user]);
-
-  const handleSaveSettings = async () => {
-    if (!user) return;
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        webhookUrl: webhookUrl
-      });
-      setUser(prev => prev ? ({ ...prev, webhookUrl }) : null);
-      setShowSettings(false);
-    } catch (e: any) {
-      console.error("[Settings] Save failed:", e);
-      setState(prev => ({ ...prev, error: `Failed to save settings: ${e.message}` }));
-    }
-  };
 
   const handleCopyFasta = useCallback(() => {
     if (!state.result) return;
@@ -1819,9 +1641,6 @@ function AppContent() {
                     <UserIcon className="w-4 h-4 text-zinc-500" />
                   </div>
                 )}
-                <button onClick={() => setShowSettings(true)} className="p-2 text-zinc-500 hover:text-white transition-colors" title="Settings">
-                  <Settings className="w-5 h-5" />
-                </button>
                 <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-500 transition-colors">
                   <LogOut className="w-5 h-5" />
                 </button>
@@ -1926,13 +1745,6 @@ function AppContent() {
                  >
                    <Download className="w-4 h-4" />
                    DOWNLOAD MASTER CSV
-                 </button>
-                 <button 
-                   onClick={handleBatchExportSql}
-                   className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold rounded-full transition-all border border-zinc-700 active:scale-95 shadow-lg shadow-indigo-500/10"
-                 >
-                   <Database className="w-4 h-4 text-indigo-400" />
-                   CONSOLIDATED SQL
                  </button>
                  <button 
                    onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
@@ -2478,97 +2290,7 @@ function AppContent() {
           </div>
 
           {/* Global Error Overlays */}
-          {/* Settings Modal */}
-      <AnimatePresence>
-        {showSettings && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowSettings(false)}
-              className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-zinc-900 border border-white/10 rounded-[32px] overflow-hidden shadow-2xl"
-            >
-              <div className="p-8 border-b border-white/5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-500/10 rounded-xl">
-                      <Settings className="w-6 h-6 text-indigo-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white tracking-tight">System Settings</h3>
-                      <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mt-1">Configure Data Sync & Integration</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowSettings(false)}
-                    className="p-2 text-zinc-500 hover:text-white transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-8 space-y-8">
-                {/* Webhook Sync Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-emerald-400" />
-                      <h4 className="text-sm font-bold text-white uppercase tracking-wider">Generic Webhook Sync</h4>
-                    </div>
-                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-500/20">
-                      Cloud Agnostic
-                    </span>
-                  </div>
-                  
-                  <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Push your antibody extraction results directly to an external endpoint (Azure Functions, AWS Lambda, or Internal API).
-                    </p>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
-                        Endpoint URL
-                      </label>
-                      <input 
-                        type="url"
-                        value={webhookUrl}
-                        onChange={(e) => setWebhookUrl(e.target.value)}
-                        placeholder="https://your-function.azurewebsites.net/api/sync"
-                        className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex items-center justify-end gap-4">
-                  <button 
-                    onClick={() => setShowSettings(false)}
-                    className="px-6 py-2.5 text-zinc-400 text-sm font-medium hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handleSaveSettings}
-                    className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-all flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
+          <AnimatePresence>
             {state.error && (
               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-md">
                 <motion.div
@@ -3250,43 +2972,6 @@ function AppContent() {
                             <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
                             <Table className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-
-                        <button 
-                          onClick={handleExportSql}
-                          disabled={isExporting}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            sqlExportSuccess ? "bg-emerald-600/20 border-emerald-600/30" : "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title="Export SQL (DBeaver Ready)"
-                        >
-                          {isExporting ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : sqlExportSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Database className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-                        <button 
-                          onClick={handleWebhookSync}
-                          disabled={isSyncing || !user?.webhookUrl}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            syncSuccess ? "bg-emerald-600/20 border-emerald-600/30" : 
-                            !user?.webhookUrl ? "opacity-30 cursor-not-allowed bg-white/5 border-white/5" :
-                            "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title={user?.webhookUrl ? "Sync to Webhook (Azure/Custom API)" : "Configure Webhook in Settings to Sync"}
-                        >
-                          {isSyncing ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : syncSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Globe className={cn("w-4 h-4", !user?.webhookUrl ? "text-zinc-500" : "text-white")} />
                           )}
                         </button>
                       </div>

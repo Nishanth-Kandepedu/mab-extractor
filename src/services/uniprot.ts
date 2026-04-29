@@ -18,16 +18,6 @@ export async function fetchTargetMetadata(targetName: string): Promise<UniProtMe
     .split('/')[0]
     .trim();
 
-  // SPECIAL MAPPING: CD3 should default to CD3E (P07766) as it's the most common binding partner for bi-specifics
-  if (cleanTarget.toUpperCase() === 'CD3' || cleanTarget.toUpperCase() === 'CD3-EPSILON' || cleanTarget.toUpperCase() === 'CD3E') {
-    return {
-      standardName: 'T-cell surface glycoprotein CD3 epsilon chain',
-      synonyms: ['CD3e', 'T-cell receptor antigen methyltransferase'],
-      geneSymbols: ['CD3E', 'T3E'],
-      uniprotId: 'P07766'
-    };
-  }
-
   try {
     // Strategy: Search for the target in human proteins (organism 9606)
     // We prioritize reviewed entries (Swiss-Prot) for better data quality
