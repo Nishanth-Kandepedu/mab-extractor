@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, AlertTriangle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -48,67 +48,108 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-white p-8">
       <div className="relative mb-12">
-        {/* Modern Loader Ring - Simple and Clean per screenshot */}
-        <div className="w-32 h-32 rounded-full border-4 border-indigo-50 relative flex items-center justify-center">
-          <div 
-            className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 border-r-indigo-600 border-b-indigo-600 animate-spin" 
+        {/* Modern Loader Ring */}
+        <div className="w-40 h-40 rounded-full border-4 border-indigo-50 relative flex items-center justify-center">
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 border-r-indigo-600/30 border-b-indigo-600/10" 
           />
-          <Database className="w-10 h-10 text-indigo-600" />
+          <motion.div 
+            animate={{ rotate: -360 }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-[10%] rounded-full border border-indigo-200 border-dashed" 
+          />
+          <div className="relative z-10 flex flex-col items-center">
+            <Database className="w-10 h-10 text-indigo-600 mb-2" />
+            <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-widest uppercase">Mining</span>
+          </div>
+        </div>
+        
+        {/* Floating Particles Animation */}
+        <div className="absolute inset-0 -z-10">
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ 
+                opacity: [0, 1, 0], 
+                scale: [0, 1.5, 0],
+                x: [0, (i % 2 === 0 ? 50 : -50)],
+                y: [0, (i < 3 ? -50 : 50)]
+              }}
+              transition={{ 
+                duration: 3, 
+                repeat: Infinity, 
+                delay: i * 0.5,
+                ease: "easeInOut"
+              }}
+              className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-indigo-200 rounded-full blur-[1px]"
+            />
+          ))}
         </div>
       </div>
       
-      <h2 className="text-2xl font-bold text-zinc-900 mb-4 tracking-tight">
-        Neural Extraction in Progress
-      </h2>
+      <div className="text-center max-w-sm">
+        <motion.h2 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl font-bold text-zinc-900 mb-2 tracking-tight"
+        >
+          Neural Sequence Mining
+        </motion.h2>
+        <p className="text-zinc-500 text-sm mb-8 leading-relaxed">
+          AI is analyzing the patent landscape to extract high-fidelity antibody sequences and characterization data.
+        </p>
+      </div>
       
       <div className="mb-10">
-        <span className="px-5 py-1.5 bg-zinc-900 text-white rounded-full text-lg font-bold font-mono tracking-tight shadow-lg">
+        <span className="px-6 py-2 bg-zinc-900 text-white rounded-2xl text-xl font-bold font-mono tracking-tight shadow-xl flex items-center gap-3">
+          <Clock className="w-5 h-5 text-indigo-400" />
           {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
         </span>
       </div>
       
-      <div className="flex flex-col gap-3 text-center mb-10">
-        {status ? (
-          <motion.p 
-            key={status}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-sm font-bold text-indigo-600 uppercase tracking-[0.2em]"
+      <div className="flex flex-col gap-3 text-center mb-10 w-64 min-h-[60px] justify-center">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={status || Math.floor((timer / 8) % steps.length)}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.5 }}
           >
-            {status}
-          </motion.p>
-        ) : (
-          steps.map((step, i) => (
-            <p 
-              key={i} 
-              className={cn(
-                "text-sm font-medium tracking-wide transition-all duration-500",
-                i === Math.floor((timer / 10) % steps.length) ? "text-indigo-600 font-bold" : "text-zinc-300"
-              )}
-            >
-              {step}
+            <p className="text-xs font-bold text-indigo-600 uppercase tracking-[0.25em] mb-1">
+               {status ? "Current Task" : "System Operation"}
             </p>
-          ))
-        )}
+            <p className="text-sm font-medium text-zinc-500">
+               {status || steps[Math.floor((timer / 8) % steps.length)]}
+            </p>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {batchProgress && (
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="px-10 py-5 bg-zinc-900 rounded-[32px] shadow-2xl text-center border border-white/5"
+          className="px-12 py-6 bg-[#050505] rounded-[32px] shadow-2xl text-center border border-white/10 relative overflow-hidden"
         >
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2 leading-none">
-            Queue Progress
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-emerald-500 to-indigo-500 animate-gradient-x" />
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-3 leading-none">
+            Processing Queue
           </p>
-          <p className="text-4xl font-black font-mono text-white tracking-tighter">
-             {batchProgress.current}<span className="text-white/20 mx-1 text-2xl">/</span>{batchProgress.total}
+          <p className="text-5xl font-black font-mono text-white tracking-tighter flex items-center justify-center gap-2">
+             {batchProgress.current}
+             <span className="text-white/20 text-3xl font-light">/</span>
+             <span className="text-white/60">{batchProgress.total}</span>
           </p>
-          <div className="w-full h-1.5 bg-white/10 rounded-full mt-4 overflow-hidden">
+          <div className="w-full h-2 bg-white/10 rounded-full mt-6 overflow-hidden p-0.5">
             <motion.div 
-              className="h-full bg-indigo-500"
+              className="h-full bg-indigo-500 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.5)]"
               initial={{ width: 0 }}
               animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+              transition={{ duration: 1, ease: "easeOut" }}
             />
           </div>
         </motion.div>
@@ -1435,96 +1476,132 @@ function AppContent() {
         {/* Right Pane: Login Form */}
         <div className="flex-1 flex flex-col p-8 md:p-12 lg:p-16 justify-center bg-white overflow-y-auto">
           <div className="max-w-sm w-full mx-auto">
-            <div className="mb-10">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-10 text-center md:text-left"
+            >
               <h2 className="text-3xl font-bold text-zinc-900 mb-2 tracking-tight">Sign In</h2>
-              <p className="text-sm text-zinc-500">Access your research environment.</p>
-            </div>
+              <p className="text-sm text-zinc-500 font-medium">Access your research environment.</p>
+            </motion.div>
 
-            <form onSubmit={handleGuestLogin} className="space-y-5 mb-10">
-              <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Username</label>
-                <input
-                  type="text"
-                  value={loginForm.username}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
-                  placeholder="Username"
-                />
+            <motion.form 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              onSubmit={handleGuestLogin} 
+              className="space-y-6 mb-12"
+            >
+              <div className="space-y-4">
+                <div className="group">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-2 block group-focus-within:text-indigo-600 transition-colors">Username</label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />
+                    <input
+                      type="text"
+                      value={loginForm.username}
+                      onChange={(e) => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none"
+                      placeholder="Username"
+                    />
+                  </div>
+                </div>
+                <div className="group">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-2 block group-focus-within:text-indigo-600 transition-colors">Password</label>
+                  <div className="relative">
+                    <X className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />
+                    <input
+                      type="password"
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Password</label>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
-                  placeholder="••••••••"
-                />
-              </div>
-              {loginError && <p className="text-xs text-red-600 font-medium">{loginError}</p>}
+
+              {loginError && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <p className="text-xs text-red-700 font-medium">{loginError}</p>
+                </motion.div>
+              )}
+
               <button
                 type="submit"
-                className="w-full bg-[#050505] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
+                className="w-full bg-[#050505] text-white py-4 rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all shadow-[0_20px_40px_-12px_rgba(0,0,0,0.2)] active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                Sign In
+                Sign In to Platform
+                <ChevronRight className="w-4 h-4" />
               </button>
-            </form>
+            </motion.form>
 
-            <div className="relative mb-10">
+            <div className="relative mb-12">
               <div className="absolute inset-0 flex items-center" aria-hidden="true">
                 <div className="w-full border-t border-zinc-100"></div>
               </div>
-              <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                <span className="bg-white px-4 text-zinc-300 font-bold">Waitlist</span>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-[0.3em]">
+                <span className="bg-white px-4 text-zinc-300 font-black">Secure Access Waitlist</span>
               </div>
             </div>
 
-            <form onSubmit={handleRequestAccess} className="space-y-4">
+            <motion.form 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              onSubmit={handleRequestAccess} 
+              className="space-y-4 bg-zinc-50/50 p-6 rounded-[32px] border border-zinc-100"
+            >
               <div>
-                <h3 className="text-sm font-bold text-zinc-900 mb-1">Join the Waitlist</h3>
-                <p className="text-xs text-zinc-500 leading-tight">Apply for early access to the AbMiner research platform.</p>
+                <h3 className="text-sm font-bold text-zinc-900 mb-1">Request Early Access</h3>
+                <p className="text-[11px] text-zinc-500 leading-tight">Mining is currently restricted to accredited research institutions.</p>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <input 
                   type="text" 
                   placeholder="Full Name" 
                   required
                   value={requestAccessForm.name}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors shadow-sm" 
                 />
                 <input 
                   type="email" 
-                  placeholder="Work Email" 
+                  placeholder="Official Work Email" 
                   required
                   value={requestAccessForm.email}
                   onChange={(e) => setRequestAccessForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors" 
+                  className="bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors shadow-sm" 
                 />
               </div>
               <textarea 
-                placeholder="Briefly describe your research focus..." 
+                placeholder="Briefly describe your sequence research focus..." 
                 required
                 value={requestAccessForm.message}
                 onChange={(e) => setRequestAccessForm(prev => ({ ...prev, message: e.target.value }))}
-                className="w-full bg-zinc-50 border border-zinc-100 rounded-lg px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none"
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs outline-none focus:border-indigo-500 transition-colors h-24 resize-none shadow-sm"
               />
               <button 
                 type="submit"
                 disabled={requestStatus === 'sending'}
                 className={cn(
-                  "w-full py-3 rounded-xl font-bold text-xs transition-all border",
-                  requestStatus === 'success' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                  requestStatus === 'error' ? "bg-red-50 text-red-700 border-red-100" :
-                  "bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100"
+                  "w-full py-3.5 rounded-xl font-bold text-xs transition-all border shadow-sm",
+                  requestStatus === 'success' ? "bg-emerald-600 text-white border-emerald-600" :
+                  requestStatus === 'error' ? "bg-red-600 text-white border-red-600" :
+                  "bg-white text-zinc-900 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300"
                 )}
               >
-                {requestStatus === 'sending' ? 'Sending Request...' : 
-                 requestStatus === 'success' ? 'Request Submitted' :
-                 requestStatus === 'error' ? 'Submission Failed' : 'Join Waitlist'}
+                {requestStatus === 'sending' ? 'Transmitting Request...' : 
+                 requestStatus === 'success' ? 'Waitlist Joined Successfully' :
+                 requestStatus === 'error' ? 'Submission Error. Try Again.' : 'Join Research Waitlist'}
               </button>
-            </form>
+            </motion.form>
           </div>
         </div>
       </div>
@@ -1732,63 +1809,76 @@ function AppContent() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
-          {/* System Health Dashboard */}
-          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest flex items-center gap-2">
-                <Activity className="w-3 h-3 text-indigo-500" />
-                System Infrastructure
-              </h3>
-              <div className="flex items-center gap-1.5">
-                <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                <span className="text-[9px] font-bold text-zinc-500 uppercase">{networkStats.online ? 'Live' : 'Offline'}</span>
+          {/* System Metrics Panel */}
+          <div className="bg-[#050505] rounded-3xl p-6 shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-600/20 transition-all duration-700" />
+            
+            <div className="relative z-10 flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                  <Activity className="w-4 h-4 text-indigo-400" />
+                </div>
+                <h2 className="font-bold text-white tracking-tight">Mining Intelligence</h2>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">API Latency</p>
-                <div className="flex items-end gap-1">
-                  <span className="text-sm font-bold text-zinc-700">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
-                  <span className="text-[8px] text-zinc-400 mb-0.5">ms</span>
+              <div className="flex flex-col items-end">
+                <div className={cn(
+                  "flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest",
+                  networkStats.online ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+                )}>
+                  <span className={cn("w-1 h-1 rounded-full", networkStats.online ? "bg-emerald-400 animate-pulse" : "bg-red-400")} />
+                  {networkStats.online ? 'Cluster Active' : 'Cluster Offline'}
                 </div>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Engine Health</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all duration-300">
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Latency</p>
+                <div className="flex items-end gap-1">
+                  <span className="text-xl font-black text-white font-mono">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
+                  <span className="text-[10px] text-white/40 mb-1 font-mono">ms</span>
+                </div>
+              </div>
+              <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all duration-300">
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Neural Load</p>
                 <span className={cn(
-                  "text-[10px] font-bold uppercase",
-                  healthInfo?.status === 'ok' ? "text-emerald-600" : "text-amber-600"
+                  "text-[12px] font-black uppercase tracking-tight",
+                  healthInfo?.status === 'ok' ? (healthInfo.concurrency?.activeCount > 0 ? "text-amber-400" : "text-emerald-400") : "text-amber-400"
                 )}>
-                  {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Checking...'}
+                  {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Syncing'}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-[9px]">
-                <span className="text-zinc-400 uppercase font-medium">Model Load / Concurrency</span>
-                <span className="text-zinc-600 font-bold uppercase tracking-tighter">
-                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} Active / ${healthInfo.concurrency?.pendingCount || 0} Queued` : '--'}
+            <div className="space-y-4 mb-6">
+              <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                <span className="text-white/40">Concurrency Throttle</span>
+                <span className="text-white">
+                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} / 4 Engines` : '--'}
                 </span>
               </div>
-              <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden p-0.5">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount + healthInfo.concurrency?.pendingCount) / 4) * 100)}%` : '0%' }}
                   className={cn(
-                    "h-full transition-all duration-500",
-                    (healthInfo?.concurrency?.activeCount || 0) >= 2 ? "bg-amber-500" : "bg-indigo-500"
+                    "h-full rounded-full transition-all duration-700",
+                    (healthInfo?.concurrency?.activeCount || 0) >= 2 ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"
                   )} 
                 />
               </div>
-              <p className="text-[8px] text-zinc-400 font-mono tracking-tight leading-tight">
-                {healthInfo ? `Throughput: 100% | Latency: ${networkStats.latency}ms | Load: ${healthInfo.concurrency?.activeCount > 0 ? 'Elevated' : 'Stable'}` : 'Synchronizing system metrics...'}
-              </p>
-            </div>
-
-            <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
-              <span className="text-[8px] text-zinc-400 italic">Last ping: {networkStats.lastChecked.toLocaleTimeString()}</span>
-              <button onClick={checkHealth} className="text-[8px] font-bold text-indigo-600 hover:underline uppercase tracking-widest">Verify Nodes</button>
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] text-white/30 font-mono tracking-tight leading-tight">
+                  Status: {networkStats.online ? 'High Consistency Enabled' : 'Reconnect Required'}
+                </p>
+                <button 
+                  onClick={checkHealth} 
+                  className="text-[9px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-widest transition-colors flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Verify
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1823,11 +1913,12 @@ function AppContent() {
               </div>
             )}
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-2">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                  const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
+                  const isDisabled = user?.role === 'guest' && (p === 'openai' || p === 'anthropic');
+                  const displayLabel = p === 'gemini' ? 'Gemini 3.1' : p === 'gemma' ? 'Gemma 4' : p === 'openai' ? 'OpenAI GPT' : 'Claude 3.5';
+                  const isSelected = llmOptions.provider === p;
                   return (
                     <button
                       key={p}
@@ -1839,14 +1930,17 @@ function AppContent() {
                         model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
-                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
-                        llmOptions.provider === p
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
-                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
+                        "group relative py-3 px-4 rounded-2xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left",
+                        isSelected
+                          ? "bg-zinc-900 text-white border-zinc-900 shadow-xl shadow-zinc-200" 
+                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
+                        isDisabled && "opacity-30 cursor-not-allowed grayscale"
                       )}
                     >
-                      {displayLabel}
+                      <div className="flex items-center justify-between">
+                        {displayLabel}
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                      </div>
                     </button>
                   );
                 })}
@@ -3007,113 +3101,127 @@ function AppContent() {
                   <div className="space-y-12">
                     {state.result.antibodies.map((mAb, mAbIdx) => (
                       <div key={mAbIdx} className="space-y-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-px bg-zinc-200 flex-1" />
-                          <div className="flex flex-col items-center gap-1">
-                            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
-                              {mAb.mAbName}
-                            </h3>
-                            <div className="flex items-center gap-2 flex-wrap justify-center">
+                        <div className="flex flex-col md:flex-row items-center gap-4">
+                          <div className="h-px bg-zinc-100 flex-1 hidden md:block" />
+                          <div className="flex flex-col items-center">
+                            <motion.div 
+                              initial={{ scale: 0.9, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              className="bg-[#050505] text-white px-8 py-2.5 rounded-[32px] shadow-2xl relative overflow-hidden"
+                            >
+                              <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-indigo-500 to-emerald-500" />
+                              <h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-3">
+                                <AntibodyIcon className="w-4 h-4 text-indigo-400" />
+                                {mAb.mAbName}
+                              </h3>
+                            </motion.div>
+                            
+                            <div className="flex items-center gap-2 mt-4 flex-wrap justify-center translate-y-[-10px]">
                               {mAb.seqId && (
-                                <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
+                                <span className="text-[10px] font-black bg-white border border-zinc-200 text-zinc-900 px-3 py-1 rounded-full shadow-sm">
                                   {mAb.seqId}
                                 </span>
                               )}
                               {mAb.pageNumber && (
-                                <span className="text-[9px] font-mono bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded border border-zinc-200">
+                                <span className="text-[10px] font-black bg-zinc-100 text-zinc-400 px-3 py-1 rounded-full uppercase tracking-tighter">
                                   Page {mAb.pageNumber}
                                 </span>
                               )}
-                              {mAb.tableId && (
-                                <span className="text-[9px] font-mono bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded border border-zinc-200">
-                                  {mAb.tableId}
-                                </span>
-                              )}
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-50 rounded-full border border-black/5">
                                 <div className={cn(
-                                  "w-2 h-2 rounded-full",
+                                  "w-1.5 h-1.5 rounded-full",
                                   mAb.confidence >= 95 ? "bg-emerald-500" :
                                   mAb.confidence >= 80 ? "bg-amber-500" :
                                   "bg-red-500"
                                 )} />
-                                <span className="text-[10px] font-bold text-zinc-500">{mAb.confidence}% Confidence</span>
+                                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-tighter">{mAb.confidence}% Score</span>
                               </div>
                             </div>
-                            {mAb.needsReview && (
-                              <div className="flex items-center gap-1.5 px-3 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-full text-[10px] font-bold uppercase animate-pulse">
-                                <AlertCircle className="w-3 h-3" />
-                                Needs Review
-                              </div>
-                            )}
                           </div>
-                          <div className="h-px bg-zinc-200 flex-1" />
+                          <div className="h-px bg-zinc-100 flex-1 hidden md:block" />
                         </div>
                         
                         {mAb.needsReview && mAb.reviewReason && (
-                          <div className="bg-white border-2 border-red-500 rounded-xl p-4 text-xs text-red-700 flex items-start gap-3 shadow-sm">
-                            <div className="bg-red-50 p-1.5 rounded-lg">
-                              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                          <motion.div 
+                            initial={{ x: -10, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            className="bg-red-50/50 border border-red-100 rounded-[28px] p-6 text-xs text-red-700 flex items-start gap-4 relative overflow-hidden"
+                          >
+                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500/20" />
+                            <div className="bg-white p-2 rounded-2xl shadow-sm border border-red-100">
+                              <AlertTriangle className="w-5 h-5 shrink-0 text-red-600" />
                             </div>
-                            <div>
-                              <span className="font-black text-red-600 uppercase tracking-wider text-[10px] block mb-1">
-                                Critical Extraction Alert
-                              </span>
-                              <div className="space-y-1 font-medium leading-relaxed">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-black text-red-600 uppercase tracking-[0.2em] text-[10px]">Quality Integrity Alert</span>
+                                <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] font-bold rounded uppercase tracking-widest">Manual Check Req</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
                                 {mAb.reviewReason.split(']').filter(Boolean).map((reason, i) => (
-                                  <p key={i} className="flex items-center gap-2">
-                                    <span className="w-1 h-1 rounded-full bg-red-400" />
-                                    {reason.replace('[', '').trim()}
-                                  </p>
+                                  <div key={i} className="flex items-start gap-2 py-1 border-b border-red-100/50 last:border-0 italic font-medium">
+                                    <span className="text-red-300 mt-0.5">•</span>
+                                    <span>{reason.replace('[', '').trim()}</span>
+                                  </div>
                                 ))}
                               </div>
                             </div>
-                          </div>
+                          </motion.div>
                         )}
                         
                         {mAb.targetMetadata ? (
-                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Database className="w-4 h-4 text-indigo-600" />
-                              <span className="font-bold text-indigo-900 uppercase tracking-wider text-[10px]">Target Info (UniProtKB)</span>
+                          <div className="bg-indigo-50/30 border border-indigo-100/50 rounded-[28px] p-6 text-xs relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-16 -mt-16" />
+                            <div className="flex items-center justify-between mb-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl bg-white border border-indigo-100 flex items-center justify-center shadow-sm">
+                                  <Database className="w-4 h-4 text-indigo-600" />
+                                </div>
+                                <h4 className="font-black text-indigo-900 uppercase tracking-[0.2em] text-[10px]">Target Enrichment (UniProtKB)</h4>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono text-indigo-400 font-bold bg-white px-2 py-0.5 rounded border border-indigo-100">
+                                  ID: {mAb.targetMetadata.uniprotId}
+                                </span>
+                                <a 
+                                  href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-6 h-6 flex items-center justify-center bg-white rounded-lg border border-indigo-100 text-indigo-400 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Standard Name</span>
-                                <div className="font-bold text-zinc-900 flex items-center gap-2">
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-indigo-400 uppercase font-black tracking-widest block opacity-70">Primary Designation</span>
+                                <div className="font-bold text-zinc-900 text-sm tracking-tight leading-tight">
                                   {mAb.targetMetadata.standardName}
-                                  <div className="flex items-center gap-1.5 ml-1">
-                                    <span className="text-[9px] bg-indigo-100 text-indigo-700 font-mono px-1.5 py-0.5 rounded uppercase">
-                                      {mAb.targetMetadata.uniprotId}
-                                    </span>
-                                    <a 
-                                      href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-indigo-400 hover:text-indigo-600 transition-colors"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </div>
                                 </div>
                               </div>
-                              <div>
-                                <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Gene Symbols</span>
-                                <div className="text-zinc-600 font-mono">
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-indigo-400 uppercase font-black tracking-widest block opacity-70">Gene Locus Symbols</span>
+                                <div className="text-zinc-600 font-mono text-[11px] font-bold">
                                   {mAb.targetMetadata.geneSymbols.join(', ')}
                                 </div>
                               </div>
-                              {mAb.targetMetadata.synonyms.length > 0 && (
-                                <div className="col-span-full">
-                                  <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Synonyms</span>
-                                  <div className="text-zinc-500 leading-relaxed italic">
-                                    {mAb.targetMetadata.synonyms.join(', ')}
-                                  </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-indigo-400 uppercase font-black tracking-widest block opacity-70">Discovery Synonyms</span>
+                                <div className="text-zinc-500 font-medium text-[10px] leading-relaxed line-clamp-2 italic">
+                                  {mAb.targetMetadata.synonyms.length > 0 ? mAb.targetMetadata.synonyms.join(', ') : 'No aliases documented'}
                                 </div>
-                              )}
+                              </div>
                             </div>
                           </div>
-                        ) : mAb.chains.some(c => c.target) && (
-                          <div className="flex justify-start">
+                        ) : mAb.chains.find(c => c.target)?.target && (
+                          <div className="bg-zinc-50 border border-zinc-100 rounded-[24px] p-4 flex items-center justify-between group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-white border border-zinc-200 flex items-center justify-center">
+                                <Search className="w-3.5 h-3.5 text-zinc-400" />
+                              </div>
+                              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest italic group-hover:text-zinc-600 transition-colors">Target Identified: {mAb.chains.find(c => c.target)?.target}</span>
+                            </div>
                             <button 
                               onClick={async () => {
                                 const target = mAb.chains.find(c => c.target)?.target;
@@ -3129,10 +3237,9 @@ function AppContent() {
                                   }
                                 }
                               }}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-indigo-600 transition-all text-[10px] font-bold uppercase tracking-wider"
+                              className="px-4 py-2 bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-indigo-700 shadow-lg shadow-indigo-100"
                             >
-                              <RotateCcw className="w-3 h-3" />
-                              Fetch UniProt Metadata for {mAb.chains.find(c => c.target)?.target}
+                              Enrich from UniProt
                             </button>
                           </div>
                         )}
@@ -3148,52 +3255,82 @@ function AppContent() {
                           ))}
                         </div>
                         
-                        <div className="bg-white border border-zinc-200 rounded-xl p-4 text-xs text-zinc-500 italic">
-                          <span className="font-bold not-italic text-zinc-700 mr-2">AI Summary:</span>
-                          {mAb.summary}
+                        <div className="bg-white border border-zinc-100 rounded-2xl p-6 text-[11px] text-zinc-600 relative overflow-hidden group shadow-sm">
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Sparkles className="w-5 h-5 text-indigo-400" />
+                          </div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="h-4 w-1 bg-indigo-500 rounded-full" />
+                            <span className="font-black text-zinc-900 uppercase tracking-widest text-[9px]">Intelligence Synthesis</span>
+                          </div>
+                          <div className="leading-relaxed whitespace-pre-wrap font-medium font-mono text-[10px] bg-zinc-50/50 p-4 rounded-xl border border-zinc-100/50">
+                            {mAb.summary}
+                          </div>
                         </div>
 
                         {mAb.experimentalData && mAb.experimentalData.length > 0 && (
-                          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm mt-4">
-                            <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Beaker className="w-4 h-4 text-indigo-600" />
-                                <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-700">Experimental & Characterization Data</h4>
+                          <div className="bg-white border border-zinc-200 rounded-[28px] overflow-hidden shadow-sm mt-4">
+                            <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 flex items-center justify-center">
+                                  <Beaker className="w-4 h-4 text-emerald-600" />
+                                </div>
+                                <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-zinc-700">Bio-Analytical Data Matrix</h4>
                               </div>
-                              <span className="text-[10px] font-mono text-zinc-400 bg-white px-2 py-0.5 rounded border border-zinc-100">
-                                Gemma 4 High-Fidelity Extraction
+                              <span className="text-[9px] font-black text-zinc-400 bg-white px-3 py-1 rounded-full border border-zinc-100 uppercase">
+                                {mAb.experimentalData.length} Data Points
                               </span>
                             </div>
-                            <div className="divide-y divide-zinc-200">
+                            <div className="divide-y divide-zinc-100">
                               {['In Vitro', 'PK', 'ADMET', 'In Vivo', 'Physical', 'Other'].map(cat => {
                                 const items = mAb.experimentalData!.filter(d => d.category === cat);
                                 if (items.length === 0) return null;
                                 return (
-                                  <div key={cat} className="overflow-x-auto">
-                                    <div className="px-4 py-2 bg-zinc-50/50 flex items-center gap-2 border-b border-zinc-100">
+                                  <div key={cat} className="group/cat">
+                                    <div className="px-6 py-2 bg-zinc-50/50 flex items-center gap-3 border-b border-zinc-100 group-first/cat:border-t-0">
                                       <div className={cn(
-                                        "w-1.5 h-1.5 rounded-full",
-                                        cat === 'In Vitro' ? "bg-blue-500" :
-                                        cat === 'PK' ? "bg-amber-500" :
-                                        cat === 'ADMET' ? "bg-purple-500" :
-                                        cat === 'In Vivo' ? "bg-red-500" :
-                                        cat === 'Physical' ? "bg-emerald-500" :
+                                        "w-1.5 h-1.5 rounded-full shadow-sm",
+                                        cat === 'In Vitro' ? "bg-blue-500 shadow-blue-100" :
+                                        cat === 'PK' ? "bg-amber-500 shadow-amber-100" :
+                                        cat === 'ADMET' ? "bg-purple-500 shadow-purple-100" :
+                                        cat === 'In Vivo' ? "bg-red-500 shadow-red-100" :
+                                        cat === 'Physical' ? "bg-emerald-500 shadow-emerald-100" :
                                         "bg-zinc-400"
                                       )} />
-                                      <span className="text-[9px] font-bold uppercase tracking-tight text-zinc-500">{cat} Properties</span>
+                                      <span className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-900 group-hover/cat:text-indigo-600 transition-colors">{cat} Data Intelligence</span>
                                     </div>
-                                    <table className="w-full text-left text-xs">
-                                      <tbody className="divide-y divide-zinc-100">
-                                        {items.map((data, idx) => (
-                                          <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
-                                            <td className="px-4 py-1.5 font-bold text-zinc-900 w-1/4">{data.property}</td>
-                                            <td className="px-4 py-1.5 font-mono text-indigo-600 whitespace-nowrap w-1/4">{data.value} {data.unit}</td>
-                                            <td className="px-4 py-1.5 text-zinc-600 leading-relaxed italic">{data.condition}</td>
-                                            <td className="px-4 py-1.5 text-[10px] text-zinc-400 font-mono whitespace-nowrap text-right">{data.evidence}</td>
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-[11px]">
+                                        <thead>
+                                          <tr className="bg-zinc-50/10">
+                                            <th className="px-6 py-2.5 font-black text-zinc-400 uppercase text-[8px] tracking-widest w-1/4">Measurement</th>
+                                            <th className="px-6 py-2.5 font-black text-zinc-400 uppercase text-[8px] tracking-widest w-1/4">Value</th>
+                                            <th className="px-6 py-2.5 font-black text-zinc-400 uppercase text-[8px] tracking-widest">Metadata Context</th>
+                                            <th className="px-6 py-2.5 font-black text-zinc-400 uppercase text-[8px] tracking-widest text-right">Evidence</th>
                                           </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-50">
+                                          {items.map((data, idx) => (
+                                            <tr key={idx} className="hover:bg-zinc-100/50 transition-colors group/row">
+                                              <td className="px-6 py-3 font-bold text-zinc-700">{data.property}</td>
+                                              <td className="px-6 py-3">
+                                                <span className="px-2 py-1 bg-white border border-zinc-100 rounded-lg font-mono font-bold text-indigo-600 shadow-sm">
+                                                  {data.value} {data.unit}
+                                                </span>
+                                              </td>
+                                              <td className="px-6 py-3 text-zinc-500 italic leading-relaxed">
+                                                {data.condition || '---'}
+                                              </td>
+                                              <td className="px-6 py-3 text-right">
+                                                <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded opacity-0 group-hover/row:opacity-100 transition-opacity">
+                                                  {data.evidence}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
                                   </div>
                                 );
                               })}
