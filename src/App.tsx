@@ -1007,7 +1007,7 @@ function AppContent() {
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
 
   const runBatch = useCallback(async () => {
-    if (!state.batch || state.batch.items.length === 0) return;
+    if (!state.batch || state.batch.items.length === 0 || state.batch.isProcessing) return;
     
     setTimer(0);
     const batchStartTime = Date.now();
@@ -1107,8 +1107,15 @@ function AppContent() {
               const itemExtractionTime = Date.now() - itemStartTime;
               result.extractionTime = itemExtractionTime;
 
-              // Enrichment for Batch Mode
-              await enrichResultsWithMetadata(result);
+              // Enrichment for Batch Mode (with 60s safety timeout to prevent stalling entire batch)
+              try {
+                const enrichmentPromise = enrichResultsWithMetadata(result);
+                const enrichmentTimeout = new Promise(resolve => setTimeout(() => resolve('timeout'), 60000));
+                const res = await Promise.race([enrichmentPromise, enrichmentTimeout]);
+                if (res === 'timeout') console.warn(`[Batch] Enrichment timed out for ${item.id}`);
+              } catch (enrichErr) {
+                console.warn(`[Batch] Enrichment error for ${item.id}:`, enrichErr);
+              }
 
               setState(prev => ({
                 ...prev,
@@ -1903,7 +1910,7 @@ function AppContent() {
                       onClick={() => setLlmOptions(prev => ({ 
                         ...prev, 
                         provider: p, 
-                        model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                        model: p === 'gemini' ? 'gemini-2.0-flash' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
                         "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
@@ -1925,9 +1932,9 @@ function AppContent() {
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fastest)</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Balanced)</option>
+                    <option value="gemini-2.0-flash-thinking-exp">Gemini 2.0 Thinking (Deep)</option>
                   </>
                 )}
                 {llmOptions.provider === 'gemma' && (

@@ -363,7 +363,8 @@ async function _extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: activeInstruction,
-      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
+      // Use BALANCED thinking instead of HIGH to prevent excessive latency in batch jobs
+      thinkingLevel: (model?.includes('-pro') || isGemma4) ? "BALANCED" : undefined,
       responseSchema: responseSchema,
     });
 

@@ -39,8 +39,8 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 2 at a time
-const limit = pLimit(2);
+// Concurrency control: Increase to 3 for better throughput in research environment
+const limit = pLimit(3);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -237,8 +237,13 @@ async function startServer() {
       const jobStartTime = Date.now();
       let retryCount = 0;
       const MAX_RETRIES = 2;
+      const JOB_TIMEOUT_MS = 900000; // 15 minutes max per job
 
       const runExtraction = async (): Promise<void> => {
+        // Create an AbortController for this attempt
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), JOB_TIMEOUT_MS);
+
         try {
           console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
@@ -254,15 +259,14 @@ async function startServer() {
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
-              model: targetModel || 'gemini-3.1-pro-preview',
+              model: targetModel || 'gemini-1.5-pro',
               contents,
               config: {
                 systemInstruction,
                 temperature: 0,
                 thinkingConfig: thinkingLevel ? { 
                   thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
-                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
-                                 ThinkingLevel.MINIMAL 
+                                 ThinkingLevel.LOW 
                 } : undefined,
                 maxOutputTokens: 65536,
                 responseMimeType: "application/json",
@@ -365,16 +369,17 @@ async function startServer() {
               ? 'The AI engine is currently over capacity or experienced a transient error. Please wait a moment and try again.' 
               : errorMessage 
           });
-        } finally {
-          if (retryCount === 0 || retryCount === MAX_RETRIES) {
-            const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
-            console.log(`[Job ${jobId}] Completed/Failed in ${duration}s`);
+          } finally {
+            clearTimeout(timeoutId);
+            if (retryCount === 0 || retryCount === MAX_RETRIES) {
+              const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
+              console.log(`[Job ${jobId}] Completed/Failed in ${duration}s`);
+            }
           }
-        }
-      };
+        };
 
-      await runExtraction();
-    });
+        await runExtraction();
+      });
 
     res.json({ jobId });
   });
