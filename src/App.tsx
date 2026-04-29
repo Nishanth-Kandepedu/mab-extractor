@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -1275,6 +1275,7 @@ function AppContent() {
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
           targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
           biologicalSource: mAb.biologicalSource || '',
+          antibodyOrigin: mAb.antibodyOrigin || '',
           epitope: mAb.epitope || '',
           
           // Heavy Chain (VH) Data
@@ -1341,6 +1342,7 @@ function AppContent() {
             VL_SeqID: vlChain?.seqId || '',
             target: vhChain?.target || vlChain?.target || '',
             biologicalSource: mAb.biologicalSource || '',
+            antibodyOrigin: mAb.antibodyOrigin || '',
             epitope: mAb.epitope || '',
             VH_Sequence: vhChain?.fullSequence || '',
             VL_Sequence: vlChain?.fullSequence || ''
@@ -3059,6 +3061,12 @@ function AppContent() {
                                 <div className="flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-bold uppercase tracking-wider">
                                   <Activity className="w-2.5 h-2.5" />
                                   {mAb.biologicalSource}
+                                </div>
+                              )}
+                              {mAb.antibodyOrigin && (
+                                <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-100 font-bold uppercase tracking-wider">
+                                  <Fingerprint className="w-2.5 h-2.5" />
+                                  {mAb.antibodyOrigin}
                                 </div>
                               )}
                               {mAb.epitope && (

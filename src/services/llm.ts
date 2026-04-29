@@ -75,10 +75,11 @@ IMPORTANT EXTRACTION RULES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
-19. EPITOPE & BIOLOGICAL SOURCE:
+19. EPITOPE, BIOLOGICAL SOURCE & ANTIBODY ORIGIN:
     - For every antibody, attempt to identify the specific epitope residues it binds to on the target (e.g., "K43, Q48, and K86 of human IFN-gamma").
-    - Identify the biological source of the antibody or the sequences (e.g., "Human", "Mouse", "Chimeric", "Rhesus", "Humanized").
-    - If either is not explicitly found, leave as an empty string.
+    - Identify the biological source of the target or expression system (e.g., "Human", "Cyno", "Rhesus").
+    - Identify the antibody origin/generation method (e.g., "Humanized", "Chimeric", "Fully Human", "Mouse", "Phage Display").
+    - If any are not explicitly found, leave as an empty string.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -336,6 +337,7 @@ export async function extractWithLLM(
               evidenceStatement: { type: "STRING" },
               epitope: { type: "STRING" },
               biologicalSource: { type: "STRING" },
+              antibodyOrigin: { type: "STRING" },
               needsReview: { type: "BOOLEAN" },
               reviewReason: { type: "STRING" },
               experimentalData: useSarExtra ? {
