@@ -135,6 +135,7 @@ export interface ExtractionResult {
   extractionTime?: number; // in milliseconds
   tier?: ExtractionTier;
   modelUsed?: string;
+  isSarMode?: boolean;
 }
 
 export interface BatchItem {

@@ -1131,7 +1131,7 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
-          allRows.push({
+          const row: any = {
             mAbName: mAb.mAbName,
             patentId: result.patentId,
             patentTitle: result.patentTitle,
@@ -1140,6 +1140,9 @@ function AppContent() {
             targetUniProtId: mAb.targetMetadata?.uniprotId || '',
             targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
             targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+            'Target Species (Standardized)': mAb.targetSpecies || '',
+            'Antibody Origin/Generation': mAb.antibodyOrigin || '',
+            'Epitope Residues': mAb.epitope || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
@@ -1154,7 +1157,14 @@ function AppContent() {
             confidence: mAb.confidence,
             needsReview: mAb.needsReview ? 'Yes' : 'No',
             reviewRemarks: mAb.reviewReason || '',
-            characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
+          };
+
+          if (result.isSarMode) {
+            row.characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
+          }
+
+          allRows.push({
+            ...row,
             evidenceLocation: mAb.evidenceLocation || '',
             evidenceStatement: mAb.evidenceStatement || '',
             summary: mAb.summary
@@ -1265,7 +1275,7 @@ function AppContent() {
         const vhChain = mAb.chains.find(c => c.type === 'Heavy');
         const vlChain = mAb.chains.find(c => c.type === 'Light');
         
-        const row = {
+        const row: any = {
           mAbName: mAb.mAbName,
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
@@ -1296,12 +1306,18 @@ function AppContent() {
           confidence: mAb.confidence,
           needsReview: mAb.needsReview ? 'Yes' : 'No',
           reviewRemarks: mAb.reviewReason || '',
-          characterization: mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '',
+        };
+
+        if (state.result.isSarMode) {
+          row.characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
+        }
+
+        rows.push({
+          ...row,
           evidenceLocation: mAb.evidenceLocation || '',
           evidenceStatement: mAb.evidenceStatement || '',
           summary: mAb.summary
-        };
-        rows.push(row);
+        });
       });
 
       const csv = Papa.unparse(rows);

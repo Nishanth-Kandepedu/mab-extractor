@@ -663,6 +663,7 @@ export async function extractWithLLM(
   });
 
   result.modelUsed = model || 'gemini-3.1-pro-preview';
+  result.isSarMode = options.isSarMode;
   return result;
   } catch (e: any) {
     console.error("[Extraction] Fetch error details:", e);
