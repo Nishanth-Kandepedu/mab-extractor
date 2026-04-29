@@ -5,10 +5,7 @@ import { ExtractionResult, Antibody, Chain, TargetMetadata } from '../types';
  */
 function escapeSql(str: string | null | undefined): string {
   if (str === null || str === undefined) return 'NULL';
-  // Escape single quotes by doubling them
-  // Also escape backslashes to prevent escape-sequence bypasses in some SQL dialects
-  const escaped = str.replace(/'/g, "''").replace(/\\/g, "\\\\");
-  return `'${escaped}'`;
+  return `'${str.replace(/'/g, "''")}'`;
 }
 
 /**
