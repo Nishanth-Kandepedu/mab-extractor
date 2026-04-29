@@ -1708,12 +1708,18 @@ function AppContent() {
                   <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${(state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100}%` }}
+                      animate={{ 
+                        width: (state.batch && state.batch.items.length > 0)
+                          ? `${(state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100}%` 
+                          : "0%" 
+                      }}
                       className="h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"
                     />
                   </div>
                   <span className="text-[10px] font-mono text-zinc-400">
-                    {Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100)}%
+                    {state.batch && state.batch.items.length > 0 
+                      ? Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100) 
+                      : 0}%
                   </span>
                 </div>
               </div>
