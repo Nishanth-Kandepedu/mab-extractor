@@ -923,9 +923,17 @@ function AppContent() {
         setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
       }, 180000);
 
-      // Hard 5-minute timeout
+      const statusTimer4 = setTimeout(() => {
+        setState(prev => ({ ...prev, extractingStatus: "Synthesizing full chain alignments..." }));
+      }, 300000);
+
+      const statusTimer5 = setTimeout(() => {
+        setState(prev => ({ ...prev, extractingStatus: "Cross-referencing sequence coordinates..." }));
+      }, 600000);
+
+      // Hard 25-minute timeout
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Extraction timed out after 5 minutes")), 300000)
+        setTimeout(() => reject(new Error("Extraction timed out after 25 minutes")), 1500000)
       );
 
       const result = await Promise.race([
@@ -942,6 +950,8 @@ function AppContent() {
       clearTimeout(statusTimer);
       clearTimeout(statusTimer2);
       clearTimeout(statusTimer3);
+      clearTimeout(statusTimer4);
+      clearTimeout(statusTimer5);
       result.extractionTime = Date.now() - startTime;
       
       // Enrichment with UniProt Target Metadata
@@ -1063,9 +1073,17 @@ function AppContent() {
               setState(prev => ({ ...prev, extractingStatus: "Finalizing data integrity..." }));
             }, 180000);
 
-            // Hard 5-minute timeout for a single patent
+            const statusTimer4 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Synthesizing full chain alignments..." }));
+            }, 300000);
+
+            const statusTimer5 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Cross-referencing sequence coordinates..." }));
+            }, 600000);
+
+            // Hard 25-minute timeout for a single patent
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Patent extraction timed out after 5 minutes")), 300000)
+              setTimeout(() => reject(new Error("Patent extraction timed out after 25 minutes")), 1500000)
             );
 
             result = await Promise.race([
@@ -1082,6 +1100,8 @@ function AppContent() {
             clearTimeout(statusTimer1);
             clearTimeout(statusTimer2);
             clearTimeout(statusTimer3);
+            clearTimeout(statusTimer4);
+            clearTimeout(statusTimer5);
             
             if (result) {
               const itemExtractionTime = Date.now() - itemStartTime;
