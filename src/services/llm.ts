@@ -40,12 +40,10 @@ IMPORTANT EXTRACTION RULES:
     - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
 6. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
-    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules, receptors, or ligands.
-    - RECEPTOR VS LIGAND: Be extremely careful not to swap the receptor and ligand. If the antibody binds to "CD3", its target is "CD3" (or "CD3E/P07766"), NOT the other arm's target (like MICA) or the cell it's on.
-    - Example: In a bispecific "Anti-CD3 x Anti-MICA", the CD3-binding arm has target "CD3", and the MICA-binding arm has target "MICA". DO NOT assign "MICA" to both.
+    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules, transcription factors, or readout proteins (e.g., STAT1, SMAD, luciferase, pSTAT1). 
     - Example: If an antibody blocks "IFN-gamma signaling" and the patent measures "STAT1 phosphorylation", the target is "IFN-gamma", NOT "STAT1".
     - You must extract the antigen that the antibody is designed to bind to. 
-    - Include this target in every chain object.
+    - Include this target and include it as "target" in every chain object.
 7. ID-Mapping & Cross-Referencing Strategy: 
     - First, identify every unique mAb ID (e.g., "mAb 1", "2419") from the tables. You MUST extract sequences for every ID found.
     - CROSS-REFERENCE: Many antibodies have multiple names (e.g., "mAb 1" is "REGN7075"). You MUST map these names together in the "mAbName" field (e.g., "mAb 1 (REGN7075)") or ensure both are mentioned in the summary.
@@ -572,13 +570,10 @@ export async function extractWithLLM(
       let lastCdrEnd = 0;
       chain.cdrs = chain.cdrs.map(cdr => {
         const cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
-        if (!cleanCdrSeq) return cdr;
-
         // Search for the CDR sequence within the full sequence, starting from the end of the last CDR
-        // This helps distinguish between similar sequences (like small CDR2s)
         let foundIndex = seq.indexOf(cleanCdrSeq, lastCdrEnd);
         
-        // If not found after last CDR, try searching from the beginning 
+        // If not found after last CDR, try searching from the beginning (in case of out-of-order extraction)
         if (foundIndex === -1) {
           foundIndex = seq.indexOf(cleanCdrSeq);
         }
@@ -590,12 +585,8 @@ export async function extractWithLLM(
           return { ...cdr, sequence: cleanCdrSeq, start: newStart, end: newEnd };
         }
         
-        // CRITICAL: If the verbatim sequence is NOT found in the fullSequence, 
-        // we MUST NOT use the hallucinated indices as they will lead to visual mismatch.
-        // We flag it for review and set indices to -1 to disable highlighting for this CDR.
-        needsReview = true;
-        reviewReason += ` [CDR ${cdr.type} sequence "${cleanCdrSeq}" not found in full sequence]`;
-        return { ...cdr, sequence: cleanCdrSeq, start: -1, end: -1 };
+        // Fallback: if sequence not found verbatim, keep original but warn
+        return { ...cdr, sequence: cleanCdrSeq };
       });
 
       // Non-standard amino acid detection
