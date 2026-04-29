@@ -20,6 +20,7 @@ IMPORTANT EXTRACTION RULES:
    - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif (Framework 4).
    - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif (Framework 4).
    - VARIABLE DOMAIN ONLY (Fv): You MUST only extract the Variable Domain. Do NOT include the Constant Region (CH1, CH2, CH3, CL, or Hinges).
+   - SEQUENCE FIELD: The JSON field "variableSequence" MUST contain only the Variable Domain.
    - DISCARD CONSERVED REGIONS: Sequences starting with "ASTKGP..." (CH1) or "RTVAAP..." (CL) are CONSTANT REGIONS and must be excluded. 
    - TRUNCATION RULE: Truncate the sequence immediately after the J-segment motifs:
      * VH: Ends after ...VTVSS or ...WGXG.
@@ -316,7 +317,7 @@ export async function extractWithLLM(
                   type: "OBJECT",
                   properties: {
                     type: { type: "STRING", enum: ["Heavy", "Light"] },
-                    fullSequence: { type: "STRING" },
+                    variableSequence: { type: "STRING", description: "The full amino acid sequence of the VARIABLE domain only (approx 110-130 AA). Do NOT include constant regions." },
                     seqId: { type: "STRING" },
                     pageNumber: { type: "INTEGER" },
                     tableId: { type: "STRING" },
@@ -335,7 +336,7 @@ export async function extractWithLLM(
                       },
                     },
                   },
-                  required: ["type", "fullSequence", "cdrs", "seqId", "pageNumber", "target"],
+                  required: ["type", "variableSequence", "cdrs", "seqId", "pageNumber", "target"],
                 },
               },
               confidence: { type: "NUMBER" },
@@ -498,7 +499,7 @@ export async function extractWithLLM(
     let reviewReason = mAb.reviewReason || "";
 
     mAb.chains = mAb.chains.map(chain => {
-      let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+      let seq = chain.variableSequence.replace(/\s/g, ''); // Remove any whitespace
 
       // Constant region detection (CH1 / CL common starts)
       const isCH1 = seq.startsWith("ASTKGP") || seq.includes("ASTKGPSVFPLAP");
@@ -639,7 +640,7 @@ export async function extractWithLLM(
         }
       }
 
-      return { ...chain, fullSequence: seq };
+      return { ...chain, variableSequence: seq };
     });
 
     // Problematic Variant Check

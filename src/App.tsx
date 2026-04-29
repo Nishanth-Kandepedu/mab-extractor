@@ -1152,12 +1152,12 @@ function AppContent() {
             'Antibody Origin/Generation': mAb.antibodyOrigin || '',
             'Epitope Residues': mAb.epitope || '',
             VH_SeqID: vhChain?.seqId || '',
-            VH_FullSequence: vhChain?.fullSequence || '',
+            VH_VariableSequence: vhChain?.variableSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
             VH_CDR2: vhChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             VH_CDR3: vhChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             VL_SeqID: vlChain?.seqId || '',
-            VL_FullSequence: vlChain?.fullSequence || '',
+            VL_VariableSequence: vlChain?.variableSequence || '',
             VL_CDR1: vlChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
             VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
@@ -1298,14 +1298,14 @@ function AppContent() {
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
-          VH_FullSequence: vhChain?.fullSequence || '',
+          VH_VariableSequence: vhChain?.variableSequence || '',
           VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
           VH_CDR2: vhChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
           VH_CDR3: vhChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
           
           // Light Chain (VL) Data
           VL_SeqID: vlChain?.seqId || '',
-          VL_FullSequence: vlChain?.fullSequence || '',
+          VL_VariableSequence: vlChain?.variableSequence || '',
           VL_CDR1: vlChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
           VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
           VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
@@ -1368,8 +1368,8 @@ function AppContent() {
             'Target Species (Standardized)': mAb.targetSpecies || '',
             'Antibody Origin/Generation': mAb.antibodyOrigin || '',
             'Epitope Residues': mAb.epitope || '',
-            VH_Sequence: vhChain?.fullSequence || '',
-            VL_Sequence: vlChain?.fullSequence || ''
+            VH_Sequence: vhChain?.variableSequence || '',
+            VL_Sequence: vlChain?.variableSequence || ''
           });
         });
         const csv = Papa.unparse(rows);
@@ -1447,7 +1447,7 @@ function AppContent() {
     
     const fasta = state.result.antibodies.flatMap(mAb => 
       mAb.chains.map(chain => 
-        `>${mAb.mAbName} | ${chain.type} Chain | ${chain.target || 'N/A'} | ${state.result?.patentId}\n${chain.fullSequence}`
+        `>${mAb.mAbName} | ${chain.type} Chain | ${chain.target || 'N/A'} | ${state.result?.patentId}\n${chain.variableSequence}`
       )
     ).join('\n');
     
@@ -1465,7 +1465,7 @@ function AppContent() {
     newResult.antibodies[mAbIdx].chains = [...newResult.antibodies[mAbIdx].chains];
     newResult.antibodies[mAbIdx].chains[chainIdx] = { 
       ...newResult.antibodies[mAbIdx].chains[chainIdx],
-      fullSequence: newSequence 
+      variableSequence: newSequence 
     };
     
     setState(prev => ({ ...prev, result: newResult }));

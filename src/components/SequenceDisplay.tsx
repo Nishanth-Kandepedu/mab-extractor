@@ -15,17 +15,17 @@ interface SequenceDisplayProps {
 }
 
 export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEditable, onUpdate }) => {
-  const { fullSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids, target } = chain;
+  const { variableSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids, target } = chain;
   const [isEditing, setIsEditing] = React.useState(false);
-  const [tempSequence, setTempSequence] = React.useState(fullSequence);
+  const [tempSequence, setTempSequence] = React.useState(variableSequence);
   const [copied, setCopied] = React.useState(false);
 
   const STANDARD_AMINO_ACIDS = new Set("ACDEFGHIKLMNPQRSTVWY");
 
-  // Sync tempSequence if fullSequence changes externally
+  // Sync tempSequence if variableSequence changes externally
   React.useEffect(() => {
-    setTempSequence(fullSequence);
-  }, [fullSequence]);
+    setTempSequence(variableSequence);
+  }, [variableSequence]);
 
   const handleSave = () => {
     if (onUpdate) {
@@ -35,12 +35,12 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
   };
 
   const handleCancel = () => {
-    setTempSequence(fullSequence);
+    setTempSequence(variableSequence);
     setIsEditing(false);
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(fullSequence);
+    navigator.clipboard.writeText(variableSequence);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -51,8 +51,8 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
   const renderSequence = () => {
     const parts: React.ReactNode[] = [];
     
-    for (let i = 0; i < fullSequence.length; i++) {
-      const char = fullSequence[i];
+    for (let i = 0; i < variableSequence.length; i++) {
+      const char = variableSequence[i];
       const isNonStandard = !STANDARD_AMINO_ACIDS.has(char.toUpperCase());
       
       // Check if this index is part of a CDR
@@ -142,7 +142,7 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
           <span className="text-[10px] font-mono bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded shadow-sm">
-            {fullSequence.length} AA
+            {variableSequence.length} AA
           </span>
         </div>
       </div>

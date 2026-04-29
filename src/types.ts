@@ -7,7 +7,7 @@ export interface CDR {
 
 export interface Chain {
   type: 'Heavy' | 'Light';
-  fullSequence: string;
+  variableSequence: string;
   cdrs: CDR[];
   seqId?: string;
   pageNumber?: number;
