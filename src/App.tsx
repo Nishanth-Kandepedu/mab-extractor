@@ -108,7 +108,7 @@ const LoadingScreen = ({ status, timer, batchProgress }: { status?: string, time
             <motion.div 
               className="h-full bg-indigo-500"
               initial={{ width: 0 }}
-              animate={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+              animate={{ width: `${batchProgress.total > 0 ? (batchProgress.current / batchProgress.total) * 100 : 0}%` }}
             />
           </div>
         </motion.div>
@@ -621,7 +621,11 @@ function AppContent() {
       console.error('Logout failed:', err);
     } finally {
       setUser(null);
-      setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
+      setState({
+        isExtracting: false,
+        result: null,
+        error: null,
+      });
       setPageRange('');
       setShowAdminDashboard(false);
       setShowHistory(false);
@@ -1625,7 +1629,7 @@ function AppContent() {
         </div>
       </header>
 
-      {state.batch && (
+      {state.batch && state.batch.items.length > 0 && (
         <div className="bg-zinc-900 text-white px-8 py-3 flex items-center justify-between border-b border-white/5 sticky top-0 z-[60] shadow-2xl backdrop-blur-md bg-zinc-900/95">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
@@ -1690,12 +1694,12 @@ function AppContent() {
                   <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${(state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100}%` }}
+                      animate={{ width: `${state.batch.items.length > 0 ? (state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100 : 0}%` }}
                       className="h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"
                     />
                   </div>
                   <span className="text-[10px] font-mono text-zinc-400">
-                    {Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100)}%
+                    {state.batch.items.length > 0 ? Math.round((state.batch.items.filter(i => i.status === 'completed' || i.status === 'error').length / state.batch.items.length) * 100) : 0}%
                   </span>
                 </div>
               </div>
@@ -1733,30 +1737,32 @@ function AppContent() {
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
           {/* System Health Dashboard */}
-          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest flex items-center gap-2">
-                <Activity className="w-3 h-3 text-indigo-500" />
-                System Infrastructure
-              </h3>
-              <div className="flex items-center gap-1.5">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-zinc-800">
+                  Infrastructure
+                </h3>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-50 border border-zinc-100">
                 <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                <span className="text-[9px] font-bold text-zinc-500 uppercase">{networkStats.online ? 'Live' : 'Offline'}</span>
+                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-tighter">{networkStats.online ? 'Live' : 'Offline'}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">API Latency</p>
-                <div className="flex items-end gap-1">
-                  <span className="text-sm font-bold text-zinc-700">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
-                  <span className="text-[8px] text-zinc-400 mb-0.5">ms</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Latency</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-lg font-bold text-zinc-900 tabular-nums">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">ms</span>
                 </div>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
-                <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Engine Health</p>
+              <div className="space-y-1 text-right">
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Health</p>
                 <span className={cn(
-                  "text-[10px] font-bold uppercase",
+                  "text-[10px] font-black uppercase tracking-tighter block",
                   healthInfo?.status === 'ok' ? "text-emerald-600" : "text-amber-600"
                 )}>
                   {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Checking...'}
@@ -1764,65 +1770,55 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-[9px]">
-                <span className="text-zinc-400 uppercase font-medium">Model Load / Concurrency</span>
-                <span className="text-zinc-600 font-bold uppercase tracking-tighter">
-                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} Active / ${healthInfo.concurrency?.pendingCount || 0} Queued` : '--'}
+            <div className="space-y-2 pt-2 border-t border-zinc-50">
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Model Load</span>
+                <span className="text-[10px] font-bold text-zinc-900 uppercase tracking-tighter tabular-nums">
+                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} / ${healthInfo.concurrency?.totalLimit || 4}` : '--'}
                 </span>
               </div>
-              <div className="w-full h-1 bg-zinc-200 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount + healthInfo.concurrency?.pendingCount) / 4) * 100)}%` : '0%' }}
+                  animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
                   className={cn(
-                    "h-full transition-all duration-500",
-                    (healthInfo?.concurrency?.activeCount || 0) >= 2 ? "bg-amber-500" : "bg-indigo-500"
+                    "h-full transition-all duration-700",
+                    (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-indigo-500Shadow shadow-[0_0_8px_rgba(99,102,241,0.3)]"
                   )} 
                 />
               </div>
-              <p className="text-[8px] text-zinc-400 font-mono tracking-tight leading-tight">
-                {healthInfo ? `Throughput: 100% | Latency: ${networkStats.latency}ms | Load: ${healthInfo.concurrency?.activeCount > 0 ? 'Elevated' : 'Stable'}` : 'Synchronizing system metrics...'}
-              </p>
             </div>
 
-            <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
-              <span className="text-[8px] text-zinc-400 italic">Last ping: {networkStats.lastChecked.toLocaleTimeString()}</span>
-              <button onClick={checkHealth} className="text-[8px] font-bold text-indigo-600 hover:underline uppercase tracking-widest">Verify Nodes</button>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[8px] font-medium text-zinc-400 uppercase tracking-widest">
+                VER: {healthInfo?.version || 'Syncing...'}
+              </span>
+              <button 
+                onClick={checkHealth} 
+                className="text-[9px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest transition-colors flex items-center gap-1"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                Refresh
+              </button>
             </div>
           </div>
 
           {/* Model Selection */}
-          <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <RotateCcw className="w-5 h-5 text-indigo-600" />
-                <h2 className="font-semibold text-zinc-800">
-                  {(user as any)?.role === 'guest' ? 'AI Analysis Engine' : 'Model Benchmarking'}
+                <Beaker className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-semibold text-zinc-800 text-sm">
+                  {(user as any)?.role === 'guest' ? 'AI Analysis Engine' : 'Extraction Model'}
                 </h2>
               </div>
               {(user as any)?.role === 'guest' && (
-                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-tight">
-                  Active
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-tight">
+                  Guest Mode
                 </span>
               )}
             </div>
             
-            {(llmOptions.model === 'gemma-4') && (
-              <div className="p-4 rounded-xl border bg-amber-50 border-amber-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full animate-pulse bg-amber-500" />
-                  <span className="text-xs font-medium text-amber-700">
-                    Gemma 4 High-Thinking Engine
-                  </span>
-                </div>
-                <p className="text-[10px] mt-2 leading-relaxed text-amber-600/80">
-                  Using Gemma 4 open weights with High Thinking enabled. Optimized for extreme verbatim accuracy. 
-                  <span className="block mt-1 font-bold">Note: 256k token limit per document. Use Gemini 3.1 Pro for large patents.</span>
-                </p>
-              </div>
-            )}
-
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-2">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
@@ -1839,10 +1835,10 @@ function AppContent() {
                         model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
-                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border",
+                        "py-2 px-1 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border",
                         llmOptions.provider === p
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100" 
-                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100",
+                          ? "bg-zinc-900 text-white border-zinc-900 shadow-sm" 
+                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300",
                         isDisabled && "opacity-40 grayscale cursor-not-allowed"
                       )}
                     >
@@ -1854,7 +1850,8 @@ function AppContent() {
               <select
                 value={llmOptions.model}
                 onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-bold outline-none ring-0 shadow-none focus:border-indigo-400 transition-all cursor-pointer"
+                disabled={state.isExtracting}
               >
                 {llmOptions.provider === 'gemini' && (
                   <>
@@ -1884,30 +1881,30 @@ function AppContent() {
                 )}
               </select>
 
-              <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-100">
+              <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-50">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-zinc-700">SAR Data Extraction</span>
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Evidence Engine</span>
                     {llmOptions.model !== 'gemma-4' && (
-                      <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-bold tracking-tighter">Gemma 4 Only</span>
+                      <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-black tracking-tighter">Gemma Only</span>
                     )}
                   </div>
-                  <span className="text-[10px] text-zinc-400 leading-tight">Extract IC50, PK, ADMET & In Vivo evidence</span>
+                  <span className="text-[9px] text-zinc-400 font-medium leading-tight">Extract IC50, PK, ADMET data</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setLlmOptions(prev => ({ ...prev, isSarMode: !prev.isSarMode }))}
                   disabled={llmOptions.model !== 'gemma-4'}
                   className={cn(
-                    "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+                    "relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                     llmOptions.isSarMode ? "bg-indigo-600" : "bg-zinc-200",
-                    llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed grayscale"
+                    llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed"
                   )}
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                      llmOptions.isSarMode ? "translate-x-5" : "translate-x-0"
+                      "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
+                      llmOptions.isSarMode ? "translate-x-4" : "translate-x-0"
                     )}
                   />
                 </button>
@@ -1915,20 +1912,20 @@ function AppContent() {
             </div>
           </div>
 
-          <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm sticky top-24">
-            <div className="flex items-center justify-between mb-6">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm sticky top-24">
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <FileUp className="w-5 h-5 text-indigo-600" />
-                <h2 className="font-semibold text-zinc-800">
-                  {mode === 'single' ? 'Input Patent Data' : 'Batch Patent Processing'}
+                <h2 className="font-semibold text-zinc-800 text-sm">
+                  {mode === 'single' ? 'Input Data' : 'Batch Processing'}
                 </h2>
               </div>
-              <div className="flex bg-zinc-100 p-0.5 rounded-lg">
+              <div className="flex bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
                 <button
                   onClick={() => setMode('single')}
                   className={cn(
-                    "px-3 py-1 text-[10px] font-bold rounded-md transition-all",
-                    mode === 'single' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                    "px-3 py-1 text-[9px] font-black rounded-md transition-all uppercase tracking-tighter",
+                    mode === 'single' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
                   )}
                 >
                   SINGLE
@@ -1936,8 +1933,8 @@ function AppContent() {
                 <button
                   onClick={() => setMode('batch')}
                   className={cn(
-                    "px-3 py-1 text-[10px] font-bold rounded-md transition-all",
-                    mode === 'batch' ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                    "px-3 py-1 text-[9px] font-black rounded-md transition-all uppercase tracking-tighter",
+                    mode === 'batch' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
                   )}
                 >
                   BATCH
@@ -1945,54 +1942,44 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {mode === 'single' ? (
                 <>
-                  {/* Existing Single Mode UI */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Target Page / Range / Section (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "Page 42", "Pages 10-15", "Table 1")</span>
-                      </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em]">
+                      Target Range (Optional)
                     </label>
                     <input
                       type="text"
                       value={pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
-                      placeholder="Focus on specific page, range, or table..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      placeholder="e.g., Page 42, Pages 10-15, Table 1"
+                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Priority SEQ IDs / Clone Names (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(e.g., "7, 12, mAb1")</span>
-                      </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em]">
+                      Priority IDs (Optional)
                     </label>
                     <input
                       type="text"
                       value={prioritySeqIds}
                       onChange={(e) => setPrioritySeqIds(e.target.value)}
-                      placeholder="Focus AI on specific SEQ IDs or Clone Names..."
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      placeholder="e.g., 7, 12, mAb1"
+                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        Sequence Listing File (Optional)
-                        <span className="font-normal lowercase text-zinc-300 italic">(.txt, .xml)</span>
-                      </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em] flex items-center justify-between">
+                      Sequence Listing
                       {sequenceListingFile && (
                         <button 
                           onClick={() => setSequenceListingFile(null)}
-                          className="text-red-500 hover:text-red-700 transition-colors"
+                          className="text-red-400 hover:text-red-600 transition-colors"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -2007,12 +1994,12 @@ function AppContent() {
                         disabled={state.isExtracting}
                       />
                       <div className={cn(
-                        "border border-zinc-200 rounded-xl px-4 py-2 text-xs flex items-center gap-3 transition-all",
-                        sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-zinc-50 text-zinc-500 hover:border-indigo-300"
+                        "border border-zinc-200 rounded-lg px-3 py-2 text-[11px] flex items-center gap-3 transition-all",
+                        sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white text-zinc-400 hover:border-zinc-300"
                       )}>
-                        <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-400")} />
-                        <span className="truncate flex-1">
-                          {sequenceListingFile ? sequenceListingFile.name : "Select Sequence Listing File..."}
+                        <FileText className={cn("w-3.5 h-3.5", sequenceListingFile ? "text-indigo-600" : "text-zinc-300")} />
+                        <span className="truncate flex-1 font-medium">
+                          {sequenceListingFile ? sequenceListingFile.name : "Select listing file..."}
                         </span>
                         {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
                       </div>
@@ -2040,21 +2027,20 @@ function AppContent() {
                       disabled={state.isExtracting}
                     />
                     <div className={cn(
-                      "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
+                      "border-2 border-dashed border-zinc-100 rounded-xl p-6 text-center transition-all group-hover:border-indigo-200 group-hover:bg-indigo-50/20",
                       state.isExtracting && "opacity-50 pointer-events-none"
                     )}>
                       {state.isExtracting ? (
-                        <div className="flex flex-col items-center">
-                          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-                          <p className="text-sm font-medium text-indigo-600">Extracting Sequences...</p>
-                          <p className="text-[10px] text-indigo-400 mt-1 uppercase tracking-widest font-mono">Analyzing Document Structure</p>
+                        <div className="flex flex-col items-center py-2">
+                          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+                          <p className="text-xs font-bold text-indigo-600">Extracting...</p>
                         </div>
                       ) : (
-                        <>
-                          <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />
-                          <p className="text-sm font-medium text-zinc-700">Upload Patent Document</p>
-                          <p className="text-xs text-zinc-500 mt-1">PDF or TXT files supported</p>
-                        </>
+                        <div className="py-2">
+                          <Upload className="w-6 h-6 text-zinc-300 mx-auto mb-2 group-hover:text-indigo-400 transition-colors" />
+                          <p className="text-xs font-bold text-zinc-600">Drop Patent Document</p>
+                          <p className="text-[10px] text-zinc-400 mt-0.5 uppercase tracking-tighter">PDF or TXT</p>
+                        </div>
                       )}
                     </div>
                   </div>
