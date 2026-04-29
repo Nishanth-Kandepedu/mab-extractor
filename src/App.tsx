@@ -3033,26 +3033,6 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
-                              {mAb.epitopeInfo && (
-                                <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100" title="Epitope Information">
-                                  {mAb.epitopeInfo}
-                                </span>
-                              )}
-                              {mAb.antigenOrigin && (
-                                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-100" title="Antigen Origin">
-                                  {mAb.antigenOrigin}
-                                </span>
-                              )}
-                              {mAb.antibodyOrigin && (
-                                <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-100" title="Antibody Origin">
-                                  {mAb.antibodyOrigin}
-                                </span>
-                              )}
-                              {mAb.developmentalTechnology && (
-                                <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded border border-purple-100" title="Developmental Technology">
-                                  {mAb.developmentalTechnology}
-                                </span>
-                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}
@@ -3173,6 +3153,41 @@ function AppContent() {
                               <RotateCcw className="w-3 h-3" />
                               Fetch UniProt Metadata for {mAb.chains.find(c => c.target)?.target}
                             </button>
+                          </div>
+                        )}
+
+                        {(mAb.epitopeInfo || mAb.antigenOrigin || mAb.antibodyOrigin || mAb.developmentalTechnology) && (
+                          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-xs">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Beaker className="w-4 h-4 text-indigo-600" />
+                              <span className="font-bold text-zinc-900 uppercase tracking-widest text-[10px]">Antibody Properties & Origin</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                              {mAb.epitopeInfo && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Epitope / Binding</span>
+                                  <div className="text-zinc-900 font-bold">{mAb.epitopeInfo}</div>
+                                </div>
+                              )}
+                              {mAb.antigenOrigin && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Antigen Source</span>
+                                  <div className="text-zinc-900 font-bold">{mAb.antigenOrigin}</div>
+                                </div>
+                              )}
+                              {mAb.antibodyOrigin && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Antibody Origin</span>
+                                  <div className="text-zinc-900 font-bold">{mAb.antibodyOrigin}</div>
+                                </div>
+                              )}
+                              {mAb.developmentalTechnology && (
+                                <div>
+                                  <span className="text-[10px] text-zinc-400 uppercase font-bold block mb-0.5">Platform / Tech</span>
+                                  <div className="text-zinc-900 font-bold">{mAb.developmentalTechnology}</div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                         
