@@ -517,10 +517,15 @@ export async function extractWithLLM(
       const jMotifs = [
         /VTVSS[A-Z]*/,           // VH standard
         /VTVSA[A-Z]*/,           // VH variant
+        /VTVSS/,                 // Exact match
         /VEIK[A-Z]*/,            // VL Kappa standard
         /LEIK[A-Z]*/,            // VL Kappa variant
+        /VEIK/,                  // Exact match
         /VFG[A-Z]GTK[A-Z]*/,     // VL motif
-        /FGGGTK[A-Z]*/          // VL variant
+        /FGGGTK[A-Z]*/,          // VL variant
+        /LTVL[A-Z]*/,            // Lambda J-region
+        /LTVL/,                  // Lambda J-region
+        /VTLG[A-Z]*/             // Another Lambda variant
       ];
 
       // If sequence is suspiciously long or constant region is detected, find J-motif and truncate
@@ -554,7 +559,7 @@ export async function extractWithLLM(
           }
         } else if (seq.length > 140) {
           // If no motif found but still long, and it contains common constant region starts, truncate there
-          const cStarts = ["ASTKGP", "RTVAAP", "RTVAAPSVF"];
+          const cStarts = ["ASTKGP", "RTVAAP", "RTVAAPSVF", "GQPKAAP", "SSASTK", "GPSVFP"];
           for (const start of cStarts) {
             const cIndex = seq.indexOf(start);
             if (cIndex > 90) {
