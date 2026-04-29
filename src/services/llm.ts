@@ -76,8 +76,17 @@ IMPORTANT EXTRACTION RULES:
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 `;
 
+export const BIOPHARMA_INSTRUCTION = `
+19. BIOPHARMACEUTICAL PROPERTIES (CRITICAL):
+    For every antibody identified, you MUST extract the following summary properties:
+    - "epitopeInfo": High-level summary of the binding site/epitope (e.g., "Human PD-L1 Domain 1", "Epitope B on HER2").
+    - "antigenOrigin": Source of the target protein used (e.g., "Recombinant Human", "Monkey-derived", "Cell-expressed").
+    - "antibodyOrigin": Method of antibody generation (e.g., "Phage display", "Immunized mouse", "Transgenic rat").
+    - "developmentalTechnology": Technology platform used (e.g., "VelocImmune", "Hybridoma", "Single B-cell cloning").
+`;
+
 export const GEMMA_4_EXTRA_INSTRUCTION = `
-19. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
+20. STRUCTURED EXPERIMENTAL MINING (CATEGORIZED):
     For each antibody clone, you MUST extract the following properties into the "experimentalData" array, categorized strictly:
     
     - "In Vitro": Target or cell line centric activity/potency/affinity. (e.g., Kd, IC50, EC50, binding by ELISA/FACS/SPR, neutralization).
@@ -284,7 +293,7 @@ export async function extractWithLLM(
 
     const isGemma4 = model === 'gemma-4';
     const useSarExtra = isGemma4 && options.isSarMode;
-    const activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
+    const activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + BIOPHARMA_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : (SYSTEM_INSTRUCTION + BIOPHARMA_INSTRUCTION);
 
     const responseSchema: any = {
       type: "OBJECT",
@@ -297,6 +306,10 @@ export async function extractWithLLM(
             type: "OBJECT",
             properties: {
               mAbName: { type: "STRING" },
+              epitopeInfo: { type: "STRING" },
+              antigenOrigin: { type: "STRING" },
+              antibodyOrigin: { type: "STRING" },
+              developmentalTechnology: { type: "STRING" },
               chains: {
                 type: "ARRAY",
                 items: {
