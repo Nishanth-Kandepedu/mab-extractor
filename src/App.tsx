@@ -11,6 +11,7 @@ import { auth, signIn, logout, db, handleFirestoreError, OperationType } from '.
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
 import Papa from 'papaparse';
+import { generateSqlDump } from './lib/sqlExport';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -1219,6 +1220,38 @@ function AppContent() {
     }
   }, [state.batch]);
 
+  const handleBatchExportSql = useCallback(async () => {
+    if (!state.batch) return;
+    
+    setIsExporting(true);
+    try {
+      const completedResults = state.batch.items
+        .filter(i => i.status === 'completed' && i.result)
+        .map(i => i.result!);
+      
+      if (completedResults.length === 0) {
+        setIsExporting(false);
+        return;
+      }
+
+      const sqlContent = generateSqlDump(completedResults);
+      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `abminer_batch_export_${new Date().toISOString().split('T')[0]}.sql`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setSqlExportSuccess(true);
+      setTimeout(() => setSqlExportSuccess(false), 3000);
+      setIsExporting(false);
+    } catch (e) {
+      setIsExporting(false);
+      console.error("[Batch Export] SQL failed:", e);
+    }
+  }, [state.batch]);
+
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
     
@@ -1404,6 +1437,58 @@ function AppContent() {
       }
     }
   }, [state.result]);
+
+  const [sqlExportSuccess, setSqlExportSuccess] = useState(false);
+
+  const handleExportSql = useCallback(async () => {
+    if (!state.result) return;
+    
+    setIsExporting(true);
+    try {
+      // Track download event
+      ReactGA.event({
+        category: 'Export',
+        action: 'Download SQL',
+        label: state.result.patentId
+      });
+      // Log download activity
+      if (user) {
+        addDoc(collection(db, 'activity_logs'), {
+          userId: user.uid,
+          accountId: user.accountId || '',
+          userDisplayName: user.displayName || 'Anonymous Guest',
+          action: 'download_sql' as any,
+          patentId: state.result.patentId,
+          patentTitle: state.result.patentTitle,
+          timestamp: Timestamp.now()
+        }).catch(err => console.error('Failed to log activity:', err));
+      }
+
+      const sqlContent = generateSqlDump(state.result);
+      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const safeId = (state.result.patentId || 'result').replace(/[^a-z0-9]/gi, '_');
+      link.setAttribute('download', `mAb-extraction-${safeId}.sql`);
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setIsExporting(false);
+        setSqlExportSuccess(true);
+        setTimeout(() => setSqlExportSuccess(false), 2000);
+      }, 100);
+    } catch (e) {
+      console.error("[Export] SQL failed:", e);
+      setIsExporting(false);
+      setState(prev => ({ ...prev, error: 'Failed to generate SQL dump.' }));
+    }
+  }, [state.result, user]);
 
   const handleWebhookSync = useCallback(async () => {
     if (!state.result || !user?.webhookUrl) return;
@@ -1841,6 +1926,13 @@ function AppContent() {
                  >
                    <Download className="w-4 h-4" />
                    DOWNLOAD MASTER CSV
+                 </button>
+                 <button 
+                   onClick={handleBatchExportSql}
+                   className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold rounded-full transition-all border border-zinc-700 active:scale-95 shadow-lg shadow-indigo-500/10"
+                 >
+                   <Database className="w-4 h-4 text-indigo-400" />
+                   CONSOLIDATED SQL
                  </button>
                  <button 
                    onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
@@ -3158,6 +3250,24 @@ function AppContent() {
                             <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
                             <Table className="w-4 h-4 text-white" />
+                          )}
+                        </button>
+
+                        <button 
+                          onClick={handleExportSql}
+                          disabled={isExporting}
+                          className={cn(
+                            "p-2 rounded-lg border transition-all relative group",
+                            sqlExportSuccess ? "bg-emerald-600/20 border-emerald-600/30" : "bg-white/10 hover:bg-white/20 border-white/10"
+                          )}
+                          title="Export SQL (DBeaver Ready)"
+                        >
+                          {isExporting ? (
+                            <Loader2 className="w-4 h-4 text-white animate-spin" />
+                          ) : sqlExportSuccess ? (
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Database className="w-4 h-4 text-white" />
                           )}
                         </button>
                         <button 
