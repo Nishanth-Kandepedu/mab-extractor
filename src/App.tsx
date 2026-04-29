@@ -858,24 +858,24 @@ function AppContent() {
         });
 
         for (const mAb of result.antibodies) {
-          // Identify all unique targets for this antibody
-          const mAbTargets = Array.from(new Set(
-            mAb.chains.map(c => c.target).filter(Boolean).map(t => t!.toLowerCase().trim())
-          ));
-
-          if (mAbTargets.length > 0) {
-            const mABMetadata = mAbTargets
-              .map(t => targetMap.get(t))
-              .filter(Boolean);
-            
-            mAb.targetsMetadata = mABMetadata;
-            
-            // Set legacy field for backward compatibility/UI ease
-            if (mABMetadata.length > 0) {
-               mAb.targetMetadata = mABMetadata[0];
+          // Find the most frequent primary target for this antibody
+          const targetCounts: Record<string, number> = {};
+          mAb.chains.forEach(c => {
+            if (c.target) {
+              const t = c.target.toLowerCase().trim();
+              targetCounts[t] = (targetCounts[t] || 0) + 1;
             }
-            
-            console.log(`[Enrichment] Applied UniProt metadata for ${mAb.mAbName}. Found ${mABMetadata.length}/${mAbTargets.length} targets.`);
+          });
+
+          // Sort targets by frequency
+          const sortedTargets = Object.entries(targetCounts).sort((a,b) => b[1] - a[1]);
+          const topTarget = sortedTargets[0]?.[0];
+          
+          if (topTarget && targetMap.has(topTarget)) {
+            mAb.targetMetadata = targetMap.get(topTarget);
+            console.log(`[Enrichment] Successfully applied UniProt metadata for ${mAb.mAbName} (Target: ${topTarget}, UniProtId: ${mAb.targetMetadata?.uniprotId})`);
+          } else if (topTarget) {
+            console.log(`[Enrichment] No UniProt match found for top target "${topTarget}" of ${mAb.mAbName}`);
           }
         }
       } else {
@@ -1131,20 +1131,15 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
-          const allTargets = Array.from(new Set(mAb.chains.map(c => c.target).filter(Boolean)));
-          
           allRows.push({
             mAbName: mAb.mAbName,
-            source: mAb.source || '',
             patentId: result.patentId,
             patentTitle: result.patentTitle,
-            target: allTargets.join('; '),
-            VH_Epitope: vhChain?.epitope || '',
-            VL_Epitope: vlChain?.epitope || '',
-            targetStandardName: mAb.targetsMetadata?.map(m => m.standardName).join('; ') || mAb.targetMetadata?.standardName || '',
-            targetUniProtId: mAb.targetsMetadata?.map(m => m.uniprotId).join('; ') || mAb.targetMetadata?.uniprotId || '',
-            targetGeneSymbols: mAb.targetsMetadata?.flatMap(m => m.geneSymbols).join('; ') || mAb.targetMetadata?.geneSymbols.join(', ') || '',
-            targetSynonyms: mAb.targetsMetadata?.flatMap(m => m.synonyms).join('; ') || mAb.targetMetadata?.synonyms.join(', ') || '',
+            target: vhChain?.target || vlChain?.target || '',
+            targetStandardName: mAb.targetMetadata?.standardName || '',
+            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
@@ -1269,20 +1264,16 @@ function AppContent() {
       state.result.antibodies.forEach(mAb => {
         const vhChain = mAb.chains.find(c => c.type === 'Heavy');
         const vlChain = mAb.chains.find(c => c.type === 'Light');
-        const allTargets = Array.from(new Set(mAb.chains.map(c => c.target).filter(Boolean)));
         
         const row = {
           mAbName: mAb.mAbName,
-          source: mAb.source || '',
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
-          target: allTargets.join('; '),
-          VH_Epitope: vhChain?.epitope || '',
-          VL_Epitope: vlChain?.epitope || '',
-          targetStandardName: mAb.targetsMetadata?.map(m => m.standardName).join('; ') || mAb.targetMetadata?.standardName || '',
-          targetUniProtId: mAb.targetsMetadata?.map(m => m.uniprotId).join('; ') || mAb.targetMetadata?.uniprotId || '',
-          targetGeneSymbols: mAb.targetsMetadata?.flatMap(m => m.geneSymbols).join('; ') || mAb.targetMetadata?.geneSymbols.join(', ') || '',
-          targetSynonyms: mAb.targetsMetadata?.flatMap(m => m.synonyms).join('; ') || mAb.targetMetadata?.synonyms.join(', ') || '',
+          target: vhChain?.target || vlChain?.target || '',
+          targetStandardName: mAb.targetMetadata?.standardName || '',
+          targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+          targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+          targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -3034,11 +3025,6 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
-                              {mAb.source && (
-                                <span className="text-[9px] font-bold bg-zinc-900 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm border border-white/10">
-                                  {mAb.source}
-                                </span>
-                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}
@@ -3095,23 +3081,23 @@ function AppContent() {
                           </div>
                         )}
                         
-                        {(mAb.targetsMetadata && mAb.targetsMetadata.length > 0 ? mAb.targetsMetadata : mAb.targetMetadata ? [mAb.targetMetadata] : []).map((meta, metaIdx) => (
-                          <div key={metaIdx} className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs mt-2 first:mt-0">
+                        {mAb.targetMetadata ? (
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs">
                             <div className="flex items-center gap-2 mb-2">
                               <Database className="w-4 h-4 text-indigo-600" />
-                              <span className="font-bold text-indigo-900 uppercase tracking-wider text-[10px]">Target Info {metaIdx + 1} (UniProtKB)</span>
+                              <span className="font-bold text-indigo-900 uppercase tracking-wider text-[10px]">Target Info (UniProtKB)</span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Standard Name</span>
                                 <div className="font-bold text-zinc-900 flex items-center gap-2">
-                                  {meta.standardName}
+                                  {mAb.targetMetadata.standardName}
                                   <div className="flex items-center gap-1.5 ml-1">
                                     <span className="text-[9px] bg-indigo-100 text-indigo-700 font-mono px-1.5 py-0.5 rounded uppercase">
-                                      {meta.uniprotId}
+                                      {mAb.targetMetadata.uniprotId}
                                     </span>
                                     <a 
-                                      href={`https://www.uniprot.org/uniprotkb/${meta.uniprotId}/entry`} 
+                                      href={`https://www.uniprot.org/uniprotkb/${mAb.targetMetadata.uniprotId}/entry`} 
                                       target="_blank" 
                                       rel="noopener noreferrer"
                                       className="text-indigo-400 hover:text-indigo-600 transition-colors"
@@ -3124,21 +3110,20 @@ function AppContent() {
                               <div>
                                 <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Gene Symbols</span>
                                 <div className="text-zinc-600 font-mono">
-                                  {meta.geneSymbols.join(', ')}
+                                  {mAb.targetMetadata.geneSymbols.join(', ')}
                                 </div>
                               </div>
-                              {meta.synonyms.length > 0 && (
+                              {mAb.targetMetadata.synonyms.length > 0 && (
                                 <div className="col-span-full">
                                   <span className="text-[10px] text-indigo-400 uppercase font-bold block mb-0.5">Synonyms</span>
                                   <div className="text-zinc-500 leading-relaxed italic">
-                                    {meta.synonyms.join(', ')}
+                                    {mAb.targetMetadata.synonyms.join(', ')}
                                   </div>
                                 </div>
                               )}
                             </div>
                           </div>
-                        ))}
-                        {!(mAb.targetsMetadata && mAb.targetsMetadata.length > 0) && !mAb.targetMetadata && mAb.chains.some(c => c.target) && (
+                        ) : mAb.chains.some(c => c.target) && (
                           <div className="flex justify-start">
                             <button 
                               onClick={async () => {

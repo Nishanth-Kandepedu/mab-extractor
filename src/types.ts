@@ -15,7 +15,6 @@ export interface Chain {
   hasNonStandardAminoAcids?: boolean;
   nonStandardAminoAcids?: string[];
   target?: string;
-  epitope?: string;
 }
 
 export type ExtractionTier = 'fast' | 'balanced' | 'extended';
@@ -66,8 +65,6 @@ export interface Antibody {
   chains: Chain[];
   confidence: number;
   summary: string;
-  source?: string; // e.g., "Human", "Murine", "Cynomolgus"
-  targetsMetadata?: TargetMetadata[]; 
   properties?: AntibodyProperties;
   experimentalData?: AssayData[]; // New field for detailed properties
   needsReview?: boolean;
