@@ -67,6 +67,7 @@ export interface Antibody {
   confidence: number;
   summary: string;
   source?: string; // e.g., "Human", "Murine", "Cynomolgus"
+  targetsMetadata?: TargetMetadata[]; 
   properties?: AntibodyProperties;
   experimentalData?: AssayData[]; // New field for detailed properties
   needsReview?: boolean;
