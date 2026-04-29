@@ -1274,6 +1274,8 @@ function AppContent() {
           targetUniProtId: mAb.targetMetadata?.uniprotId || '',
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
           targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+          biologicalSource: mAb.biologicalSource || '',
+          epitope: mAb.epitope || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -1338,6 +1340,8 @@ function AppContent() {
             VH_SeqID: vhChain?.seqId || '',
             VL_SeqID: vlChain?.seqId || '',
             target: vhChain?.target || vlChain?.target || '',
+            biologicalSource: mAb.biologicalSource || '',
+            epitope: mAb.epitope || '',
             VH_Sequence: vhChain?.fullSequence || '',
             VL_Sequence: vlChain?.fullSequence || ''
           });
@@ -3049,6 +3053,20 @@ function AppContent() {
                                 )} />
                                 <span className="text-[10px] font-bold text-zinc-500">{mAb.confidence}% Confidence</span>
                               </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap justify-center">
+                              {mAb.biologicalSource && (
+                                <div className="flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-bold uppercase tracking-wider">
+                                  <Activity className="w-2.5 h-2.5" />
+                                  {mAb.biologicalSource}
+                                </div>
+                              )}
+                              {mAb.epitope && (
+                                <div className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100 font-bold uppercase tracking-wider">
+                                  <Beaker className="w-2.5 h-2.5" />
+                                  Epitope: {mAb.epitope}
+                                </div>
+                              )}
                             </div>
                             {mAb.needsReview && (
                               <div className="flex items-center gap-1.5 px-3 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-full text-[10px] font-bold uppercase animate-pulse">
