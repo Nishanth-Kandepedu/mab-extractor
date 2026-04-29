@@ -108,6 +108,7 @@ export interface UserProfile {
   createdAt?: any;
   disabled?: boolean;
   lastActive?: any;
+  webhookUrl?: string;
 }
 
 export interface ActivityLog {
