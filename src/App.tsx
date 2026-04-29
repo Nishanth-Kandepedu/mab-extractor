@@ -439,10 +439,16 @@ function AppContent() {
       } else {
         intendedRoleRef.current = null;
         setUser(null);
-        setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
+        setState({
+          isExtracting: false,
+          result: null,
+          error: null,
+          batch: undefined
+        });
         setPageRange('');
         setShowAdminDashboard(false);
         setShowHistory(false);
+        setHistory([]);
       }
       setIsAuthLoading(false);
       setIsAuthReady(true);
@@ -625,6 +631,7 @@ function AppContent() {
         isExtracting: false,
         result: null,
         error: null,
+        batch: undefined
       });
       setPageRange('');
       setShowAdminDashboard(false);
@@ -1708,26 +1715,26 @@ function AppContent() {
 
 
           <div className="flex items-center gap-4">
-            {!state.batch.isProcessing && !state.batch.cooldownRemaining && (
+            {state.batch && !state.batch.isProcessing && !state.batch.cooldownRemaining && (
                <>
                  <button 
                    onClick={handleBatchExportCsv}
-                   className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                   className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-full transition-all shadow-lg shadow-indigo-500/30 active:scale-95"
                  >
-                   <Download className="w-3.5 h-3.5" />
+                   <Download className="w-4 h-4" />
                    DOWNLOAD MASTER CSV
                  </button>
                  <button 
                    onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
-                   className="p-2 text-zinc-500 hover:text-white transition-colors"
+                   className="p-2 text-zinc-400 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10"
                    title="Exit Batch Mode"
                  >
                    <X className="w-5 h-5" />
                  </button>
                </>
             )}
-            {state.batch.isProcessing && (
-              <span className="text-[9px] font-bold text-zinc-500 tracking-[0.2em] animate-pulse uppercase">Sequence Extraction in Progress</span>
+            {state.batch?.isProcessing && (
+              <span className="text-[10px] font-bold text-zinc-400 tracking-[0.2em] animate-pulse uppercase">Extraction in Progress</span>
             )}
           </div>
         </div>
@@ -1737,32 +1744,32 @@ function AppContent() {
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
           {/* System Health Dashboard */}
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-5 shadow-sm">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-sm font-semibold text-zinc-800">
+                <h3 className="text-sm font-bold text-zinc-900">
                   Infrastructure
                 </h3>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-50 border border-zinc-100">
-                <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-tighter">{networkStats.online ? 'Live' : 'Offline'}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-50 border border-zinc-100">
+                <div className={cn("w-2 h-2 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-tight">{networkStats.online ? 'Live' : 'Offline'}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Latency</p>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Latency</p>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-lg font-bold text-zinc-900 tabular-nums">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">ms</span>
+                  <span className="text-xl font-bold text-zinc-900 tabular-nums leading-none">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
+                  <span className="text-xs font-semibold text-zinc-500 uppercase tracking-tighter">ms</span>
                 </div>
               </div>
-              <div className="space-y-1 text-right">
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Health</p>
+              <div className="space-y-1.5 text-right">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Health</p>
                 <span className={cn(
-                  "text-[10px] font-black uppercase tracking-tighter block",
+                  "text-xs font-bold uppercase tracking-tight block leading-none",
                   healthInfo?.status === 'ok' ? "text-emerald-600" : "text-amber-600"
                 )}>
                   {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Checking...'}
@@ -1770,34 +1777,34 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-zinc-50">
+            <div className="space-y-2.5 pt-2 border-t border-zinc-100">
               <div className="flex justify-between items-end">
-                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Model Load</span>
-                <span className="text-[10px] font-bold text-zinc-900 uppercase tracking-tighter tabular-nums">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Model Load</span>
+                <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-tight tabular-nums">
                   {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} / ${healthInfo.concurrency?.totalLimit || 4}` : '--'}
                 </span>
               </div>
-              <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden shadow-inner">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
                   className={cn(
                     "h-full transition-all duration-700",
-                    (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-indigo-500Shadow shadow-[0_0_8px_rgba(99,102,241,0.3)]"
+                    (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.3)]"
                   )} 
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[8px] font-medium text-zinc-400 uppercase tracking-widest">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                 VER: {healthInfo?.version || 'Syncing...'}
               </span>
               <button 
                 onClick={checkHealth} 
-                className="text-[9px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest transition-colors flex items-center gap-1"
+                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-widest transition-colors flex items-center gap-1.5 group"
               >
-                <RotateCcw className="w-2.5 h-2.5" />
+                <RotateCcw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
                 Refresh
               </button>
             </div>
@@ -1835,10 +1842,10 @@ function AppContent() {
                         model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
-                        "py-2 px-1 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border",
+                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
                         llmOptions.provider === p
-                          ? "bg-zinc-900 text-white border-zinc-900 shadow-sm" 
-                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300",
+                          ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
+                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
                         isDisabled && "opacity-40 grayscale cursor-not-allowed"
                       )}
                     >
@@ -1884,27 +1891,27 @@ function AppContent() {
               <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-50">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Evidence Engine</span>
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Evidence Engine</span>
                     {llmOptions.model !== 'gemma-4' && (
-                      <span className="text-[8px] bg-zinc-100 text-zinc-400 px-1 py-0.5 rounded uppercase font-black tracking-tighter">Gemma Only</span>
+                      <span className="text-[8px] bg-zinc-50 text-zinc-400 px-1.5 py-0.5 rounded-full uppercase font-bold tracking-tight border border-zinc-100">Gemma Only</span>
                     )}
                   </div>
-                  <span className="text-[9px] text-zinc-400 font-medium leading-tight">Extract IC50, PK, ADMET data</span>
+                  <span className="text-[10px] text-zinc-400 font-semibold leading-tight mt-0.5">Extract IC50, PK, ADMET data</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setLlmOptions(prev => ({ ...prev, isSarMode: !prev.isSarMode }))}
                   disabled={llmOptions.model !== 'gemma-4'}
                   className={cn(
-                    "relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    llmOptions.isSarMode ? "bg-indigo-600" : "bg-zinc-200",
+                    "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none",
+                    llmOptions.isSarMode ? "bg-indigo-600 shadow-sm shadow-indigo-100" : "bg-zinc-200",
                     llmOptions.model !== 'gemma-4' && "opacity-30 cursor-not-allowed"
                   )}
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
-                      llmOptions.isSarMode ? "translate-x-4" : "translate-x-0"
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-in-out",
+                      llmOptions.isSarMode ? "translate-x-5" : "translate-x-0"
                     )}
                   />
                 </button>
@@ -1913,18 +1920,18 @@ function AppContent() {
           </div>
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm sticky top-24">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <FileUp className="w-5 h-5 text-indigo-600" />
-                <h2 className="font-semibold text-zinc-800 text-sm">
+                <h2 className="font-bold text-zinc-900 text-sm">
                   {mode === 'single' ? 'Input Data' : 'Batch Processing'}
                 </h2>
               </div>
-              <div className="flex bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+              <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200">
                 <button
                   onClick={() => setMode('single')}
                   className={cn(
-                    "px-3 py-1 text-[9px] font-black rounded-md transition-all uppercase tracking-tighter",
+                    "px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-widest",
                     mode === 'single' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
                   )}
                 >
@@ -1933,7 +1940,7 @@ function AppContent() {
                 <button
                   onClick={() => setMode('batch')}
                   className={cn(
-                    "px-3 py-1 text-[9px] font-black rounded-md transition-all uppercase tracking-tighter",
+                    "px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-widest",
                     mode === 'batch' ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
                   )}
                 >
@@ -1942,25 +1949,25 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {mode === 'single' ? (
                 <>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em]">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
                       Target Range (Optional)
                     </label>
                     <input
                       type="text"
                       value={pageRange}
                       onChange={(e) => setPageRange(e.target.value)}
-                      placeholder="e.g., Page 42, Pages 10-15, Table 1"
-                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300"
+                      placeholder="e.g., Page 42, Pages 10-15"
+                      className="w-full bg-zinc-50/50 border border-zinc-200 rounded-xl px-4 py-2.5 text-xs focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300 font-medium"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em]">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
                       Priority IDs (Optional)
                     </label>
                     <input
@@ -1968,20 +1975,20 @@ function AppContent() {
                       value={prioritySeqIds}
                       onChange={(e) => setPrioritySeqIds(e.target.value)}
                       placeholder="e.g., 7, 12, mAb1"
-                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300"
+                      className="w-full bg-zinc-50/50 border border-zinc-200 rounded-xl px-4 py-2.5 text-xs focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-300 font-medium"
                       disabled={state.isExtracting}
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.1em] flex items-center justify-between">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest flex items-center justify-between ml-1">
                       Sequence Listing
                       {sequenceListingFile && (
                         <button 
                           onClick={() => setSequenceListingFile(null)}
-                          className="text-red-400 hover:text-red-600 transition-colors"
+                          className="text-red-500 hover:text-red-700 transition-colors"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </label>
@@ -1994,20 +2001,20 @@ function AppContent() {
                         disabled={state.isExtracting}
                       />
                       <div className={cn(
-                        "border border-zinc-200 rounded-lg px-3 py-2 text-[11px] flex items-center gap-3 transition-all",
-                        sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white text-zinc-400 hover:border-zinc-300"
+                        "border border-zinc-200 rounded-xl px-4 py-2.5 text-[11px] flex items-center gap-3 transition-all",
+                        sequenceListingFile ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-zinc-50/50 text-zinc-400 hover:border-zinc-300"
                       )}>
-                        <FileText className={cn("w-3.5 h-3.5", sequenceListingFile ? "text-indigo-600" : "text-zinc-300")} />
-                        <span className="truncate flex-1 font-medium">
+                        <FileText className={cn("w-4 h-4", sequenceListingFile ? "text-indigo-600" : "text-zinc-300")} />
+                        <span className="truncate flex-1 font-semibold">
                           {sequenceListingFile ? sequenceListingFile.name : "Select listing file..."}
                         </span>
-                        {sequenceListingFile && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                        {sequenceListingFile && <Check className="w-4 h-4 text-emerald-500" />}
                       </div>
                     </div>
                   </div>
 
                   <div 
-                    className="relative group"
+                    className="relative group mt-2"
                     onDragOver={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2027,19 +2034,21 @@ function AppContent() {
                       disabled={state.isExtracting}
                     />
                     <div className={cn(
-                      "border-2 border-dashed border-zinc-100 rounded-xl p-6 text-center transition-all group-hover:border-indigo-200 group-hover:bg-indigo-50/20",
+                      "border-2 border-dashed border-zinc-100 rounded-2xl p-8 text-center transition-all group-hover:border-indigo-300 group-hover:bg-indigo-50/30",
                       state.isExtracting && "opacity-50 pointer-events-none"
                     )}>
                       {state.isExtracting ? (
                         <div className="flex flex-col items-center py-2">
-                          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
-                          <p className="text-xs font-bold text-indigo-600">Extracting...</p>
+                          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
+                          <p className="text-sm font-bold text-indigo-600">Extracting...</p>
                         </div>
                       ) : (
                         <div className="py-2">
-                          <Upload className="w-6 h-6 text-zinc-300 mx-auto mb-2 group-hover:text-indigo-400 transition-colors" />
-                          <p className="text-xs font-bold text-zinc-600">Drop Patent Document</p>
-                          <p className="text-[10px] text-zinc-400 mt-0.5 uppercase tracking-tighter">PDF or TXT</p>
+                          <div className="w-12 h-12 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-100 transition-colors">
+                            <Upload className="w-6 h-6 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                          </div>
+                          <p className="text-sm font-bold text-zinc-700">Drop Patent Document</p>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 uppercase font-bold tracking-widest">PDF or TXT</p>
                         </div>
                       )}
                     </div>
@@ -2051,19 +2060,31 @@ function AppContent() {
                   <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
                     <div className="flex items-center gap-2 mb-3">
                       <Clock className="w-4 h-4 text-indigo-600" />
-                      <p className="text-[11px] font-bold text-indigo-900 uppercase">Batch Processing Rules</p>
+                      <p className="text-[11px] font-bold text-indigo-900 uppercase tracking-widest">Processing Rules</p>
                     </div>
-                    <ul className="text-[10px] text-indigo-700 space-y-1.5 list-disc pl-4 leading-relaxed">
-                      <li>Max 20 patents per batch.</li>
-                      <li>Extractions run sequentially to guarantee accuracy.</li>
-                      <li>Failed extractions are automatically skipped.</li>
-                      <li>Consolidated CSV generated upon completion.</li>
+                    <ul className="text-[11px] text-indigo-700/80 space-y-2 list-none pl-1 leading-normal font-medium">
+                      <li className="flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                        Max 20 patents per batch.
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                        Sequential extraction (High Accuracy).
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                        Failed extractions are skipped.
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                        Consolidated CSV upon completion.
+                      </li>
                     </ul>
                   </div>
 
                   <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                      Queue Patents (Upload Files)
+                    <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
+                      Queue Patents
                     </label>
                     <div className="relative group">
                       <input
@@ -2094,12 +2115,16 @@ function AppContent() {
                         disabled={state.batch?.isProcessing}
                       />
                       <div className={cn(
-                        "border-2 border-dashed border-zinc-200 rounded-xl p-6 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30",
+                        "border-2 border-dashed border-zinc-100 rounded-2xl p-8 text-center transition-all group-hover:border-indigo-300 group-hover:bg-indigo-50/30",
                         state.batch?.isProcessing && "opacity-50 pointer-events-none"
                       )}>
-                        <Upload className="w-6 h-6 text-zinc-400 mx-auto mb-2 group-hover:text-indigo-500 transition-colors" />
-                        <p className="text-xs font-medium text-zinc-700">Select Multiple PDF/TXT Files</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Drag and drop or click to choose</p>
+                        <div className="py-2">
+                          <div className="w-12 h-12 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-100 transition-colors">
+                            <Upload className="w-6 h-6 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                          </div>
+                          <p className="text-sm font-bold text-zinc-700">Upload Multiple Files</p>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 uppercase font-bold tracking-widest">Select up to 20 PDF/TXT</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2108,23 +2133,23 @@ function AppContent() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
                         <div className="flex items-center gap-2">
-                          <Database className="w-3.5 h-3.5 text-zinc-400" />
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                            Queue ({state.batch.items.length} Patents)
+                          <Database className="w-5 h-5 text-indigo-500" />
+                          <p className="text-[11px] font-bold text-zinc-600 uppercase tracking-[0.2em] leading-none">
+                            Queue ({state.batch.items.length} Documents)
                           </p>
                         </div>
                         {state.batch.currentIndex === state.batch.items.length && (
                           <button
                             onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
-                            className="text-[9px] text-zinc-400 font-bold uppercase hover:text-red-500 transition-colors flex items-center gap-1"
+                            className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest px-2.5 py-1 rounded-full bg-red-50 transition-all flex items-center gap-1.5"
                           >
                             <RotateCcw className="w-3 h-3" />
-                            Clear
+                            Clear Results
                           </button>
                         )}
                       </div>
                       
-                      <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100 shadow-sm max-h-[400px] overflow-y-auto overflow-x-hidden custom-scrollbar">
+                      <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-50 shadow-sm max-h-[400px] overflow-y-auto overflow-x-hidden custom-scrollbar">
                         {state.batch.items.map((item, idx) => (
                           <button 
                             key={idx} 
