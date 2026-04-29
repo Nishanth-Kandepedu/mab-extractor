@@ -38,7 +38,10 @@
         "accountId": { "type": "string" },
         "patentId": { "type": "string" },
         "patentTitle": { "type": "string" },
-        "antibodies": { "type": "array" },
+        "antibodies": { 
+          "type": "array",
+          "description": "Array of antibody objects, each containing chains with sequences, CDRs, source organism, and epitope details."
+        },
         "createdAt": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["pending", "validated", "rejected"] }
       },

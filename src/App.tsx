@@ -1133,9 +1133,12 @@ function AppContent() {
           
           allRows.push({
             mAbName: mAb.mAbName,
+            source: mAb.source || '',
             patentId: result.patentId,
             patentTitle: result.patentTitle,
             target: vhChain?.target || vlChain?.target || '',
+            VH_Epitope: vhChain?.epitope || '',
+            VL_Epitope: vlChain?.epitope || '',
             targetStandardName: mAb.targetMetadata?.standardName || '',
             targetUniProtId: mAb.targetMetadata?.uniprotId || '',
             targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
@@ -1267,9 +1270,12 @@ function AppContent() {
         
         const row = {
           mAbName: mAb.mAbName,
+          source: mAb.source || '',
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           target: vhChain?.target || vlChain?.target || '',
+          VH_Epitope: vhChain?.epitope || '',
+          VL_Epitope: vlChain?.epitope || '',
           targetStandardName: mAb.targetMetadata?.standardName || '',
           targetUniProtId: mAb.targetMetadata?.uniprotId || '',
           targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
@@ -3025,6 +3031,11 @@ function AppContent() {
                               {mAb.mAbName}
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap justify-center">
+                              {mAb.source && (
+                                <span className="text-[9px] font-bold bg-zinc-900 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm border border-white/10">
+                                  {mAb.source}
+                                </span>
+                              )}
                               {mAb.seqId && (
                                 <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200 shadow-sm">
                                   {mAb.seqId}

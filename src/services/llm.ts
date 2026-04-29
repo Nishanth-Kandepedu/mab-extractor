@@ -74,6 +74,9 @@ IMPORTANT EXTRACTION RULES:
 18. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
+19. SOURCE & EPITOPE MINING:
+    - Source: Extract the origin species of the antibody (e.g., "Human", "Humanized", "Murine", "Cynomolgus"). This is often found in the title, abstract, or introductory paragraphs of the examples.
+    - Epitope: Extract the specific residue(s) or region(s) on the target antigen that the antibody binds to (e.g., "K403", "residues 120-145", "D3 loop"). Search specifically for "binding site", "epitope mapping", or "interaction" sections.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -297,6 +300,7 @@ export async function extractWithLLM(
             type: "OBJECT",
             properties: {
               mAbName: { type: "STRING" },
+              source: { type: "STRING" },
               chains: {
                 type: "ARRAY",
                 items: {
@@ -308,6 +312,7 @@ export async function extractWithLLM(
                     pageNumber: { type: "INTEGER" },
                     tableId: { type: "STRING" },
                     target: { type: "STRING" }, 
+                    epitope: { type: "STRING" },
                     cdrs: {
                       type: "ARRAY",
                       items: {
