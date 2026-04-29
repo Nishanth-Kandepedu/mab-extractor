@@ -2,7 +2,7 @@ import React from 'react';
 import { Chain, CDR } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Copy, Check, Edit2, X, Save } from 'lucide-react';
+import { Copy, Check, Edit2, X, Save, AlertCircle } from 'lucide-react';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -15,17 +15,17 @@ interface SequenceDisplayProps {
 }
 
 export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEditable, onUpdate }) => {
-  const { variableSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids, target } = chain;
+  const { fullSequence, cdrs, type, seqId, pageNumber, tableId, hasNonStandardAminoAcids, target } = chain;
   const [isEditing, setIsEditing] = React.useState(false);
-  const [tempSequence, setTempSequence] = React.useState(variableSequence);
+  const [tempSequence, setTempSequence] = React.useState(fullSequence);
   const [copied, setCopied] = React.useState(false);
 
   const STANDARD_AMINO_ACIDS = new Set("ACDEFGHIKLMNPQRSTVWY");
 
-  // Sync tempSequence if variableSequence changes externally
+  // Sync tempSequence if fullSequence changes externally
   React.useEffect(() => {
-    setTempSequence(variableSequence);
-  }, [variableSequence]);
+    setTempSequence(fullSequence);
+  }, [fullSequence]);
 
   const handleSave = () => {
     if (onUpdate) {
@@ -35,12 +35,12 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
   };
 
   const handleCancel = () => {
-    setTempSequence(variableSequence);
+    setTempSequence(fullSequence);
     setIsEditing(false);
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(variableSequence);
+    navigator.clipboard.writeText(fullSequence);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -51,14 +51,19 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
   const renderSequence = () => {
     const parts: React.ReactNode[] = [];
     
-    for (let i = 0; i < variableSequence.length; i++) {
-      const char = variableSequence[i];
+    for (let i = 0; i < fullSequence.length; i++) {
+      const char = fullSequence[i];
       const isNonStandard = !STANDARD_AMINO_ACIDS.has(char.toUpperCase());
       
       // Check if this index is part of a CDR
-      const cdr = sortedCdrs.find(c => i >= c.start && i < c.end);
+      const cdr = sortedCdrs.find(c => c.start !== -1 && i >= c.start && i < c.end);
+      
+      // Verify correctness: Does the sequence at these indices match the claimed CDR sequence?
+      const fullCdrSeqAtPos = cdr && fullSequence.substring(cdr.start, cdr.end);
+      const isMismatch = cdr && fullCdrSeqAtPos !== cdr.sequence;
       
       const cdrColor = cdr ? (
+        isMismatch ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-[0_0_0_1px_rgba(225,29,72,0.1)]' :
         cdr.type === 'CDR1' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
         cdr.type === 'CDR2' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
         'bg-amber-50 text-amber-700 border-amber-100'
@@ -76,9 +81,17 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
         >
           {char}
           {cdr && i === cdr.start && (
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg">
-              {cdr.type}
-            </span>
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-xl pointer-events-none border border-white/10">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold flex items-center gap-1">
+                  {cdr.type}
+                  {isMismatch && <span className="text-rose-400 font-black">! POSITION ERROR</span>}
+                </span>
+                <span className="text-zinc-400 font-mono">Seq: {cdr.sequence}</span>
+                {isMismatch && <span className="text-rose-400 font-mono">At Pos: {fullCdrSeqAtPos}</span>}
+              </div>
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+            </div>
           )}
         </span>
       );
@@ -142,7 +155,7 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
           <span className="text-[10px] font-mono bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded shadow-sm">
-            {variableSequence.length} AA
+            {fullSequence.length} AA
           </span>
         </div>
       </div>
@@ -180,14 +193,36 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
         )}
 
         <div className="mt-4 grid grid-cols-3 gap-4">
-          {sortedCdrs.map((cdr) => (
-            <div key={cdr.type} className="flex flex-col gap-1">
-              <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider">{cdr.type}</span>
-              <div className="bg-zinc-50 border border-zinc-100 rounded px-2 py-1">
-                <span className="text-[10px] font-mono font-bold text-zinc-700 truncate block">{cdr.sequence}</span>
+          {sortedCdrs.map((cdr) => {
+            const isUnverified = cdr.start === -1;
+            return (
+              <div key={cdr.type} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-wider">{cdr.type}</span>
+                  {isUnverified && (
+                    <span 
+                      className="text-[8px] bg-rose-50 text-rose-600 px-1 rounded flex items-center gap-0.5 font-bold animate-pulse"
+                      title="Sequence was extracted but not found in the full Variable Domain sequence"
+                    >
+                      <AlertCircle className="w-2 h-2" />
+                      UNVERIFIED
+                    </span>
+                  )}
+                </div>
+                <div className={cn(
+                  "bg-zinc-50 border rounded px-2 py-1",
+                  isUnverified ? "border-rose-100 bg-rose-50/10" : "border-zinc-100"
+                )}>
+                  <span className={cn(
+                    "text-[10px] font-mono font-bold truncate block",
+                    isUnverified ? "text-rose-600 italic" : "text-zinc-700"
+                  )}>
+                    {cdr.sequence || 'Not found'}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
