@@ -81,9 +81,9 @@ EXTRACTION RULES:
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
 19. Metadata Extraction (High Precision):
-   - "epitope": The specific binding site. PREFER specific residues (e.g. "K43, Q48, K86") or contact residues over general domains (e.g. "Domain 1"). Look for "alanine scanning" or "cross-blocking" data. Use "" if not found.
-   - "originSpecies": The host source (e.g. "Human", "Mouse", "Cynomolgus"). Check for "human antibody" or "humanized" status. Use "" if not found.
-   - "generationSource": Discovery method (e.g. "Single B cell sorting", "Phage display", "Hybridoma"). Use "" if not found.
+   - "epitope": The specific binding site. PLEASE EXTRACT as a descriptive phrase (e.g. "K43, Q48, and K86 of human IFN-gamma", "residues 20-40 of Target X"). Identify specific contact residues if available. Use "" if not found.
+   - "originSpecies": The host source organism (e.g. "Human", "Cynomolgus monkey"). Check for "humanized" or "chimeric" status. Use "" if not found.
+   - "generationSource": Discovery method (e.g. "Single B cell sorting", "Phage display library", "Hybridoma"). Use "" if not found.
    - SPEED RULE: Do NOT search recursively if not found. Use "" if these aren't listed in summary tables or near the clone description.
 `;
 
