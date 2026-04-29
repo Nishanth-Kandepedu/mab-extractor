@@ -865,8 +865,22 @@ function AppContent() {
           }
         });
 
+        // Store the global map in the result
+        result.targetMetadataMap = Object.fromEntries(targetMap);
+
         for (const mAb of result.antibodies) {
-          // Find the most frequent primary target for this antibody
+          // 1. Assign metadata to each chain independently based on its own target
+          mAb.chains.forEach(chain => {
+            if (chain.target) {
+              const t = chain.target.toLowerCase().trim();
+              if (targetMap.has(t)) {
+                chain.targetMetadata = targetMap.get(t);
+              }
+            }
+          });
+
+          // 2. For the overall mAb, pick the non-CD3 target as primary if it's a bispecific,
+          // or just the most frequent one otherwise.
           const targetCounts: Record<string, number> = {};
           mAb.chains.forEach(c => {
             if (c.target) {
@@ -875,15 +889,20 @@ function AppContent() {
             }
           });
 
-          // Sort targets by frequency
-          const sortedTargets = Object.entries(targetCounts).sort((a,b) => b[1] - a[1]);
-          const topTarget = sortedTargets[0]?.[0];
+          const uniqueTargetsForMab = Object.keys(targetCounts);
+          let topTarget: string | undefined;
+
+          if (uniqueTargetsForMab.length > 1) {
+            // Bispecific logic: Prefer the "payload" or "antigen" target over the CD3 recruiter
+            topTarget = uniqueTargetsForMab.find(t => !t.includes('cd3'));
+            if (!topTarget) topTarget = uniqueTargetsForMab[0];
+          } else {
+            topTarget = uniqueTargetsForMab[0];
+          }
           
           if (topTarget && targetMap.has(topTarget)) {
             mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Successfully applied UniProt metadata for ${mAb.mAbName} (Target: ${topTarget}, UniProtId: ${mAb.targetMetadata?.uniprotId})`);
-          } else if (topTarget) {
-            console.log(`[Enrichment] No UniProt match found for top target "${topTarget}" of ${mAb.mAbName}`);
+            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Primary: ${topTarget})`);
           }
         }
       } else {
@@ -1139,15 +1158,17 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
+          const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
+
           const row: any = {
             mAbName: mAb.mAbName,
             patentId: result.patentId,
             patentTitle: result.patentTitle,
             target: vhChain?.target || vlChain?.target || '',
-            targetStandardName: mAb.targetMetadata?.standardName || '',
-            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
-            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
-            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+            targetStandardName: targetMeta?.standardName || '',
+            targetUniProtId: targetMeta?.uniprotId || '',
+            targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
+            targetSynonyms: targetMeta?.synonyms.join(', ') || '',
             'Target Species (Standardized)': mAb.targetSpecies || '',
             'Antibody Origin/Generation': mAb.antibodyOrigin || '',
             'Epitope Residues': mAb.epitope || '',
@@ -1283,15 +1304,18 @@ function AppContent() {
         const vhChain = mAb.chains.find(c => c.type === 'Heavy');
         const vlChain = mAb.chains.find(c => c.type === 'Light');
         
+        // Pick metadata from the heavy chain's target if available, or the light chain, or the mAb overall
+        const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
+
         const row: any = {
           mAbName: mAb.mAbName,
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           target: vhChain?.target || vlChain?.target || '',
-          targetStandardName: mAb.targetMetadata?.standardName || '',
-          targetUniProtId: mAb.targetMetadata?.uniprotId || '',
-          targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
-          targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
+          targetStandardName: targetMeta?.standardName || '',
+          targetUniProtId: targetMeta?.uniprotId || '',
+          targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
+          targetSynonyms: targetMeta?.synonyms.join(', ') || '',
           'Target Species (Standardized)': mAb.targetSpecies || '',
           'Antibody Origin/Generation': mAb.antibodyOrigin || '',
           'Epitope Residues': mAb.epitope || '',
