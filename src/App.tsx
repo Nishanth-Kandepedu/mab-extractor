@@ -11,7 +11,6 @@ import { auth, signIn, logout, db, handleFirestoreError, OperationType } from '.
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
 import Papa from 'papaparse';
-import { generateSqlDump } from './lib/sqlExport';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -866,22 +865,8 @@ function AppContent() {
           }
         });
 
-        // Store the global map in the result
-        result.targetMetadataMap = Object.fromEntries(targetMap);
-
         for (const mAb of result.antibodies) {
-          // 1. Assign metadata to each chain independently based on its own target
-          mAb.chains.forEach(chain => {
-            if (chain.target) {
-              const t = chain.target.toLowerCase().trim();
-              if (targetMap.has(t)) {
-                chain.targetMetadata = targetMap.get(t);
-              }
-            }
-          });
-
-          // 2. For the overall mAb, pick the non-CD3 target as primary if it's a bispecific,
-          // or just the most frequent one otherwise.
+          // Find the most frequent primary target for this antibody
           const targetCounts: Record<string, number> = {};
           mAb.chains.forEach(c => {
             if (c.target) {
@@ -890,20 +875,15 @@ function AppContent() {
             }
           });
 
-          const uniqueTargetsForMab = Object.keys(targetCounts);
-          let topTarget: string | undefined;
-
-          if (uniqueTargetsForMab.length > 1) {
-            // Bispecific logic: Prefer the "payload" or "antigen" target over the CD3 recruiter
-            topTarget = uniqueTargetsForMab.find(t => !t.includes('cd3'));
-            if (!topTarget) topTarget = uniqueTargetsForMab[0];
-          } else {
-            topTarget = uniqueTargetsForMab[0];
-          }
+          // Sort targets by frequency
+          const sortedTargets = Object.entries(targetCounts).sort((a,b) => b[1] - a[1]);
+          const topTarget = sortedTargets[0]?.[0];
           
           if (topTarget && targetMap.has(topTarget)) {
             mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Primary: ${topTarget})`);
+            console.log(`[Enrichment] Successfully applied UniProt metadata for ${mAb.mAbName} (Target: ${topTarget}, UniProtId: ${mAb.targetMetadata?.uniprotId})`);
+          } else if (topTarget) {
+            console.log(`[Enrichment] No UniProt match found for top target "${topTarget}" of ${mAb.mAbName}`);
           }
         }
       } else {
@@ -1159,17 +1139,15 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
-          const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
-
           const row: any = {
             mAbName: mAb.mAbName,
             patentId: result.patentId,
             patentTitle: result.patentTitle,
             target: vhChain?.target || vlChain?.target || '',
-            targetStandardName: targetMeta?.standardName || '',
-            targetUniProtId: targetMeta?.uniprotId || '',
-            targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-            targetSynonyms: targetMeta?.synonyms.join(', ') || '',
+            targetStandardName: mAb.targetMetadata?.standardName || '',
+            targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+            targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+            targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
             'Target Species (Standardized)': mAb.targetSpecies || '',
             'Antibody Origin/Generation': mAb.antibodyOrigin || '',
             'Epitope Residues': mAb.epitope || '',
@@ -1217,38 +1195,6 @@ function AppContent() {
     } catch (e) {
       setIsExporting(false);
       console.error(e);
-    }
-  }, [state.batch]);
-
-  const handleBatchExportSql = useCallback(async () => {
-    if (!state.batch) return;
-    
-    setIsExporting(true);
-    try {
-      const completedResults = state.batch.items
-        .filter(i => i.status === 'completed' && i.result)
-        .map(i => i.result!);
-      
-      if (completedResults.length === 0) {
-        setIsExporting(false);
-        return;
-      }
-
-      const sqlContent = generateSqlDump(completedResults);
-      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', `abminer_batch_export_${new Date().toISOString().split('T')[0]}.sql`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setSqlExportSuccess(true);
-      setTimeout(() => setSqlExportSuccess(false), 3000);
-      setIsExporting(false);
-    } catch (e) {
-      setIsExporting(false);
-      console.error("[Batch Export] SQL failed:", e);
     }
   }, [state.batch]);
 
@@ -1337,18 +1283,15 @@ function AppContent() {
         const vhChain = mAb.chains.find(c => c.type === 'Heavy');
         const vlChain = mAb.chains.find(c => c.type === 'Light');
         
-        // Pick metadata from the heavy chain's target if available, or the light chain, or the mAb overall
-        const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
-
         const row: any = {
           mAbName: mAb.mAbName,
           patentId: state.result?.patentId,
           patentTitle: state.result?.patentTitle,
           target: vhChain?.target || vlChain?.target || '',
-          targetStandardName: targetMeta?.standardName || '',
-          targetUniProtId: targetMeta?.uniprotId || '',
-          targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-          targetSynonyms: targetMeta?.synonyms.join(', ') || '',
+          targetStandardName: mAb.targetMetadata?.standardName || '',
+          targetUniProtId: mAb.targetMetadata?.uniprotId || '',
+          targetGeneSymbols: mAb.targetMetadata?.geneSymbols.join(', ') || '',
+          targetSynonyms: mAb.targetMetadata?.synonyms.join(', ') || '',
           'Target Species (Standardized)': mAb.targetSpecies || '',
           'Antibody Origin/Generation': mAb.antibodyOrigin || '',
           'Epitope Residues': mAb.epitope || '',
@@ -1437,58 +1380,6 @@ function AppContent() {
       }
     }
   }, [state.result]);
-
-  const [sqlExportSuccess, setSqlExportSuccess] = useState(false);
-
-  const handleExportSql = useCallback(async () => {
-    if (!state.result) return;
-    
-    setIsExporting(true);
-    try {
-      // Track download event
-      ReactGA.event({
-        category: 'Export',
-        action: 'Download SQL',
-        label: state.result.patentId
-      });
-      // Log download activity
-      if (user) {
-        addDoc(collection(db, 'activity_logs'), {
-          userId: user.uid,
-          accountId: user.accountId || '',
-          userDisplayName: user.displayName || 'Anonymous Guest',
-          action: 'download_sql' as any,
-          patentId: state.result.patentId,
-          patentTitle: state.result.patentTitle,
-          timestamp: Timestamp.now()
-        }).catch(err => console.error('Failed to log activity:', err));
-      }
-
-      const sqlContent = generateSqlDump(state.result);
-      const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      const safeId = (state.result.patentId || 'result').replace(/[^a-z0-9]/gi, '_');
-      link.setAttribute('download', `mAb-extraction-${safeId}.sql`);
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setIsExporting(false);
-        setSqlExportSuccess(true);
-        setTimeout(() => setSqlExportSuccess(false), 2000);
-      }, 100);
-    } catch (e) {
-      console.error("[Export] SQL failed:", e);
-      setIsExporting(false);
-      setState(prev => ({ ...prev, error: 'Failed to generate SQL dump.' }));
-    }
-  }, [state.result, user]);
 
   const handleWebhookSync = useCallback(async () => {
     if (!state.result || !user?.webhookUrl) return;
@@ -1926,13 +1817,6 @@ function AppContent() {
                  >
                    <Download className="w-4 h-4" />
                    DOWNLOAD MASTER CSV
-                 </button>
-                 <button 
-                   onClick={handleBatchExportSql}
-                   className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold rounded-full transition-all border border-zinc-700 active:scale-95 shadow-lg shadow-indigo-500/10"
-                 >
-                   <Database className="w-4 h-4 text-indigo-400" />
-                   CONSOLIDATED SQL
                  </button>
                  <button 
                    onClick={() => setState(prev => ({ ...prev, batch: undefined }))}
@@ -3250,24 +3134,6 @@ function AppContent() {
                             <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
                             <Table className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-
-                        <button 
-                          onClick={handleExportSql}
-                          disabled={isExporting}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            sqlExportSuccess ? "bg-emerald-600/20 border-emerald-600/30" : "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title="Export SQL (DBeaver Ready)"
-                        >
-                          {isExporting ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : sqlExportSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Database className="w-4 h-4 text-white" />
                           )}
                         </button>
                         <button 
