@@ -1018,29 +1018,35 @@ function AppContent() {
 
   const runBatch = useCallback(async () => {
     if (!state.batch || state.batch.items.length === 0) return;
+    if (state.batch.isProcessing) return; // Prevent double trigger
     
     setTimer(0);
     const batchStartTime = Date.now();
     setState(prev => ({
       ...prev,
-      batch: { ...prev.batch!, isProcessing: true, currentIndex: 0, startTime: batchStartTime }
+      batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
     }));
 
-    const items = [...state.batch.items];
     const currentLlmOptions = { ...llmOptions };
     
-    for (let i = 0; i < items.length; i++) {
-       setState(prev => ({
-         ...prev,
-         batch: { 
-           ...prev.batch!, 
-           currentIndex: i, 
-           items: prev.batch!.items.map((item, idx) => idx === i ? { ...item, status: 'processing' } : item) 
-         }
-       }));
+    // We fetch items from state inside the loop to react to status changes (like manual retries)
+    for (let i = 0; i < state.batch.items.length; i++) {
+        // Refresh items list from current state
+        const currentItems = state.batch.items;
+        const item = currentItems[i];
+        
+        if (item.status === 'completed') continue;
 
-       const item = items[i];
-       if (!item.file) continue;
+        setState(prev => ({
+          ...prev,
+          batch: { 
+            ...prev.batch!, 
+            currentIndex: i, 
+            items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'processing', error: undefined } : it) 
+          }
+        }));
+
+        if (!item.file) continue;
 
        try {
          setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
@@ -1123,7 +1129,7 @@ function AppContent() {
        }
 
        // Cooldown period between patents
-       if (i < items.length - 1) {
+       if (i < state.batch!.items.length - 1) {
          const COOLDOWN_SECONDS = 30;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
@@ -1141,7 +1147,7 @@ function AppContent() {
 
     setState(prev => ({
       ...prev,
-      batch: { ...prev.batch!, isProcessing: false, currentIndex: items.length, endTime: Date.now() }
+      batch: { ...prev.batch!, isProcessing: false, currentIndex: state.batch!.items.length, endTime: Date.now() }
     }));
   }, [llmOptions, user, state.batch?.items, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
 
@@ -2425,11 +2431,32 @@ function AppContent() {
                                 </div>
                               )}
                               {item.status === 'error' && (
-                                <div className="flex items-center gap-2 group/err relative">
-                                  <AlertCircle className="w-3.5 h-3.5 text-red-400 cursor-help" />
-                                  <div className="absolute right-0 bottom-full mb-2 hidden group-hover/err:block w-48 p-2 bg-zinc-900 text-white text-[9px] rounded-lg shadow-xl z-20">
-                                    {item.error || 'Unknown error'}
+                                <div className="flex items-center gap-2">
+                                  <div className="group/err relative">
+                                    <AlertCircle className="w-3.5 h-3.5 text-red-400 cursor-help" />
+                                    <div className="absolute right-0 bottom-full mb-2 hidden group-hover/err:block w-48 p-2 bg-zinc-900 text-white text-[9px] rounded-lg shadow-xl z-20">
+                                      {item.error || 'Unknown error'}
+                                    </div>
                                   </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setState(prev => ({
+                                        ...prev,
+                                        batch: {
+                                          ...prev.batch!,
+                                          items: prev.batch!.items.map((it, i) => i === idx ? { ...it, status: 'pending', error: undefined } : it)
+                                        }
+                                      }));
+                                      // Trigger runBatch if not already running
+                                      if (!state.batch?.isProcessing) {
+                                        setTimeout(runBatch, 0);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-red-50 text-red-500 hover:bg-red-100 rounded text-[9px] font-bold uppercase transition-colors"
+                                  >
+                                    Retry
+                                  </button>
                                   <span className="text-[9px] font-bold text-red-500 uppercase">Fail</span>
                                 </div>
                               )}

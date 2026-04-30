@@ -396,11 +396,16 @@ export async function extractWithLLM(
           headers: { 'Content-Type': 'application/json' },
           body: payload,
         });
+
+        if (startResponse.status === 429 || startResponse.status === 503) {
+          throw new Error(`Transient server error: ${startResponse.status}`);
+        }
         break; // Success
       } catch (postError: any) {
         postAttempts++;
         const isNetworkError = postError.message?.toLowerCase().includes('fetch') || 
-                               postError.message?.toLowerCase().includes('network');
+                               postError.message?.toLowerCase().includes('network') ||
+                               postError.message?.toLowerCase().includes('transient');
         
         if (isNetworkError && postAttempts < maxPostAttempts) {
           console.warn(`[Extraction] POST network error (attempt ${postAttempts}): ${postError.message}. Retrying in 2s...`);
