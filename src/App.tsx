@@ -2280,7 +2280,7 @@ function AppContent() {
                     <ul className="text-[11px] text-indigo-700/80 space-y-2 list-none pl-1 leading-normal font-medium">
                       <li className="flex items-start gap-2">
                         <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                        Max 20 patents per batch.
+                        Max 50 patents per batch.
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="w-1 h-1 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
@@ -2308,8 +2308,8 @@ function AppContent() {
                         multiple
                         onChange={(e) => {
                           const files = Array.from(e.target.files || []) as File[];
-                          if (files.length > 20) {
-                            alert("Maximum 20 patents allowed per batch.");
+                          if (files.length > 50) {
+                            alert("Maximum 50 patents allowed per batch.");
                             return;
                           }
                           const newItems = files.map(f => ({
@@ -2338,7 +2338,7 @@ function AppContent() {
                             <Upload className="w-6 h-6 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
                           </div>
                           <p className="text-sm font-bold text-zinc-700">Upload Multiple Files</p>
-                          <p className="text-[10px] text-zinc-400 mt-1.5 uppercase font-bold tracking-widest">Select up to 20 PDF/TXT</p>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 uppercase font-bold tracking-widest">Select up to 50 PDF/TXT</p>
                         </div>
                       </div>
                     </div>
