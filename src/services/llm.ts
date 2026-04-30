@@ -574,8 +574,17 @@ export async function extractWithLLM(
         const cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
         if (!cleanCdrSeq) return cdr;
 
-        // Search for the CDR sequence within the full sequence, starting from the end of the last CDR
-        // This helps distinguish between similar sequences (like small CDR2s)
+        // Extra Quality Check: Suspiciously short/long CDRs
+        if (cdr.type === 'CDR3' && (cleanCdrSeq.length < 3 || cleanCdrSeq.length > 35)) {
+          needsReview = true;
+          reviewReason += ` [Suspicious ${cdr.type} length: ${cleanCdrSeq.length}]`;
+        }
+        if ((cdr.type === 'CDR1' || cdr.type === 'CDR2') && (cleanCdrSeq.length < 2 || cleanCdrSeq.length > 20)) {
+          needsReview = true;
+          reviewReason += ` [Suspicious ${cdr.type} length: ${cleanCdrSeq.length}]`;
+        }
+
+        // Search for the CDR sequence within the full sequence
         let foundIndex = seq.indexOf(cleanCdrSeq, lastCdrEnd);
         
         // If not found after last CDR, try searching from the beginning 

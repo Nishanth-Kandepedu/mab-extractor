@@ -2407,9 +2407,19 @@ function AppContent() {
                               {item.status === 'completed' && (
                                 <div className="flex items-center gap-3">
                                   {item.result && (
-                                    <span className="text-[10px] font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded leading-none">
-                                      {item.result.antibodies.length} mAbs
-                                    </span>
+                                    <>
+                                      {item.result.antibodies.some(a => a.needsReview) && (
+                                        <div className="group/rev relative">
+                                          <AlertCircle className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover/rev:block w-32 p-2 bg-zinc-900 text-white text-[9px] rounded-lg shadow-xl z-20">
+                                            Some extractions require manual review.
+                                          </div>
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded leading-none">
+                                        {item.result.antibodies.length} mAbs
+                                      </span>
+                                    </>
                                   )}
                                   <Check className="w-3.5 h-3.5 text-emerald-500" />
                                 </div>
