@@ -7,7 +7,7 @@ export interface CDR {
 
 export interface Chain {
   type: 'Heavy' | 'Light';
-  variableSequence: string;
+  fullSequence: string;
   cdrs: CDR[];
   seqId?: string;
   pageNumber?: number;
@@ -15,6 +15,7 @@ export interface Chain {
   hasNonStandardAminoAcids?: boolean;
   nonStandardAminoAcids?: string[];
   target?: string;
+  targetMetadata?: TargetMetadata;
 }
 
 export type ExtractionTier = 'fast' | 'balanced' | 'extended';
@@ -137,6 +138,7 @@ export interface ExtractionResult {
   tier?: ExtractionTier;
   modelUsed?: string;
   isSarMode?: boolean;
+  targetMetadataMap?: Record<string, TargetMetadata>;
 }
 
 export interface BatchItem {
