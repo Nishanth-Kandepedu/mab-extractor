@@ -7,7 +7,7 @@ export interface CDR {
 
 export interface Chain {
   type: 'Heavy' | 'Light';
-  fullSequence: string;
+  variableSequence: string;
   cdrs: CDR[];
   seqId?: string;
   pageNumber?: number;
@@ -108,6 +108,7 @@ export interface UserProfile {
   createdAt?: any;
   disabled?: boolean;
   lastActive?: any;
+  webhookUrl?: string;
 }
 
 export interface ActivityLog {
