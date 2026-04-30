@@ -1223,32 +1223,37 @@ function AppContent() {
   const handleBatchExportSql = useCallback(async () => {
     if (!state.batch) return;
     
+    const completedResults = state.batch.items
+      .filter(i => i.status === 'completed' && i.result)
+      .map(i => i.result!);
+    
+    if (completedResults.length === 0) {
+      setState(prev => ({ ...prev, error: 'No completed extractions to export yet.' }));
+      return;
+    }
+
     setIsExporting(true);
     try {
-      const completedResults = state.batch.items
-        .filter(i => i.status === 'completed' && i.result)
-        .map(i => i.result!);
-      
-      if (completedResults.length === 0) {
-        setIsExporting(false);
-        return;
-      }
-
       const sqlContent = generateSqlDump(completedResults);
       const blob = new Blob([sqlContent], { type: 'text/sql;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = url;
       link.setAttribute('download', `abminer_batch_export_${new Date().toISOString().split('T')[0]}.sql`);
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
       
-      setSqlExportSuccess(true);
-      setTimeout(() => setSqlExportSuccess(false), 3000);
-      setIsExporting(false);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setSqlExportSuccess(true);
+        setTimeout(() => setSqlExportSuccess(false), 3000);
+        setIsExporting(false);
+      }, 100);
     } catch (e) {
       setIsExporting(false);
       console.error("[Batch Export] SQL failed:", e);
+      setState(prev => ({ ...prev, error: 'Failed to generate batch SQL export.' }));
     }
   }, [state.batch]);
 
