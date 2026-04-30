@@ -502,6 +502,25 @@ export async function extractWithLLM(
     mAb.chains = mAb.chains.map(chain => {
       let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
 
+      // OCR Correction: O -> Q (Pyrrolysine is essentially never in antibodies, Q is often misread)
+      const { corrected, positions } = (function(s: string) {
+        const ps: number[] = [];
+        const chars = s.split('');
+        for (let i = 0; i < chars.length; i++) {
+          if (chars[i].toUpperCase() === 'O') {
+            chars[i] = chars[i] === 'o' ? 'q' : 'Q';
+            ps.push(i + 1);
+          }
+        }
+        return { corrected: chars.join(''), positions: ps };
+      })(seq);
+
+      if (positions.length > 0) {
+        seq = corrected;
+        needsReview = true;
+        reviewReason += ` [Auto-corrected O to Q at positions: ${positions.join(', ')}]`;
+      }
+
       // Constant region detection (CH1 / CL common starts)
       const isCH1 = seq.startsWith("ASTKGP") || seq.includes("ASTKGPSVFPLAP");
       const isCL = seq.startsWith("RTVAAP") || seq.includes("RTVAAPSVFIFPPS");
@@ -571,8 +590,13 @@ export async function extractWithLLM(
       // This is more robust than relying on LLM-generated indices which are often off-by-one or hallucinated.
       let lastCdrEnd = 0;
       chain.cdrs = chain.cdrs.map(cdr => {
-        const cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
+        let cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
         if (!cleanCdrSeq) return cdr;
+
+        // OCR Correction: O -> Q in CDRs
+        if (cleanCdrSeq.toUpperCase().includes('O')) {
+          cleanCdrSeq = cleanCdrSeq.split('').map(c => c.toUpperCase() === 'O' ? (c === 'o' ? 'q' : 'Q') : c).join('');
+        }
 
         // Extra Quality Check: Suspiciously short/long CDRs
         if (cdr.type === 'CDR3' && (cleanCdrSeq.length < 3 || cleanCdrSeq.length > 35)) {
