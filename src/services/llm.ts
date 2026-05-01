@@ -417,6 +417,11 @@ export async function extractWithLLM(
 
     mAb.chains = mAb.chains.map(chain => {
       let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+      
+      // Handle three-letter amino acid codes (e.g. "GluValGln" -> "EVQ")
+      if (seq.length > 30 && seq.match(/^[A-Z][a-z][a-z][A-Z][a-z][a-z]/)) {
+          seq = convertThreeLetterToOneLetter(seq);
+      }
 
       // OCR Correction: O -> Q (Pyrrolysine is essentially never in antibodies, Q is often misread)
       const { corrected, positions } = (function(s: string) {
@@ -508,6 +513,11 @@ export async function extractWithLLM(
       chain.cdrs = chain.cdrs.map(cdr => {
         let cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
         if (!cleanCdrSeq) return cdr;
+
+        // Handle three-letter amino acid codes in CDRs
+        if (cleanCdrSeq.length >= 9 && cleanCdrSeq.match(/^[A-Z][a-z][a-z][A-Z][a-z][a-z]/)) {
+            cleanCdrSeq = convertThreeLetterToOneLetter(cleanCdrSeq);
+        }
 
         // OCR Correction: O -> Q in CDRs
         if (cleanCdrSeq.toUpperCase().includes('O')) {
@@ -665,13 +675,21 @@ async function performDeepScanExtraction(
   // First 5 pages usually contain critical title, ID, and summary
   for (let i = 1; i <= Math.min(5, totalPages); i++) mandatoryPages.add(i);
   
+  // Last 5 pages often contain the claims which reference sequences
+  for (let i = Math.max(1, totalPages - 5); i <= totalPages; i++) mandatoryPages.add(i);
+
   if (discoveryPages.length === 0) {
-    console.warn("[Deep Scan] Discovery pass found nothing. Including end of document as fallback.");
+    console.warn("[Deep Scan] Discovery pass found nothing. Including broad fallback scan.");
     // Last 15 pages often contain the sequence listing if it's integrated
-    for (let i = Math.max(1, totalPages - 15); i <= totalPages; i++) mandatoryPages.add(i);
+    for (let i = Math.max(1, totalPages - 25); i <= totalPages; i++) mandatoryPages.add(i);
   }
   
-  discoveryPages.forEach(p => mandatoryPages.add(p));
+  // Add a 1-page buffer around every discovered page for context
+  discoveryPages.forEach(p => {
+      mandatoryPages.add(Math.max(1, p - 1));
+      mandatoryPages.add(p);
+      mandatoryPages.add(Math.min(totalPages, p + 1));
+  });
   
   // Sort and remove duplicates
   const sortedPages = Array.from(mandatoryPages).sort((a, b) => a - b).filter(p => p > 0 && p <= totalPages);
@@ -684,9 +702,9 @@ async function performDeepScanExtraction(
     
     for (let i = 1; i <= sortedPages.length; i++) {
         const p = sortedPages[i];
-        // If gap is more than 2 pages, or cluster exceeds 20 pages, break it
-        // Smaller clusters (20 vs 40) help avoid tokens/rate limit pressure
-        if (p === undefined || (p - currentPrev > 2) || (p - currentStart >= 20)) {
+        // If gap is more than 3 pages (was 2), or cluster exceeds 25 pages (was 20), break it
+        // This larger buffer ensures we don't split tables or descriptions apart
+        if (p === undefined || (p - currentPrev > 3) || (p - currentStart >= 25)) {
             pageClusters.push(`${currentStart}-${currentPrev}`);
             if (p !== undefined) {
                 currentStart = p;
@@ -774,10 +792,11 @@ CRITICAL TARGETS:
 2. SEQUENCE LISTING definitions (where SEQ ID NO: X is followed by a peptide/DNA sequence).
 3. mAb identifier lists (e.g., columns labeled "Antibody ID", "Clone Name", "mAb ID").
 4. CDR definitions (tables mapping SEQ IDs to CDR1, CDR2, CDR3).
+5. EXAMPLE sections that list specific clones (e.g., "Example 1", "Example 12").
+6. CLAIMS that reference specific SEQ ID NOs or Clone Names.
+7. ANY page containing large blocks of single-letter or three-letter amino acids.
 
 OUTPUT: Return a JSON object with a unique list of relevant page numbers.
-Example: {"relevantPages": [1, 2, 17, 24, 48, 52]}
-
 Total pages in doc: ${totalPages}.
 `;
 
@@ -934,4 +953,34 @@ Actually, to keep it simple and avoid another LLM call with a complex schema, le
   }
 
   return Array.from(merged.values());
+}
+
+/**
+ * Converts three-letter amino acid codes to one-letter codes.
+ * e.g. "GluValGln" -> "EVQ"
+ */
+function convertThreeLetterToOneLetter(seq: string): string {
+    const map: { [key: string]: string } = {
+        'Ala': 'A', 'Arg': 'R', 'Asn': 'N', 'Asp': 'D', 'Cys': 'C',
+        'Gln': 'Q', 'Glu': 'E', 'Gly': 'G', 'His': 'H', 'Ile': 'I',
+        'Leu': 'L', 'Lys': 'K', 'Met': 'M', 'Phe': 'F', 'Pro': 'P',
+        'Prq': 'P', 'Prp': 'P', 'Trp': 'W', 'Tyr': 'Y', 'Val': 'V',
+        'Ser': 'S', 'Thr': 'T', 'Asx': 'B', 'Glx': 'Z', 'Xaa': 'X',
+        'Glq': 'Q' // Some OCR variants
+    };
+
+    let result = '';
+    for (let i = 0; i < seq.length; i += 3) {
+        const triplet = seq.substring(i, i + 3);
+        const code = triplet.charAt(0).toUpperCase() + triplet.substring(1).toLowerCase();
+        result += map[code] || '?';
+    }
+    
+    // If we have many unknown residues, it might not be a 3-letter sequence
+    const unknownCount = (result.match(/\?/g) || []).length;
+    if (unknownCount > result.length / 2) {
+        return seq; // Fallback to original
+    }
+    
+    return result.replace(/\?/g, 'X');
 }
