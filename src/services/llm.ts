@@ -83,14 +83,16 @@ IMPORTANT EXTRACTION RULES:
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
 19. EPITOPE, TARGET SPECIES & ANTIBODY ORIGIN:
-    - For every antibody, identify the specific epitope residues it binds to on the target (e.g., "K43, Q48, and K86 of human IFN-gamma").
+    - For every antibody, attempt to identify the specific epitope residues it binds to on the target (e.g., "K43, Q48, and K86 of human IFN-gamma").
     - Identify the TARGET SPECIES (the biological source of the antigen/target protein).
     - MANDATORY STANDARDIZATION for Target Species:
       * "Human" -> "Homo sapiens"
       * "Cynomolgus" or "Cyno" -> "Macaca fascicularis"
       * "Rhesus" -> "Macaca mulatta"
-    - Identify the ANTIBODY SPECIES (mAB Species) (e.g., "Human", "Mouse", "Chimeric", "Humanized"). This goes into 'antibodyOrigin'.
-    - Identify the GENERATION SOURCE TECHNIQUE (e.g., "Single B cell sorting", "Phage Display", "Transgenic Mouse", "Hybridoma"). This goes into 'generationSource'.
+      * "Mouse" -> "Mus musculus"
+      * "Rat" -> "Rattus norvegicus"
+      * "Rabbit" -> "Oryctolagus cuniculus"
+    - Identify the ANTIBODY ORIGIN (the species or method used to generate the antibody). Examples: "Humanized", "Chimeric", "Fully Human", "Mouse", "Phage Display", "Transgenic Mouse".
     - If any are not explicitly found, leave as an empty string.
 `;
 
@@ -355,7 +357,6 @@ export async function extractWithLLM(
               epitope: { type: "STRING" },
               targetSpecies: { type: "STRING" },
               antibodyOrigin: { type: "STRING" },
-              generationSource: { type: "STRING" },
               needsReview: { type: "BOOLEAN" },              reviewReason: { type: "STRING" },
               experimentalData: useSarExtra ? {
                 type: "ARRAY",
