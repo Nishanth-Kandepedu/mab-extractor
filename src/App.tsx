@@ -1168,17 +1168,18 @@ function AppContent() {
           const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
 
           const row: any = {
-            mAbName: mAb.mAbName,
-            patentId: result.patentId,
-            patentTitle: result.patentTitle,
-            target: vhChain?.target || vlChain?.target || '',
-            targetStandardName: targetMeta?.standardName || '',
-            targetUniProtId: targetMeta?.uniprotId || '',
-            targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-            targetSynonyms: targetMeta?.synonyms.join(', ') || '',
-            'Target Species (Standardized)': mAb.targetSpecies || '',
-            'Antibody Origin/Generation': mAb.antibodyOrigin || '',
-            'Epitope Residues': mAb.epitope || '',
+            'Molecule name': mAb.mAbName,
+            'Patent ID': result.patentId,
+            'Patent Title': result.patentTitle,
+            'Molecule Target': vhChain?.target || vlChain?.target || '',
+            'Molecule Target Standard Name': targetMeta?.standardName || '',
+            'Molecule Target UniProt Id': targetMeta?.uniprotId || '',
+            'Molecule Target Gene Symbols': targetMeta?.geneSymbols.join(', ') || '',
+            'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
+            'Molecule Target_Species': mAb.targetSpecies || '',
+            'mAB Species': mAb.antibodyOrigin || '',
+            'mAB generation source technique': '', // Placeholder for now
+            'Epitope': mAb.epitope || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VH_CDR1: vhChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
@@ -1190,20 +1191,20 @@ function AppContent() {
             VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
             overallSeqID: mAb.seqId || '',
-            confidence: mAb.confidence,
-            needsReview: mAb.needsReview ? 'Yes' : 'No',
-            reviewRemarks: mAb.reviewReason || '',
+            'Confidence': mAb.confidence,
+            'Needs Review': mAb.needsReview ? 'Yes' : 'No',
+            'Review Remarks': mAb.reviewReason || '',
           };
 
           if (result.isSarMode) {
-            row.characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
+            row.Characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
           }
 
           allRows.push({
             ...row,
-            evidenceLocation: mAb.evidenceLocation || '',
-            evidenceStatement: mAb.evidenceStatement || '',
-            summary: mAb.summary
+            'Evidence Location': mAb.evidenceLocation || '',
+            'Evidence statement': mAb.evidenceStatement || '',
+            'Summary': mAb.summary
           });
         });
       });
@@ -1352,17 +1353,18 @@ function AppContent() {
         const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
 
         const row: any = {
-          mAbName: mAb.mAbName,
-          patentId: state.result?.patentId,
-          patentTitle: state.result?.patentTitle,
-          target: vhChain?.target || vlChain?.target || '',
-          targetStandardName: targetMeta?.standardName || '',
-          targetUniProtId: targetMeta?.uniprotId || '',
-          targetGeneSymbols: targetMeta?.geneSymbols.join(', ') || '',
-          targetSynonyms: targetMeta?.synonyms.join(', ') || '',
-          'Target Species (Standardized)': mAb.targetSpecies || '',
-          'Antibody Origin/Generation': mAb.antibodyOrigin || '',
-          'Epitope Residues': mAb.epitope || '',
+          'Molecule name': mAb.mAbName,
+          'Patent ID': state.result?.patentId,
+          'Patent Title': state.result?.patentTitle,
+          'Molecule Target': vhChain?.target || vlChain?.target || '',
+          'Molecule Target Standard Name': targetMeta?.standardName || '',
+          'Molecule Target UniProt Id': targetMeta?.uniprotId || '',
+          'Molecule Target Gene Symbols': targetMeta?.geneSymbols.join(', ') || '',
+          'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
+          'Molecule Target_Species': mAb.targetSpecies || '',
+          'mAB Species': mAb.antibodyOrigin || '',
+          'mAB generation source technique': '', // Placeholder
+          'Epitope': mAb.epitope || '',
           
           // Heavy Chain (VH) Data
           VH_SeqID: vhChain?.seqId || '',
@@ -1379,20 +1381,20 @@ function AppContent() {
           VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
           
           overallSeqID: mAb.seqId || '',
-          confidence: mAb.confidence,
-          needsReview: mAb.needsReview ? 'Yes' : 'No',
-          reviewRemarks: mAb.reviewReason || '',
+          'Confidence': mAb.confidence,
+          'Needs Review': mAb.needsReview ? 'Yes' : 'No',
+          'Review Remarks': mAb.reviewReason || '',
         };
 
         if (state.result.isSarMode) {
-          row.characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
+          row.Characterization = mAb.experimentalData?.map(d => `[${d.category}] ${d.property}: ${d.value} ${d.unit} (${d.condition}) [${d.evidence}]`).join(' | ') || '';
         }
 
         rows.push({
           ...row,
-          evidenceLocation: mAb.evidenceLocation || '',
-          evidenceStatement: mAb.evidenceStatement || '',
-          summary: mAb.summary
+          'Evidence Location': mAb.evidenceLocation || '',
+          'Evidence statement': mAb.evidenceStatement || '',
+          'Summary': mAb.summary
         });
       });
 
@@ -1429,15 +1431,15 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           rows.push({
-            mAbName: mAb.mAbName,
+            'Molecule name': mAb.mAbName,
             VH_SeqID: vhChain?.seqId || '',
             VL_SeqID: vlChain?.seqId || '',
-            target: vhChain?.target || vlChain?.target || '',
-            'Target Species (Standardized)': mAb.targetSpecies || '',
-            'Antibody Origin/Generation': mAb.antibodyOrigin || '',
-            'Epitope Residues': mAb.epitope || '',
-            VH_Sequence: vhChain?.fullSequence || '',
-            VL_Sequence: vlChain?.fullSequence || ''
+            'Molecule Target': vhChain?.target || vlChain?.target || '',
+            'Molecule Target_Species': mAb.targetSpecies || '',
+            'mAB Species': mAb.antibodyOrigin || '',
+            'Epitope': mAb.epitope || '',
+            VH_FullSequence: vhChain?.fullSequence || '',
+            VL_FullSequence: vlChain?.fullSequence || ''
           });
         });
         const csv = Papa.unparse(rows);
