@@ -1178,7 +1178,6 @@ function AppContent() {
             'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
             'Molecule Target_Species': mAb.targetSpecies || '',
             'mAB Species': mAb.antibodyOrigin || '',
-            'mAB generation source technique': '', // Placeholder for now
             'Epitope': mAb.epitope || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
@@ -1190,7 +1189,6 @@ function AppContent() {
             VL_CDR1: vlChain?.cdrs.find(c => c.type === 'CDR1')?.sequence || '',
             VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
             VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
-            overallSeqID: mAb.seqId || '',
             'Confidence': mAb.confidence,
             'Needs Review': mAb.needsReview ? 'Yes' : 'No',
             'Review Remarks': mAb.reviewReason || '',
@@ -1363,7 +1361,6 @@ function AppContent() {
           'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
           'Molecule Target_Species': mAb.targetSpecies || '',
           'mAB Species': mAb.antibodyOrigin || '',
-          'mAB generation source technique': '', // Placeholder
           'Epitope': mAb.epitope || '',
           
           // Heavy Chain (VH) Data
@@ -1380,7 +1377,6 @@ function AppContent() {
           VL_CDR2: vlChain?.cdrs.find(c => c.type === 'CDR2')?.sequence || '',
           VL_CDR3: vlChain?.cdrs.find(c => c.type === 'CDR3')?.sequence || '',
           
-          overallSeqID: mAb.seqId || '',
           'Confidence': mAb.confidence,
           'Needs Review': mAb.needsReview ? 'Yes' : 'No',
           'Review Remarks': mAb.reviewReason || '',
