@@ -56,8 +56,12 @@ IMPORTANT EXTRACTION RULES:
 11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
-14. Return the data in valid JSON format.
-15. CRITICAL: Ensure the JSON is valid and complete. If the output is getting too long, prioritize the most important antibodies first.
+14. Amino Acid Format:
+    - Use ONLY single-letter amino acid codes (e.g., A, C, D, E...).
+    - DO NOT USE three-letter codes (e.g., Ala, Cys, Asp, Glu). If the document uses three-letter codes, you MUST convert them to single-letter codes in your output.
+    - If a sequence contains spaces or other punctuation, CLEAN IT.
+15. Return the data in valid JSON format.
+16. CRITICAL: Ensure the JSON is valid and complete.
 
 16. BISPECIFIC & MULTISPECIFIC HANDLING:
     - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
@@ -736,56 +740,33 @@ async function performDeepScanExtraction(
   let totalPromptTokens = 0;
   let totalCandidatesTokens = 0;
 
-  // 4. Targeted Extraction Pass
-  for (let i = 0; i < pageClusters.length; i++) {
-    const range = pageClusters[i];
-    console.log(`[Deep Scan] Targeted Pass ${i+1}/${pageClusters.length}: Pages ${range}`);
-    
-    try {
-      if (i > 0) await new Promise(resolve => setTimeout(resolve, 3000)); // Rate limit buffer
-      
-      const chunkResult = await extractWithLLM(
-        input, 
-        { ...options, isDeepScanMode: false }, // Use standard mode for actual extraction
-        range,
-        sequenceListing,
-        prioritySeqIds
-      );
+  // 4. Unified Extraction Pass
+  // Instead of chunking, we send all identified relevant pages in a single request
+  // to maintain full context and improve coverage (cross-referencing).
+  const unifiedRange = pageClusters.join(",");
+  console.log(`[Deep Scan] Performing Unified Pass: Pages ${unifiedRange}`);
+  
+  try {
+    const result = await extractWithLLM(
+      input, 
+      { ...options, isDeepScanMode: false }, // Standard mode for the actual extraction
+      unifiedRange,
+      sequenceListing,
+      prioritySeqIds
+    );
 
-      if (chunkResult.patentId !== "Unknown") patentId = chunkResult.patentId;
-      if (chunkResult.patentTitle !== "Untitled Patent") patentTitle = chunkResult.patentTitle;
-      
-      if (chunkResult.usageMetadata) {
-        totalPromptTokens += chunkResult.usageMetadata.promptTokenCount;
-        totalCandidatesTokens += chunkResult.usageMetadata.candidatesTokenCount;
-      }
+    // Merge/Synthesis is still useful if we want to ensure data looks consistent
+    const consolidatedAntibodies = await synthesizeAntibodies(result.antibodies, options);
 
-      allAntibodies.push(...chunkResult.antibodies);
-      console.log(`[Deep Scan] Pass ${i+1} found ${chunkResult.antibodies.length} clones.`);
-    } catch (err) {
-      console.error(`[Deep Scan] Error in pass ${i+1} (${range}):`, err);
-    }
+    return {
+      ...result,
+      antibodies: consolidatedAntibodies,
+      isSarMode: options.isSarMode
+    };
+  } catch (err: any) {
+    console.error("[Deep Scan] Unified Pass failed:", err);
+    throw new Error(`Deep Scan Unified Pass failed: ${err.message}`);
   }
-
-  if (allAntibodies.length === 0) {
-    throw new Error("Deep Scan Pass completed but no clones were discovered or extractable. Ensure the PDF contains text or high-quality OCR.");
-  }
-
-  // 5. Synthesis & Deduplication
-  const consolidatedAntibodies = await synthesizeAntibodies(allAntibodies, options);
-
-  return {
-    patentId,
-    patentTitle,
-    antibodies: consolidatedAntibodies,
-    modelUsed: options.model,
-    isSarMode: options.isSarMode,
-    usageMetadata: {
-      promptTokenCount: totalPromptTokens,
-      candidatesTokenCount: totalCandidatesTokens,
-      totalTokenCount: totalPromptTokens + totalCandidatesTokens
-    }
-  };
 }
 
 /**
@@ -809,7 +790,7 @@ CRITICAL TARGETS:
 7. ANY page containing large blocks of single-letter or three-letter amino acids.
 8. EXPERIMENTAL RESULTS tables where clone names reappear.
 
-OUTPUT: Return a JSON object with a unique list of relevant page numbers. You MUST identify EVERY page that looks like it has a table or a sequence listing. Do not be conservative.
+OUTPUT: Return a JSON object with a unique list of relevant page numbers. You MUST identify EVERY page that looks like it has a table or a sequence listing. Do not be conservative. 
 Total pages in doc: ${totalPages}.
 `;
 
