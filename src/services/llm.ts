@@ -390,109 +390,15 @@ export async function extractWithLLM(
       console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
     }
 
-    let startResponse: Response | null = null;
-    let postAttempts = 0;
-    const maxPostAttempts = 3;
-
-    while (postAttempts < maxPostAttempts) {
-      try {
-        startResponse = await fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-        });
-
-        if (startResponse.status === 429 || startResponse.status === 503) {
-          throw new Error(`Transient server error: ${startResponse.status}`);
-        }
-        break; // Success
-      } catch (postError: any) {
-        postAttempts++;
-        const isNetworkError = postError.message?.toLowerCase().includes('fetch') || 
-                               postError.message?.toLowerCase().includes('network') ||
-                               postError.message?.toLowerCase().includes('transient');
-        
-        if (isNetworkError && postAttempts < maxPostAttempts) {
-          console.warn(`[Extraction] POST network error (attempt ${postAttempts}): ${postError.message}. Retrying in 2s...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          throw postError;
-        }
-      }
-    }
-
-    if (!startResponse || !startResponse.ok) {
-      const errorData = await startResponse?.json().catch(() => ({ error: `Server error: ${startResponse?.status}` }));
-      throw new Error(errorData.error || `Server error: ${startResponse?.status}`);
-    }
-
-    const { jobId } = await startResponse.json();
-    console.log(`[Extraction] Job started: ${jobId}`);
-
-    // 2. Poll for results
-    let result: ExtractionResult | null = null;
-    let attempts = 0;
-    const maxAttempts = 120; // 10 minutes (5s intervals)
-
-    const baseUrl = window.location.origin;
-
-    while (attempts < maxAttempts) {
-      const timestamp = Date.now();
-      console.log(`[Extraction] Polling attempt ${attempts + 1}/${maxAttempts} for job ${jobId}...`);
-      try {
-        const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${timestamp}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-        });
-        if (!statusResponse.ok) {
-          console.error(`[Extraction] Status check failed: ${statusResponse.status} ${statusResponse.statusText}`);
-          throw new Error(`Failed to check job status: ${statusResponse.status}`);
-        }
-
-        const job = await statusResponse.json();
-        console.log(`[Extraction] Job ${jobId} status: ${job.status}`);
-
-        if (job.status === 'completed') {
-          result = job.result;
-          break;
-        } else if (job.status === 'failed') {
-          throw new Error(job.error || 'Extraction job failed');
-        }
-      } catch (pollError: any) {
-        // If it's a network error, retry a few times before giving up
-        const errorMsg = pollError.message?.toLowerCase() || "";
-        const isNetworkError = errorMsg.includes('fetch') || 
-                               errorMsg.includes('network') ||
-                               errorMsg.includes('aborted') ||
-                               errorMsg.includes('failed to fetch') ||
-                               pollError.name === 'TypeError';
-        
-        if (isNetworkError && attempts < maxAttempts - 1) {
-          console.warn(`[Extraction] Polling network error (attempt ${attempts + 1}): ${pollError.message}. Retrying in 5s...`);
-          // Check if we are still online
-          if (!navigator.onLine) {
-            console.error("[Extraction] Browser is offline. Waiting for connection...");
-          }
-        } else {
-          console.error("[Extraction] Non-recoverable polling error:", pollError);
-          throw pollError;
-        }
-      }
-
-      // Wait 5 seconds before next poll with jitter
-      const jitter = Math.floor(Math.random() * 1000);
-      await new Promise(resolve => setTimeout(resolve, 5000 + jitter));
-      attempts++;
-    }
-
-    if (!result) {
-      throw new Error("Extraction timed out after 10 minutes.");
-    }
+    const { patentId, patentTitle, antibodies, usageMetadata } = await executeLLMJob(payload);
   
   // Post-processing and Validation
-  result.patentId = result.patentId || "Unknown";
-  result.patentTitle = result.patentTitle || "Untitled Patent";
-  result.antibodies = result.antibodies || [];
+  const result: ExtractionResult = {
+    patentId: patentId || "Unknown",
+    patentTitle: patentTitle || "Untitled Patent",
+    antibodies: antibodies || [],
+    usageMetadata
+  };
   
   const STANDARD_AMINO_ACIDS = new Set("ACDEFGHIKLMNPQRSTVWY");
 
@@ -728,7 +634,7 @@ export async function extractWithLLM(
 }
 
 /**
- * Performs a multi-pass extraction by breaking a large PDF into chunks.
+ * Orchestrates a multi-step extraction by first surveying relevant pages and then performing targeted analysis.
  */
 async function performDeepScanExtraction(
   input: { data: string; mimeType: string },
@@ -736,22 +642,58 @@ async function performDeepScanExtraction(
   sequenceListing?: { data: string; mimeType: string },
   prioritySeqIds?: string
 ): Promise<ExtractionResult> {
-  console.log("[Deep Scan] Initiating chunked extraction...");
+  console.log("[Deep Scan] Initiating specialized discovery pass...");
   
   const totalPages = await getPdfPageCount(input.data);
   if (totalPages <= 0) {
     throw new Error("Could not determine page count for Deep Scan.");
   }
 
-  const CHUNK_SIZE = 30; // Pages per pass
-  const chunks: string[] = [];
-  
-  for (let i = 1; i <= totalPages; i += CHUNK_SIZE) {
-    const end = Math.min(i + CHUNK_SIZE - 1, totalPages);
-    chunks.push(`${i}-${end}`);
+  // 1. Discovery Pass - Find where the "meat" is
+  let discoveryPages: number[] = [];
+  try {
+    discoveryPages = await performDiscoveryPass(input, options, totalPages);
+    console.log(`[Deep Scan] Discovery pass identified ${discoveryPages.length} potentially relevant pages.`);
+  } catch (err) {
+    console.warn("[Deep Scan] Discovery pass failed, falling back to incremental scan.", err);
+    // Fallback: process every 15 pages to be safe but efficient
+    for (let i = 1; i <= totalPages; i += 15) discoveryPages.push(i);
   }
 
-  console.log(`[Deep Scan] Splitting ${totalPages} pages into ${chunks.length} chunks of ~${CHUNK_SIZE} pages each.`);
+  // 2. Add Default High-Probabilty Pages (Intro tables and end of doc)
+  const mandatoryPages = new Set<number>();
+  // First 10 pages usually contain critical summary tables (Table 1, 3 etc)
+  for (let i = 1; i <= Math.min(10, totalPages); i++) mandatoryPages.add(i);
+  // Last 20 pages often contain the sequence listing if it's integrated
+  for (let i = Math.max(1, totalPages - 20); i <= totalPages; i++) mandatoryPages.add(i);
+  
+  discoveryPages.forEach(p => mandatoryPages.add(p));
+  
+  // Sort and remove duplicates
+  const sortedPages = Array.from(mandatoryPages).sort((a, b) => a - b).filter(p => p > 0 && p <= totalPages);
+  
+  // 3. Cluster adjacent pages into chunks (to preserve context across page breaks)
+  const pageClusters: string[] = [];
+  if (sortedPages.length > 0) {
+    let currentStart = sortedPages[0];
+    let currentPrev = sortedPages[0];
+    
+    for (let i = 1; i <= sortedPages.length; i++) {
+        const p = sortedPages[i];
+        // If gap is more than 3 pages, or cluster exceeds 40 pages, break it
+        if (p === undefined || (p - currentPrev > 3) || (p - currentStart >= 40)) {
+            pageClusters.push(`${currentStart}-${currentPrev}`);
+            if (p !== undefined) {
+                currentStart = p;
+                currentPrev = p;
+            }
+        } else {
+            currentPrev = p;
+        }
+    }
+  }
+
+  console.log(`[Deep Scan] Target map: ${pageClusters.join(", ")}`);
 
   const allAntibodies: Antibody[] = [];
   let patentId = "Unknown";
@@ -759,18 +701,17 @@ async function performDeepScanExtraction(
   let totalPromptTokens = 0;
   let totalCandidatesTokens = 0;
 
-  // Process chunks sequentially to stay within rate limits and maintain state
-  for (let i = 0; i < chunks.length; i++) {
-    const range = chunks[i];
-    console.log(`[Deep Scan] Processing Chunk ${i+1}/${chunks.length}: Pages ${range}`);
+  // 4. Targeted Extraction Pass
+  for (let i = 0; i < pageClusters.length; i++) {
+    const range = pageClusters[i];
+    console.log(`[Deep Scan] Targeted Pass ${i+1}/${pageClusters.length}: Pages ${range}`);
     
     try {
-      // Small delay between chunks to avoid rate limits
-      if (i > 0) await new Promise(resolve => setTimeout(resolve, 3000));
+      if (i > 0) await new Promise(resolve => setTimeout(resolve, 3000)); // Rate limit buffer
       
       const chunkResult = await extractWithLLM(
         input, 
-        { ...options, isDeepScanMode: false }, // Use normal mode for the actual call
+        { ...options, isDeepScanMode: false }, // Use standard mode for actual extraction
         range,
         sequenceListing,
         prioritySeqIds
@@ -784,22 +725,18 @@ async function performDeepScanExtraction(
         totalCandidatesTokens += chunkResult.usageMetadata.candidatesTokenCount;
       }
 
-      // Merge findings
       allAntibodies.push(...chunkResult.antibodies);
-      console.log(`[Deep Scan] Chunk ${i+1} completed. Found ${chunkResult.antibodies.length} mAb entries.`);
+      console.log(`[Deep Scan] Pass ${i+1} found ${chunkResult.antibodies.length} clones.`);
     } catch (err) {
-      console.error(`[Deep Scan] Error in chunk ${i+1} (${range}):`, err);
-      // We continue with other chunks if one fails, to get partial results
+      console.error(`[Deep Scan] Error in pass ${i+1} (${range}):`, err);
     }
   }
 
   if (allAntibodies.length === 0) {
-    throw new Error("Deep Scan failed to extract any antibody sequences from the chunks.");
+    throw new Error("Deep Scan Pass completed but no clones were discovered or extractable. Ensure the PDF contains text or high-quality OCR.");
   }
 
-  // Final Synthesis
-  console.log(`[Deep Scan] Synthesis: Consolidating ${allAntibodies.length} raw mAb entries...`);
-  
+  // 5. Synthesis & Deduplication
   const consolidatedAntibodies = await synthesizeAntibodies(allAntibodies, options);
 
   return {
@@ -814,6 +751,107 @@ async function performDeepScanExtraction(
       totalTokenCount: totalPromptTokens + totalCandidatesTokens
     }
   };
+}
+
+/**
+ * Performs a broad 'scout' pass of the document to find page numbers containing mAb definitions.
+ */
+async function performDiscoveryPass(
+    input: { data: string; mimeType: string },
+    options: LLMOptions,
+    totalPages: number
+): Promise<number[]> {
+    const scoutPrompt = `
+You are a patent indexing agent. Your ONLY goal is to scan this document and identify the page numbers that contain critical antibody sequence data.
+
+LOOK FOR:
+1. Tables of antibody clones (e.g., Table 1, Table 3, Table 6).
+2. DEFINITIONS of SEQ ID NOs (sequence listing sections).
+3. mAb clone mentions in tables or listing text (e.g., "mAb 1", "clone 2419").
+4. Experimental potency tables (IC50, Kd).
+
+OUTPUT: Return a JSON object with a unique list of relevant page numbers.
+Example: {"relevantPages": [1, 2, 8, 15, 100, 101, 250]}
+
+Total pages in doc: ${totalPages}.
+`;
+
+    const payload = JSON.stringify({
+        provider: options.provider,
+        model: options.model,
+        input: [
+            { inlineData: { data: input.data, mimeType: input.mimeType } },
+            { text: scoutPrompt }
+        ],
+        responseSchema: {
+            type: "OBJECT",
+            properties: {
+                relevantPages: {
+                    type: "ARRAY",
+                    items: { type: "INTEGER" }
+                }
+            },
+            required: ["relevantPages"]
+        }
+    });
+
+    const result = await executeLLMJob(payload);
+    return Array.isArray(result.relevantPages) ? result.relevantPages : [];
+}
+
+/**
+ * Shared helper for executing an extraction job and polling for completion.
+ */
+async function executeLLMJob(payload: string): Promise<any> {
+    const baseUrl = window.location.origin;
+    let startResponse: Response | null = null;
+    let postAttempts = 0;
+    const maxPostAttempts = 3;
+
+    while (postAttempts < maxPostAttempts) {
+        try {
+            startResponse = await fetch('/api/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+            });
+            if (startResponse.status === 429 || startResponse.status === 503) {
+                throw new Error(`Transient status: ${startResponse.status}`);
+            }
+            break;
+        } catch (postError: any) {
+            postAttempts++;
+            if (postAttempts < maxPostAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+                throw postError;
+            }
+        }
+    }
+
+    if (!startResponse || !startResponse.ok) {
+        const errorData = await startResponse?.json().catch(() => ({ error: `Server error: ${startResponse?.status}` }));
+        throw new Error(errorData.error || `Server error: ${startResponse?.status}`);
+    }
+
+    const { jobId } = await startResponse.json();
+    let attempts = 0;
+    const maxAttempts = 120; // 10 mins
+
+    while (attempts < maxAttempts) {
+        const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
+            cache: 'no-store'
+        });
+        if (!statusResponse.ok) throw new Error(`Status check failed: ${statusResponse.status}`);
+
+        const job = await statusResponse.json();
+        if (job.status === 'completed') return job.result;
+        if (job.status === 'failed') throw new Error(job.error || 'Job failed');
+        
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        attempts++;
+    }
+    throw new Error("Job timed out.");
 }
 
 /**
