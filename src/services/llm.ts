@@ -660,12 +660,16 @@ async function performDeepScanExtraction(
     for (let i = 1; i <= totalPages; i += 15) discoveryPages.push(i);
   }
 
-  // 2. Add Default High-Probabilty Pages (Intro tables and end of doc)
+  // 2. Add Default High-Probabilty Pages (Title and metadata)
   const mandatoryPages = new Set<number>();
-  // First 10 pages usually contain critical summary tables (Table 1, 3 etc)
-  for (let i = 1; i <= Math.min(10, totalPages); i++) mandatoryPages.add(i);
-  // Last 20 pages often contain the sequence listing if it's integrated
-  for (let i = Math.max(1, totalPages - 20); i <= totalPages; i++) mandatoryPages.add(i);
+  // First 5 pages usually contain critical title, ID, and summary
+  for (let i = 1; i <= Math.min(5, totalPages); i++) mandatoryPages.add(i);
+  
+  if (discoveryPages.length === 0) {
+    console.warn("[Deep Scan] Discovery pass found nothing. Including end of document as fallback.");
+    // Last 15 pages often contain the sequence listing if it's integrated
+    for (let i = Math.max(1, totalPages - 15); i <= totalPages; i++) mandatoryPages.add(i);
+  }
   
   discoveryPages.forEach(p => mandatoryPages.add(p));
   
@@ -680,8 +684,9 @@ async function performDeepScanExtraction(
     
     for (let i = 1; i <= sortedPages.length; i++) {
         const p = sortedPages[i];
-        // If gap is more than 3 pages, or cluster exceeds 40 pages, break it
-        if (p === undefined || (p - currentPrev > 3) || (p - currentStart >= 40)) {
+        // If gap is more than 2 pages, or cluster exceeds 20 pages, break it
+        // Smaller clusters (20 vs 40) help avoid tokens/rate limit pressure
+        if (p === undefined || (p - currentPrev > 2) || (p - currentStart >= 20)) {
             pageClusters.push(`${currentStart}-${currentPrev}`);
             if (p !== undefined) {
                 currentStart = p;
@@ -762,16 +767,16 @@ async function performDiscoveryPass(
     totalPages: number
 ): Promise<number[]> {
     const scoutPrompt = `
-You are a patent indexing agent. Your ONLY goal is to scan this document and identify the page numbers that contain critical antibody sequence data.
+You are a patent indexing specialist. Your mission is to find the EXACT page numbers where antibody sequences and clone definitions are located.
 
-LOOK FOR:
-1. Tables of antibody clones (e.g., Table 1, Table 3, Table 6).
-2. DEFINITIONS of SEQ ID NOs (sequence listing sections).
-3. mAb clone mentions in tables or listing text (e.g., "mAb 1", "clone 2419").
-4. Experimental potency tables (IC50, Kd).
+CRITICAL TARGETS:
+1. TABLES of antibody clones (e.g., "Table 1", "Table 3", "Table 6", "Table 8").
+2. SEQUENCE LISTING definitions (where SEQ ID NO: X is followed by a peptide/DNA sequence).
+3. mAb identifier lists (e.g., columns labeled "Antibody ID", "Clone Name", "mAb ID").
+4. CDR definitions (tables mapping SEQ IDs to CDR1, CDR2, CDR3).
 
 OUTPUT: Return a JSON object with a unique list of relevant page numbers.
-Example: {"relevantPages": [1, 2, 8, 15, 100, 101, 250]}
+Example: {"relevantPages": [1, 2, 17, 24, 48, 52]}
 
 Total pages in doc: ${totalPages}.
 `;
@@ -806,7 +811,7 @@ async function executeLLMJob(payload: string): Promise<any> {
     const baseUrl = window.location.origin;
     let startResponse: Response | null = null;
     let postAttempts = 0;
-    const maxPostAttempts = 3;
+    const maxPostAttempts = 5; // Increased retries
 
     while (postAttempts < maxPostAttempts) {
         try {
@@ -815,14 +820,18 @@ async function executeLLMJob(payload: string): Promise<any> {
                 headers: { 'Content-Type': 'application/json' },
                 body: payload,
             });
+            
             if (startResponse.status === 429 || startResponse.status === 503) {
+                const delay = Math.pow(2, postAttempts) * 1000 + Math.random() * 1000;
+                console.warn(`[Extraction] Engine at capacity (${startResponse.status}). Retrying in ${Math.round(delay)}ms...`);
                 throw new Error(`Transient status: ${startResponse.status}`);
             }
             break;
         } catch (postError: any) {
             postAttempts++;
             if (postAttempts < maxPostAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                const backoff = Math.pow(2, postAttempts - 1) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
+                await new Promise(resolve => setTimeout(resolve, backoff));
             } else {
                 throw postError;
             }
