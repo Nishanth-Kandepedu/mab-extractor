@@ -1178,7 +1178,7 @@ function AppContent() {
             'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
             'Molecule Target_Species': mAb.targetSpecies || '',
             'mAB Species': mAb.antibodyOrigin || '',
-            'mAB generation source technique': '', // Placeholder for now
+            'mAB generation source technique': mAb.generationSource || '',
             'Epitope': mAb.epitope || '',
             VH_SeqID: vhChain?.seqId || '',
             VH_FullSequence: vhChain?.fullSequence || '',
@@ -1363,7 +1363,7 @@ function AppContent() {
           'Molecule Target Synonyms': targetMeta?.synonyms.join(', ') || '',
           'Molecule Target_Species': mAb.targetSpecies || '',
           'mAB Species': mAb.antibodyOrigin || '',
-          'mAB generation source technique': '', // Placeholder
+          'mAB generation source technique': mAb.generationSource || '',
           'Epitope': mAb.epitope || '',
           
           // Heavy Chain (VH) Data
@@ -1437,6 +1437,7 @@ function AppContent() {
             'Molecule Target': vhChain?.target || vlChain?.target || '',
             'Molecule Target_Species': mAb.targetSpecies || '',
             'mAB Species': mAb.antibodyOrigin || '',
+            'mAB generation source technique': mAb.generationSource || '',
             'Epitope': mAb.epitope || '',
             VH_FullSequence: vhChain?.fullSequence || '',
             VL_FullSequence: vlChain?.fullSequence || ''
