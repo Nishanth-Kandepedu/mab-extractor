@@ -670,13 +670,13 @@ async function performDeepScanExtraction(
     for (let i = 1; i <= totalPages; i += 15) discoveryPages.push(i);
   }
 
-  // 2. Add Default High-Probabilty Pages (Title and metadata)
+  // 2. Add Default High-Probabilty Pages (Title, metadata, and early tables)
   const mandatoryPages = new Set<number>();
-  // First 5 pages usually contain critical title, ID, and summary
-  for (let i = 1; i <= Math.min(5, totalPages); i++) mandatoryPages.add(i);
+  // First 10 pages usually contain critical title, ID, and early summary tables
+  for (let i = 1; i <= Math.min(10, totalPages); i++) mandatoryPages.add(i);
   
-  // Last 5 pages often contain the claims which reference sequences
-  for (let i = Math.max(1, totalPages - 5); i <= totalPages; i++) mandatoryPages.add(i);
+  // Last 10 pages (was 5) often contain claims or end of sequence listing
+  for (let i = Math.max(1, totalPages - 10); i <= totalPages; i++) mandatoryPages.add(i);
 
   if (discoveryPages.length === 0) {
     console.warn("[Deep Scan] Discovery pass found nothing. Including broad fallback scan.");
@@ -684,12 +684,24 @@ async function performDeepScanExtraction(
     for (let i = Math.max(1, totalPages - 25); i <= totalPages; i++) mandatoryPages.add(i);
   }
   
-  // Add a 1-page buffer around every discovered page for context
+  // Add a 2-page buffer around every discovered page for context (was 1)
   discoveryPages.forEach(p => {
+      mandatoryPages.add(Math.max(1, p - 2));
       mandatoryPages.add(Math.max(1, p - 1));
       mandatoryPages.add(p);
       mandatoryPages.add(Math.min(totalPages, p + 1));
+      mandatoryPages.add(Math.min(totalPages, p + 2));
   });
+
+  // SAFETY FALLBACK: If discovery pass returned very little for a large document, 
+  // we add a distributed scan to ensure we don't miss entire sections.
+  if (totalPages > 30 && mandatoryPages.size < 12) {
+    console.warn("[Deep Scan] Discovery pass found exceptionally few targets. Adding distributed samples for coverage safety.");
+    for (let i = 1; i <= totalPages; i += 15) {
+        mandatoryPages.add(i);
+        mandatoryPages.add(Math.min(totalPages, i + 1));
+    }
+  }
   
   // Sort and remove duplicates
   const sortedPages = Array.from(mandatoryPages).sort((a, b) => a - b).filter(p => p > 0 && p <= totalPages);
@@ -785,18 +797,19 @@ async function performDiscoveryPass(
     totalPages: number
 ): Promise<number[]> {
     const scoutPrompt = `
-You are a patent indexing specialist. Your mission is to find the EXACT page numbers where antibody sequences and clone definitions are located.
+You are a patent indexing specialist. Your mission is to find ALL page numbers where antibody sequences and clone definitions are located.
 
 CRITICAL TARGETS:
-1. TABLES of antibody clones (e.g., "Table 1", "Table 3", "Table 6", "Table 8").
+1. TABLES of antibody clones (e.g., "Table 1", "Table 3", "Table 6", "Table 8", "Table 10", "Table 12").
 2. SEQUENCE LISTING definitions (where SEQ ID NO: X is followed by a peptide/DNA sequence).
-3. mAb identifier lists (e.g., columns labeled "Antibody ID", "Clone Name", "mAb ID").
+3. mAb identifier lists (e.g., columns labeled "Antibody ID", "Clone Name", "mAb ID", "Antibody Molecule", "Ig ID").
 4. CDR definitions (tables mapping SEQ IDs to CDR1, CDR2, CDR3).
 5. EXAMPLE sections that list specific clones (e.g., "Example 1", "Example 12").
 6. CLAIMS that reference specific SEQ ID NOs or Clone Names.
 7. ANY page containing large blocks of single-letter or three-letter amino acids.
+8. EXPERIMENTAL RESULTS tables where clone names reappear.
 
-OUTPUT: Return a JSON object with a unique list of relevant page numbers.
+OUTPUT: Return a JSON object with a unique list of relevant page numbers. You MUST identify EVERY page that looks like it has a table or a sequence listing. Do not be conservative.
 Total pages in doc: ${totalPages}.
 `;
 
@@ -925,7 +938,17 @@ Actually, to keep it simple and avoid another LLM call with a complex schema, le
   const merged = new Map<string, Antibody>();
   
   for (const mAb of antibodies) {
-    const key = mAb.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
+    // Unique key: Name + Length + Sequence Profile (first 40 residues to cover CDR1)
+    const nameKey = mAb.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
+    const vh = mAb.chains.find(c => c.type === 'Heavy');
+    const vl = mAb.chains.find(c => c.type === 'Light');
+    
+    // Create a fingerprint including lengths and sequence segments
+    const vhProfile = vh ? `${vh.fullSequence.length}_${vh.fullSequence.substring(0, 40)}` : "no_vh";
+    const vlProfile = vl ? `${vl.fullSequence.length}_${vl.fullSequence.substring(0, 40)}` : "no_vl";
+    
+    const key = `${nameKey}_${vhProfile}_${vlProfile}`;
+    
     if (merged.has(key)) {
       const existing = merged.get(key)!;
       // Merge chains
