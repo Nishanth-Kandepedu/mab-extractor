@@ -58,8 +58,9 @@ IMPORTANT EXTRACTION RULES:
 13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
 14. Amino Acid Format:
     - Use ONLY single-letter amino acid codes (e.g., A, C, D, E...).
-    - DO NOT USE three-letter codes (e.g., Ala, Cys, Asp, Glu). If the document uses three-letter codes, you MUST convert them to single-letter codes in your output.
+    - DO NOT USE three-letter codes (e.g., Ala, Cys, Asp, Glu, GLY). If the document uses three-letter codes, you MUST convert them to single-letter codes in your output.
     - If a sequence contains spaces or other punctuation, CLEAN IT.
+    - VERBATIM ACCURACY: You must never summarize or approximate a sequence. Every character must match the source exactly.
 15. Return the data in valid JSON format.
 16. CRITICAL: Ensure the JSON is valid and complete.
 
@@ -720,9 +721,9 @@ async function performDeepScanExtraction(
     
     for (let i = 1; i <= sortedPages.length; i++) {
         const p = sortedPages[i];
-        // If gap is more than 3 pages (was 2), or cluster exceeds 25 pages (was 20), break it
-        // This larger buffer ensures we don't split tables or descriptions apart
-        if (p === undefined || (p - currentPrev > 3) || (p - currentStart >= 25)) {
+        // If gap is more than 2 pages (was 3), or cluster exceeds 5 pages (was 25), break it
+        // Smaller clusters (max 5 pages) preserve high focus and avoid token pressure/summarization
+        if (p === undefined || (p - currentPrev > 2) || (p - currentStart >= 5)) {
             pageClusters.push(`${currentStart}-${currentPrev}`);
             if (p !== undefined) {
                 currentStart = p;
@@ -1050,13 +1051,13 @@ function convertThreeLetterToOneLetter(seq: string): string {
         'GLQ': 'Q'
     };
 
-    // Clean all punctuation and spaces
-    const clean = seq.replace(/[^A-Za-z]/g, '').toUpperCase();
+    // Clean all punctuation and remove numbers, but keep characters
+    const clean = seq.replace(/[\d\s\.\-]/g, '').toUpperCase();
     
     let result = '';
-    for (let i = 0; i < clean.length; i += 3) {
+    // Use a sliding window to find triplets if joined without fixed structure
+    for (let i = 0; i <= clean.length - 3; i += 3) {
         const triplet = clean.substring(i, i + 3);
-        if (triplet.length < 3) break;
         result += map[triplet] || '?';
     }
     
