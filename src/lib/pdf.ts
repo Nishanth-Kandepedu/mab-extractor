@@ -73,3 +73,21 @@ export async function getPdfPages(base64Data: string, range: string): Promise<st
     return base64Data; // Fallback to original
   }
 }
+
+/**
+ * Returns the total page count of a PDF.
+ */
+export async function getPdfPageCount(base64Data: string): Promise<number> {
+  try {
+    const binaryString = atob(base64Data.trim());
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    const srcDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    return srcDoc.getPageCount();
+  } catch (e) {
+    console.error("[PDF] Error getting page count:", e);
+    return 0;
+  }
+}

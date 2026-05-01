@@ -1,5 +1,5 @@
 import { ExtractionResult, Antibody } from "../types";
-import { getPdfPages } from "../lib/pdf";
+import { getPdfPages, getPdfPageCount } from "../lib/pdf";
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -117,6 +117,7 @@ export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
   isSarMode?: boolean;
+  isDeepScanMode?: boolean;
 }
 
 /**
@@ -242,6 +243,10 @@ export async function extractWithLLM(
   
   try {
     const { provider, model } = options;
+
+    if (options.isDeepScanMode && typeof input !== 'string' && input.mimeType === 'application/pdf') {
+      return await performDeepScanExtraction(input, options, sequenceListing, prioritySeqIds);
+    }
 
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
@@ -720,4 +725,166 @@ export async function extractWithLLM(
     }
     throw e;
   }
+}
+
+/**
+ * Performs a multi-pass extraction by breaking a large PDF into chunks.
+ */
+async function performDeepScanExtraction(
+  input: { data: string; mimeType: string },
+  options: LLMOptions,
+  sequenceListing?: { data: string; mimeType: string },
+  prioritySeqIds?: string
+): Promise<ExtractionResult> {
+  console.log("[Deep Scan] Initiating chunked extraction...");
+  
+  const totalPages = await getPdfPageCount(input.data);
+  if (totalPages <= 0) {
+    throw new Error("Could not determine page count for Deep Scan.");
+  }
+
+  const CHUNK_SIZE = 30; // Pages per pass
+  const chunks: string[] = [];
+  
+  for (let i = 1; i <= totalPages; i += CHUNK_SIZE) {
+    const end = Math.min(i + CHUNK_SIZE - 1, totalPages);
+    chunks.push(`${i}-${end}`);
+  }
+
+  console.log(`[Deep Scan] Splitting ${totalPages} pages into ${chunks.length} chunks of ~${CHUNK_SIZE} pages each.`);
+
+  const allAntibodies: Antibody[] = [];
+  let patentId = "Unknown";
+  let patentTitle = "Untitled Patent";
+  let totalPromptTokens = 0;
+  let totalCandidatesTokens = 0;
+
+  // Process chunks sequentially to stay within rate limits and maintain state
+  for (let i = 0; i < chunks.length; i++) {
+    const range = chunks[i];
+    console.log(`[Deep Scan] Processing Chunk ${i+1}/${chunks.length}: Pages ${range}`);
+    
+    try {
+      // Small delay between chunks to avoid rate limits
+      if (i > 0) await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      const chunkResult = await extractWithLLM(
+        input, 
+        { ...options, isDeepScanMode: false }, // Use normal mode for the actual call
+        range,
+        sequenceListing,
+        prioritySeqIds
+      );
+
+      if (chunkResult.patentId !== "Unknown") patentId = chunkResult.patentId;
+      if (chunkResult.patentTitle !== "Untitled Patent") patentTitle = chunkResult.patentTitle;
+      
+      if (chunkResult.usageMetadata) {
+        totalPromptTokens += chunkResult.usageMetadata.promptTokenCount;
+        totalCandidatesTokens += chunkResult.usageMetadata.candidatesTokenCount;
+      }
+
+      // Merge findings
+      allAntibodies.push(...chunkResult.antibodies);
+      console.log(`[Deep Scan] Chunk ${i+1} completed. Found ${chunkResult.antibodies.length} mAb entries.`);
+    } catch (err) {
+      console.error(`[Deep Scan] Error in chunk ${i+1} (${range}):`, err);
+      // We continue with other chunks if one fails, to get partial results
+    }
+  }
+
+  if (allAntibodies.length === 0) {
+    throw new Error("Deep Scan failed to extract any antibody sequences from the chunks.");
+  }
+
+  // Final Synthesis
+  console.log(`[Deep Scan] Synthesis: Consolidating ${allAntibodies.length} raw mAb entries...`);
+  
+  const consolidatedAntibodies = await synthesizeAntibodies(allAntibodies, options);
+
+  return {
+    patentId,
+    patentTitle,
+    antibodies: consolidatedAntibodies,
+    modelUsed: options.model,
+    isSarMode: options.isSarMode,
+    usageMetadata: {
+      promptTokenCount: totalPromptTokens,
+      candidatesTokenCount: totalCandidatesTokens,
+      totalTokenCount: totalPromptTokens + totalCandidatesTokens
+    }
+  };
+}
+
+/**
+ * Uses the LLM to synthesize and deduplicate antibodies found across multiple chunks.
+ */
+async function synthesizeAntibodies(antibodies: Antibody[], options: LLMOptions): Promise<Antibody[]> {
+  // If we have very few antibodies, we can potentially skip LLM synthesis and just do basic merging
+  if (antibodies.length < 3) return antibodies;
+
+  // For very long lists, we might need to chunk the synthesis too, but let's start with a single pass
+  const summaryPayload = antibodies.map(a => ({
+    name: a.mAbName,
+    summary: a.summary,
+    chains: a.chains.map(c => ({ 
+      type: c.type, 
+      seqId: c.seqId, 
+      target: c.target,
+      len: c.fullSequence.length,
+      // We don't send full sequences to synthesis as it's too much data, 
+      // but we send enough to identify if they are duplicates
+      head: c.fullSequence.substring(0, 10),
+      tail: c.fullSequence.slice(-10)
+    }))
+  }));
+
+  const synthPrompt = `
+You are a master antibody data synthesizer. Your task is to merge and deduplicate a list of antibody components extracted from different parts of a large patent.
+
+INPUT DATA: A list of monoclonal antibodies (mAbs) and their chains. Some entries might be duplicates (same name, same sequences), and some might be partials (e.g., mAb 1 with only a Heavy chain in one entry and mAb 1 with only a Light chain in another).
+
+RULES:
+1. Deduplicate by mAbName and Sequence identity.
+2. If two entries have the same mAbName, MERGE their chains.
+3. If a name is "mAb 1" and another is "mAb 1 (REGN7075)", they are likely the same. Use the most descriptive name.
+4. Ensure every monoclonal antibody represents a unique clone.
+5. If sequences are slightly different (OCR errors), use the one with higher precision (e.g. from sequence listing).
+
+OUTPUT: Return a JSON array of the original indices that should be merged or kept. 
+Actually, to keep it simple and avoid another LLM call with a complex schema, let's perform a programmatic merge first.
+`;
+
+  // Programmatic merge based on name
+  const merged = new Map<string, Antibody>();
+  
+  for (const mAb of antibodies) {
+    const key = mAb.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
+    if (merged.has(key)) {
+      const existing = merged.get(key)!;
+      // Merge chains
+      for (const newChain of mAb.chains) {
+        const isDuplicate = existing.chains.some(c => 
+          c.type === newChain.type && 
+          (c.fullSequence === newChain.fullSequence || c.seqId === newChain.seqId)
+        );
+        if (!isDuplicate) {
+          existing.chains.push(newChain);
+        }
+      }
+      // Combine summaries and metadata
+      if (mAb.summary && !existing.summary.includes(mAb.summary.substring(0, 20))) {
+        existing.summary += " | " + mAb.summary;
+      }
+      if (mAb.evidenceLocation && !existing.evidenceLocation?.includes(mAb.evidenceLocation)) {
+        existing.evidenceLocation += ", " + mAb.evidenceLocation;
+      }
+      // Update confidence (average or pick max)
+      existing.confidence = Math.max(existing.confidence, mAb.confidence);
+    } else {
+      merged.set(key, { ...mAb });
+    }
+  }
+
+  return Array.from(merged.values());
 }
