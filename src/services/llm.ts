@@ -420,10 +420,12 @@ export async function extractWithLLM(
     let reviewReason = mAb.reviewReason || "";
 
     mAb.chains = mAb.chains.map(chain => {
-      let seq = chain.fullSequence.replace(/\s/g, ''); // Remove any whitespace
+      // Pre-clean sequence: remove spaces, dots, dashes, numbers, and newlines
+      let seq = chain.fullSequence.replace(/[\s\.\-\d\n\r]/g, ''); 
       
-      // Handle three-letter amino acid codes (e.g. "GluValGln" -> "EVQ")
-      if (seq.length > 30 && seq.match(/^[A-Z][a-z][a-z][A-Z][a-z][a-z]/)) {
+      // Handle three-letter amino acid codes (e.g. "GluValGln" or "GLU VAL GLN" -> "EVQ")
+      // Check if it looks like a 3-letter sequence (starts with many triplets)
+      if (seq.length > 20 && (seq.match(/([A-Z][a-z][a-z]){3,}/) || seq.match(/([A-Z]{3}){3,}/))) {
           seq = convertThreeLetterToOneLetter(seq);
       }
 
@@ -515,11 +517,11 @@ export async function extractWithLLM(
       // This is more robust than relying on LLM-generated indices which are often off-by-one or hallucinated.
       let lastCdrEnd = 0;
       chain.cdrs = chain.cdrs.map(cdr => {
-        let cleanCdrSeq = cdr.sequence.replace(/\s/g, '');
+        let cleanCdrSeq = cdr.sequence.replace(/[\s\.\-\d\n\r]/g, ''); 
         if (!cleanCdrSeq) return cdr;
 
         // Handle three-letter amino acid codes in CDRs
-        if (cleanCdrSeq.length >= 9 && cleanCdrSeq.match(/^[A-Z][a-z][a-z][A-Z][a-z][a-z]/)) {
+        if (cleanCdrSeq.length >= 9 && (cleanCdrSeq.match(/([A-Z][a-z][a-z]){2,}/) || cleanCdrSeq.match(/([A-Z]{3}){2,}/))) {
             cleanCdrSeq = convertThreeLetterToOneLetter(cleanCdrSeq);
         }
 
@@ -732,7 +734,7 @@ async function performDeepScanExtraction(
     }
   }
 
-  console.log(`[Deep Scan] Target map: ${pageClusters.join(", ")}`);
+  console.log(`[Deep Scan] Target clusters: ${pageClusters.join(", ")}`);
 
   const allAntibodies: Antibody[] = [];
   let patentId = "Unknown";
@@ -740,33 +742,59 @@ async function performDeepScanExtraction(
   let totalPromptTokens = 0;
   let totalCandidatesTokens = 0;
 
-  // 4. Unified Extraction Pass
-  // Instead of chunking, we send all identified relevant pages in a single request
-  // to maintain full context and improve coverage (cross-referencing).
-  const unifiedRange = pageClusters.join(",");
-  console.log(`[Deep Scan] Performing Unified Pass: Pages ${unifiedRange}`);
-  
-  try {
-    const result = await extractWithLLM(
-      input, 
-      { ...options, isDeepScanMode: false }, // Standard mode for the actual extraction
-      unifiedRange,
-      sequenceListing,
-      prioritySeqIds
-    );
+  // 4. Chunked Extraction Pass
+  // Divide the identified pages into smaller batches to preserve high focus and verbatim accuracy.
+  for (let i = 0; i < pageClusters.length; i++) {
+    const range = pageClusters[i];
+    console.log(`[Deep Scan] Extraction Pass ${i+1}/${pageClusters.length}: Pages ${range}`);
+    
+    try {
+      if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit buffer
+      
+      const chunkResult = await extractWithLLM(
+        input, 
+        { ...options, isDeepScanMode: false }, // Use standard mode for detailed extraction
+        range,
+        sequenceListing,
+        prioritySeqIds
+      );
 
-    // Merge/Synthesis is still useful if we want to ensure data looks consistent
-    const consolidatedAntibodies = await synthesizeAntibodies(result.antibodies, options);
+      if (chunkResult.patentId !== "Unknown") patentId = chunkResult.patentId;
+      if (chunkResult.patentTitle !== "Untitled Patent" && chunkResult.patentTitle !== "Untitled") {
+        patentTitle = chunkResult.patentTitle;
+      }
+      
+      if (chunkResult.usageMetadata) {
+        totalPromptTokens += chunkResult.usageMetadata.promptTokenCount;
+        totalCandidatesTokens += chunkResult.usageMetadata.candidatesTokenCount;
+      }
 
-    return {
-      ...result,
-      antibodies: consolidatedAntibodies,
-      isSarMode: options.isSarMode
-    };
-  } catch (err: any) {
-    console.error("[Deep Scan] Unified Pass failed:", err);
-    throw new Error(`Deep Scan Unified Pass failed: ${err.message}`);
+      allAntibodies.push(...chunkResult.antibodies);
+      console.log(`[Deep Scan] Pass ${i+1} found ${chunkResult.antibodies.length} clones.`);
+    } catch (err) {
+      console.error(`[Deep Scan] Error in extraction pass ${i+1} (${range}):`, err);
+    }
   }
+
+  if (allAntibodies.length === 0) {
+    throw new Error("Deep Scan completed but no clones were extracted. Ensure the PDF contains text or high-quality OCR.");
+  }
+
+  // 5. Synthesis & Deduplication
+  const consolidatedAntibodies = await synthesizeAntibodies(allAntibodies, options);
+
+  return {
+    patentId,
+    patentTitle,
+    antibodies: consolidatedAntibodies,
+    modelUsed: options.model,
+    isSarMode: options.isSarMode,
+    usageMetadata: {
+      promptTokenCount: totalPromptTokens,
+      candidatesTokenCount: totalCandidatesTokens,
+      totalTokenCount: totalPromptTokens + totalCandidatesTokens
+    }
+  };
 }
 
 /**
@@ -915,44 +943,93 @@ OUTPUT: Return a JSON array of the original indices that should be merged or kep
 Actually, to keep it simple and avoid another LLM call with a complex schema, let's perform a programmatic merge first.
 `;
 
-  // Programmatic merge based on name
+  // Programmatic merge based on name and sequence characteristics
   const merged = new Map<string, Antibody>();
   
   for (const mAb of antibodies) {
-    // Unique key: Name + Length + Sequence Profile (first 40 residues to cover CDR1)
+    // Normalize name for keying
     const nameKey = mAb.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
-    const vh = mAb.chains.find(c => c.type === 'Heavy');
-    const vl = mAb.chains.find(c => c.type === 'Light');
     
-    // Create a fingerprint including lengths and sequence segments
-    const vhProfile = vh ? `${vh.fullSequence.length}_${vh.fullSequence.substring(0, 40)}` : "no_vh";
-    const vlProfile = vl ? `${vl.fullSequence.length}_${vl.fullSequence.substring(0, 40)}` : "no_vl";
+    // We try to find an existing entry with the same name first
+    // If name matches, we check if the sequences are compatible
+    let existingKey: string | null = null;
     
-    const key = `${nameKey}_${vhProfile}_${vlProfile}`;
+    for (const [key, existing] of merged.entries()) {
+        const existingNameKey = existing.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
+        // Exact name match or one is a subset of another (e.g. "2A6" and "mAb 2A6")
+        if (existingNameKey === nameKey || 
+            (nameKey.length > 2 && existingNameKey.includes(nameKey)) ||
+            (existingNameKey.length > 2 && nameKey.includes(existingNameKey))) {
+            
+            // Check sequence compatibility
+            const newVh = mAb.chains.find(c => c.type === 'Heavy');
+            const newVl = mAb.chains.find(c => c.type === 'Light');
+            const extVh = existing.chains.find(c => c.type === 'Heavy');
+            const extVl = existing.chains.find(c => c.type === 'Light');
+            
+            let compatible = true;
+            // If both have Heavy chains, they must be similar
+            if (newVh && extVh) {
+                const s1 = newVh.fullSequence.substring(0, 30);
+                const s2 = extVh.fullSequence.substring(0, 30);
+                if (s1 !== s2 && !s1.includes(s2) && !s2.includes(s1)) compatible = false;
+            }
+            // If both have Light chains, they must be similar
+            if (newVl && extVl && compatible) {
+                const s1 = newVl.fullSequence.substring(0, 30);
+                const s2 = extVl.fullSequence.substring(0, 30);
+                if (s1 !== s2 && !s1.includes(s2) && !s2.includes(s1)) compatible = false;
+            }
+            
+            if (compatible) {
+                existingKey = key;
+                break;
+            }
+        }
+    }
     
-    if (merged.has(key)) {
-      const existing = merged.get(key)!;
+    if (existingKey) {
+      const existing = merged.get(existingKey)!;
       // Merge chains
       for (const newChain of mAb.chains) {
-        const isDuplicate = existing.chains.some(c => 
-          c.type === newChain.type && 
-          (c.fullSequence === newChain.fullSequence || c.seqId === newChain.seqId)
-        );
-        if (!isDuplicate) {
-          existing.chains.push(newChain);
+        const existingChain = existing.chains.find(c => c.type === newChain.type);
+        if (existingChain) {
+            // Keep the longer/better sequence
+            if (newChain.fullSequence.length > existingChain.fullSequence.length) {
+                const index = existing.chains.indexOf(existingChain);
+                existing.chains[index] = newChain;
+            }
+        } else {
+            existing.chains.push(newChain);
         }
       }
-      // Combine summaries and metadata
+      
+      // Prefer the more descriptive name
+      if (mAb.mAbName.length > existing.mAbName.length) {
+          existing.mAbName = mAb.mAbName;
+      }
+
+      // Combine metadata
       if (mAb.summary && !existing.summary.includes(mAb.summary.substring(0, 20))) {
         existing.summary += " | " + mAb.summary;
       }
       if (mAb.evidenceLocation && !existing.evidenceLocation?.includes(mAb.evidenceLocation)) {
         existing.evidenceLocation += ", " + mAb.evidenceLocation;
       }
-      // Update confidence (average or pick max)
       existing.confidence = Math.max(existing.confidence, mAb.confidence);
+      
+      // Merge SAR data if exists
+      if (mAb.experimentalData) {
+          existing.experimentalData = [...(existing.experimentalData || []), ...mAb.experimentalData];
+      }
     } else {
-      merged.set(key, { ...mAb });
+      // Create a stable key for this new entry
+      const vh = mAb.chains.find(c => c.type === 'Heavy');
+      const vl = mAb.chains.find(c => c.type === 'Light');
+      const vhProfile = vh ? vh.fullSequence.substring(0, 40) : "no_vh";
+      const vlProfile = vl ? vl.fullSequence.substring(0, 40) : "no_vl";
+      const finalKey = `${nameKey}_${vhProfile}_${vlProfile}`;
+      merged.set(finalKey, { ...mAb });
     }
   }
 
@@ -965,25 +1042,30 @@ Actually, to keep it simple and avoid another LLM call with a complex schema, le
  */
 function convertThreeLetterToOneLetter(seq: string): string {
     const map: { [key: string]: string } = {
-        'Ala': 'A', 'Arg': 'R', 'Asn': 'N', 'Asp': 'D', 'Cys': 'C',
-        'Gln': 'Q', 'Glu': 'E', 'Gly': 'G', 'His': 'H', 'Ile': 'I',
-        'Leu': 'L', 'Lys': 'K', 'Met': 'M', 'Phe': 'F', 'Pro': 'P',
-        'Prq': 'P', 'Prp': 'P', 'Trp': 'W', 'Tyr': 'Y', 'Val': 'V',
-        'Ser': 'S', 'Thr': 'T', 'Asx': 'B', 'Glx': 'Z', 'Xaa': 'X',
-        'Glq': 'Q' // Some OCR variants
+        'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+        'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+        'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+        'PRQ': 'P', 'PRP': 'P', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
+        'SER': 'S', 'THR': 'T', 'ASX': 'B', 'GLX': 'Z', 'XAA': 'X',
+        'GLQ': 'Q'
     };
 
+    // Clean all punctuation and spaces
+    const clean = seq.replace(/[^A-Za-z]/g, '').toUpperCase();
+    
     let result = '';
-    for (let i = 0; i < seq.length; i += 3) {
-        const triplet = seq.substring(i, i + 3);
-        const code = triplet.charAt(0).toUpperCase() + triplet.substring(1).toLowerCase();
-        result += map[code] || '?';
+    for (let i = 0; i < clean.length; i += 3) {
+        const triplet = clean.substring(i, i + 3);
+        if (triplet.length < 3) break;
+        result += map[triplet] || '?';
     }
     
-    // If we have many unknown residues, it might not be a 3-letter sequence
+    // If it was already single letter but accidentally passed in, the map will return many '?'
+    // result would be roughly 1/3 of the length. 
+    // If the map fails significantly, it's either not a sequence or already single letter.
     const unknownCount = (result.match(/\?/g) || []).length;
-    if (unknownCount > result.length / 2) {
-        return seq; // Fallback to original
+    if (unknownCount > result.length / 2 || result.length < 5) {
+        return seq; 
     }
     
     return result.replace(/\?/g, 'X');
