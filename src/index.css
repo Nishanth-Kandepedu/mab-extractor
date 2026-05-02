@@ -4,11 +4,26 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-indigo-50: #f5f7ff;
+  --color-indigo-100: #ebf0fe;
+  --color-indigo-600: #3b5bdb;
+  --color-indigo-700: #364fc7;
+}
+
+@layer base {
+  body {
+    @apply bg-[#fcfcfd] text-zinc-900 antialiased selection:bg-indigo-100 selection:text-indigo-900;
+  }
 }
 
 @layer utilities {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white shadow-[0_8px_32px_rgba(0,0,0,0.04)];
+  }
+  
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;

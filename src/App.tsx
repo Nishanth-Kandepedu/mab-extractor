@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -1754,95 +1754,86 @@ function AppContent() {
   return (
     <div className="flex flex-col min-h-screen bg-[#F8F9FA] text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#050505] border-b border-white/10 px-8 py-4 flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
-            <AntibodyIcon className="text-zinc-900 w-6 h-6" />
+      <header className="h-16 bg-white border-b border-zinc-100 flex items-center justify-between px-8 sticky top-0 z-[70] shadow-sm">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 group cursor-pointer" onClick={handleReset}>
+            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 transform group-hover:scale-105 transition-transform">
+              <AntibodyIcon className="text-white w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-sm font-extrabold text-zinc-900 tracking-tight leading-none italic">AB<span className="text-indigo-600">MINER</span></h1>
+              <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-1">Smarter Antibody Discovery</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white">AbMiner</h1>
-            <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">The Patent Antibody Mining Engine</p>
-          </div>
+          
+          <nav className="hidden md:flex items-center gap-1 pl-6 border-l border-zinc-100">
+             <button 
+               onClick={() => { setShowAdminDashboard(false); setShowHistory(false); }}
+               className={cn(
+                 "px-4 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-tighter",
+                 (!showAdminDashboard && !showHistory) ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+               )}
+             >
+               PATENT MINER
+             </button>
+             {user && (user as any).role === 'admin' && (
+               <button 
+                 onClick={() => { setShowAdminDashboard(true); setShowHistory(false); }}
+                 className={cn(
+                   "px-4 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-tighter",
+                   showAdminDashboard ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+                 )}
+               >
+                 INTELLIGENCE HUB
+               </button>
+             )}
+          </nav>
         </div>
-        
+
         <div className="flex items-center gap-4">
-          {(user as any)?.isGuest && !auth.currentUser && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px] text-amber-500 font-medium">
-              <AlertCircle className="w-3 h-3" />
-              Guest Offline Mode (Saving Disabled)
-            </div>
-          )}
           {user ? (
-            <div className="flex items-center gap-4">
-              {(user as any)?.role === 'admin' && (
+            <div className="flex items-center gap-5">
+              {!showAdminDashboard && (
                 <button 
-                  onClick={() => {
-                    setShowAdminDashboard(!showAdminDashboard);
-                    setShowHistory(false);
-                  }}
+                  onClick={() => { setShowHistory(!showHistory); setShowAdminDashboard(false); }}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    showAdminDashboard ? "bg-amber-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight border",
+                    showHistory ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-zinc-100 text-zinc-600 hover:bg-zinc-50"
                   )}
                 >
-                  <Database className="w-4 h-4" />
-                  Admin Dashboard
+                  <History className="w-3.5 h-3.5" />
+                  ARCHIVE {history.length > 0 && `(${history.length})`}
                 </button>
               )}
-          {user && (user as any)?.role !== 'guest' && (
-            <div className="flex items-center gap-4">
-              { (user as any)?.role === 'admin' && !forceLoadHistory ? (
-                <button 
-                  onClick={() => setForceLoadHistory(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all uppercase tracking-widest"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Sync Database
-                </button>
-              ) : (
-                <button 
-                  onClick={() => {
-                    setShowHistory(!showHistory);
-                    setShowAdminDashboard(false);
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    showHistory ? "bg-indigo-600 text-white" : "bg-white/5 border border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
-                  )}
-                >
-                  <History className="w-4 h-4" />
-                  { (user as any)?.role === 'admin' ? 'All History' : 'My History' } ({history.length})
-                </button>
-              )}
-            </div>
-          )}
-              <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+              <div className="flex items-center gap-3 pl-5 border-l border-zinc-100">
                 <div className="text-right hidden sm:block">
-                  <p className="text-xs font-bold text-white">{user.displayName}</p>
-                  <p className="text-[10px] text-zinc-400">{user.email}</p>
+                  <p className="text-[11px] font-extrabold text-zinc-900 leading-none">{user.displayName}</p>
+                  <p className="text-[9px] text-zinc-400 mt-1 uppercase font-bold tracking-tighter">{(user as any).role}</p>
                 </div>
                 {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-white/10" />
+                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-lg border border-zinc-100 object-cover shadow-sm" />
                 ) : (
-                  <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                    <UserIcon className="w-4 h-4 text-zinc-500" />
+                  <div className="w-8 h-8 bg-zinc-50 rounded-lg flex items-center justify-center border border-zinc-100">
+                    <UserIcon className="w-4 h-4 text-zinc-400" />
                   </div>
                 )}
-                <button onClick={() => setShowSettings(true)} className="p-2 text-zinc-500 hover:text-white transition-colors" title="Settings">
-                  <Settings className="w-5 h-5" />
-                </button>
-                <button onClick={handleLogout} className="p-2 text-zinc-500 hover:text-red-500 transition-colors">
-                  <LogOut className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setShowSettings(true)} className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Settings">
+                    <Settings className="w-4 h-4" />
+                  </button>
+                  <button onClick={handleLogout} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Sign Out">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
             <button 
               onClick={signIn}
-              className="flex items-center gap-2 bg-white text-zinc-900 px-6 py-2 rounded-xl font-medium text-sm hover:bg-zinc-100 transition-all"
+              className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
             >
               <LogIn className="w-4 h-4" />
-              Sign In to Save
+              SIGN IN
             </button>
           )}
         </div>
@@ -1962,94 +1953,98 @@ function AppContent() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Input */}
         <div className="lg:col-span-4 space-y-6">
-          {/* System Health Dashboard */}
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-sm font-bold text-zinc-900">
-                  Infrastructure
-                </h3>
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-50 border border-zinc-100">
-                <div className={cn("w-2 h-2 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-tight">{networkStats.online ? 'Live' : 'Offline'}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Latency</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xl font-bold text-zinc-900 tabular-nums leading-none">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
-                  <span className="text-xs font-semibold text-zinc-500 uppercase tracking-tighter">ms</span>
+          {/* Fleet Status Dashboard */}
+          <div className="bg-white border border-zinc-200 rounded-[28px] p-6 shadow-sm overflow-hidden relative">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100">
+                  <Activity className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 leading-tight">FLEET STATUS</h3>
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter mt-0.5">Real-time Infrastructure Monitoring</p>
                 </div>
               </div>
-              <div className="space-y-1.5 text-right">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Health</p>
+              <div className="flex flex-col items-end">
                 <span className={cn(
-                  "text-xs font-bold uppercase tracking-tight block leading-none",
-                  healthInfo?.status === 'ok' ? "text-emerald-600" : "text-amber-600"
+                  "text-[10px] font-black uppercase tracking-widest",
+                  networkStats.online ? "text-emerald-500" : "text-red-500"
                 )}>
-                  {healthInfo ? (healthInfo.concurrency?.activeCount > 0 ? 'Busy' : 'Optimal') : 'Checking...'}
+                  {networkStats.online ? 'SYSTEM LIVE' : 'SYSTEM DOWN'}
                 </span>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                  <span className="text-[9px] font-mono text-zinc-400">{networkStats.latency === -1 ? '--' : networkStats.latency}ms</span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2.5 pt-2 border-t border-zinc-100">
-              <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Model Load</span>
-                <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-tight tabular-nums">
-                  {healthInfo ? `${healthInfo.concurrency?.activeCount || 0} / ${healthInfo.concurrency?.totalLimit || 4}` : '--'}
-                </span>
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                     <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Compute Load</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-zinc-900 font-mono tracking-tight tabular-nums">
+                    {healthInfo ? `${healthInfo.concurrency?.activeCount || 0}/${healthInfo.concurrency?.totalLimit || 4} UNITS` : '--'}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
+                    className={cn(
+                      "h-full transition-all duration-700",
+                      (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                    )} 
+                  />
+                </div>
               </div>
-              <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden shadow-inner">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
-                  className={cn(
-                    "h-full transition-all duration-700",
-                    (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.3)]"
-                  )} 
-                />
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                VER: {healthInfo?.version || 'Syncing...'}
-              </span>
-              <button 
-                onClick={checkHealth} 
-                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-widest transition-colors flex items-center gap-1.5 group"
-              >
-                <RotateCcw className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
-                Refresh
-              </button>
+              <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Version</span>
+                    <span className="text-[10px] font-bold text-zinc-900 font-mono">{healthInfo?.version || 'V1.4.2-PRO'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Uptime</span>
+                    <span className="text-[10px] font-bold text-zinc-900 font-mono">100.0%</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={checkHealth} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-50 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  REVALIDATE
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Model Selection */}
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <Beaker className="w-5 h-5 text-indigo-600" />
-                <h2 className="font-semibold text-zinc-800 text-sm">
-                  {(user as any)?.role === 'guest' ? 'AI Analysis Engine' : 'Extraction Model'}
-                </h2>
+          <div className="bg-white border border-zinc-200 rounded-[28px] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100">
+                  <Beaker className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-zinc-900 text-sm leading-tight">
+                    {(user as any)?.role === 'guest' ? 'Analysis Engine' : 'Extraction Model'}
+                  </h2>
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter mt-0.5">High Performance Reasoning</p>
+                </div>
               </div>
-              {(user as any)?.role === 'guest' && (
-                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-tight">
-                  Guest Mode
-                </span>
-              )}
             </div>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex bg-zinc-50 p-1 rounded-xl border border-zinc-100">
                 {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                   const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
+                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'GPT' : 'Claude';
                   return (
                     <button
                       key={p}
@@ -2061,11 +2056,11 @@ function AppContent() {
                         model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                       }))}
                       className={cn(
-                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                        "flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all",
                         llmOptions.provider === p
-                          ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
-                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
-                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
+                          ? "bg-white text-zinc-900 shadow-sm border border-zinc-100" 
+                          : "text-zinc-400 hover:text-zinc-600",
+                        isDisabled && "opacity-20 grayscale cursor-not-allowed"
                       )}
                     >
                       {displayLabel}
@@ -3177,57 +3172,52 @@ function AppContent() {
                   className="space-y-8"
                 >
                   {/* Patent Summary Header */}
-                  <div className="bg-zinc-900 text-white rounded-2xl p-6 shadow-xl">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold bg-indigo-500 text-white px-2 py-0.5 rounded uppercase tracking-wider inline-block">
-                            Patent Source
-                          </span>
-                          {state.result.status && (
-                            <span className={cn(
-                              "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                              state.result.status === 'validated' ? "bg-emerald-500 text-white" :
-                              state.result.status === 'rejected' ? "bg-red-500 text-white" :
-                              "bg-amber-500 text-white"
-                            )}>
-                              Status: {state.result.status}
-                            </span>
-                          )}
+                  <div className="bg-white border border-zinc-200 rounded-[32px] p-8 shadow-sm overflow-hidden relative group">
+                    <div className="absolute top-0 right-0 p-8 flex items-center gap-2">
+                       <div className="flex flex-col items-end">
+                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest leading-none">System Status</span>
+                         <div className="flex items-center gap-2 mt-2">
+                           <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">Synchronized</span>
+                           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                         </div>
+                       </div>
+                    </div>
+
+                    <div className="max-w-2xl">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-600">
+                          <FileText className="w-5 h-5" />
                         </div>
-                        <h2 className="text-xl font-bold">{state.result.patentTitle}</h2>
-                        <div className="flex items-center gap-4 mt-1">
-                          <p className="text-sm text-zinc-400 font-mono">{state.result.patentId}</p>
-                          {state.result.extractionTime && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              Time: {(state.result.extractionTime / 1000).toFixed(1)}s
-                            </span>
-                          )}
-                          {state.result.usageMetadata && (
-                            <div className="flex items-center gap-3">
-                              <span className="text-[10px] text-zinc-500 font-mono">
-                                Total Tokens: {state.result.usageMetadata.totalTokenCount.toLocaleString()}
-                              </span>
-                              {state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > state.result.usageMetadata.candidatesTokenCount && (
-                                <span className="text-[10px] text-amber-500 font-mono">
-                                  (incl. {(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - state.result.usageMetadata.candidatesTokenCount).toLocaleString()} thinking)
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {state.result.modelUsed && (
-                            <span className={cn(
-                              "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
-                              state.result.modelUsed.includes('flash') ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                            )}>
-                              {state.result.modelUsed.replace('gemini-', '').replace('-preview', '')}
-                            </span>
-                          )}
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded-lg border border-indigo-100 uppercase tracking-wider">
+                          EXTRACTED PATENT ENTITY
+                        </span>
+                      </div>
+                      
+                      <h2 className="text-2xl font-black text-zinc-900 tracking-tight leading-tight mb-2">
+                        {state.result.patentTitle}
+                      </h2>
+                      
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-2">
+                          <Fingerprint className="w-4 h-4 text-zinc-400" />
+                          <p className="text-sm font-bold text-zinc-500 font-mono tracking-tight">{state.result.patentId}</p>
+                        </div>
+                        <div className="h-4 w-px bg-zinc-200" />
+                        <div className="flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-zinc-400" />
+                          <p className="text-sm font-bold text-zinc-500 uppercase tracking-tighter">
+                            {state.result.antibodies.length} Identified Molecules
+                          </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-50 border border-zinc-200 p-4 px-6 rounded-[24px]">
+                      <div className="flex items-center gap-3">
                         {state.batch && state.batch.items.some(i => i.status === 'completed') && (
-                          <div className="flex items-center bg-zinc-800 rounded-xl p-1 border border-white/5 mr-2">
+                          <div className="flex items-center bg-white rounded-xl p-1 border border-zinc-200 shadow-sm">
                             <button
                               onClick={() => {
                                 const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
@@ -3237,12 +3227,12 @@ function AppContent() {
                                 }
                               }}
                               disabled={!state.batch.items.slice(0, state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId)).some(i => i.status === 'completed')}
-                              className="p-2 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                              className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"
                               title="Previous Patent"
                             >
                               <ChevronRight className="w-4 h-4 rotate-180" />
                             </button>
-                            <div className="h-4 w-px bg-white/10 mx-1" />
+                            <div className="h-4 w-px bg-zinc-100 mx-1" />
                             <button
                               onClick={() => {
                                 const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
@@ -3252,163 +3242,137 @@ function AppContent() {
                                 }
                               }}
                               disabled={!state.batch.items.slice(state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId) + 1).some(i => i.status === 'completed')}
-                              className="p-2 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+                              className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"
                               title="Next Patent"
                             >
                               <ChevronRight className="w-4 h-4" />
                             </button>
                           </div>
                         )}
+                        <div className="h-6 w-px bg-zinc-200 mx-1" />
+                        
                         {user && !state.result.id && (
                           <button 
                             onClick={saveToFirestore}
                             disabled={isSaving}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-medium transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[14px] text-[11px] font-bold uppercase tracking-tight transition-all disabled:opacity-50"
                           >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            Save Result
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4" />}
+                            Commit to DB
                           </button>
                         )}
+                        
                         <button 
                           onClick={handleReset}
-                          className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-[14px] text-[11px] font-bold uppercase tracking-tight transition-all shadow-sm"
                         >
                           <RotateCcw className="w-4 h-4" />
-                          Reset
+                          Discard
                         </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         {state.result.id && (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 mr-2">
                             <button 
                               onClick={() => updateExtractionStatus(state.result!.id!, 'validated')}
-                              className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 rounded-lg text-[10px] font-bold uppercase hover:bg-emerald-600/30 transition-all"
+                              className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all"
                             >
-                              Validate
+                              Verify
                             </button>
                             <button 
                               onClick={() => updateExtractionStatus(state.result!.id!, 'rejected')}
-                              className="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg text-[10px] font-bold uppercase hover:bg-red-600/30 transition-all"
+                              className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all"
                             >
-                              Reject
+                              Flag
                             </button>
                           </div>
                         )}
-                        <button 
-                          onClick={handleCopyFasta}
-                          className="p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/10 transition-colors relative group"
-                          title="Copy All FASTA"
-                        >
-                          {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-white" />}
-                        </button>
-                        <button 
-                          onClick={handleExportCsv}
-                          disabled={isExporting}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            exportSuccess ? "bg-emerald-600/20 border-emerald-600/30" : "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title="Export CSV"
-                        >
-                          {isExporting ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : exportSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Table className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-
-                        <button 
-                          onClick={handleExportSql}
-                          disabled={isExporting}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            sqlExportSuccess ? "bg-emerald-600/20 border-emerald-600/30" : "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title="Export SQL (DBeaver Ready)"
-                        >
-                          {isExporting ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : sqlExportSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Database className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-                        <button 
-                          onClick={handleWebhookSync}
-                          disabled={isSyncing || !user?.webhookUrl}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all relative group",
-                            syncSuccess ? "bg-emerald-600/20 border-emerald-600/30" : 
-                            !user?.webhookUrl ? "opacity-30 cursor-not-allowed bg-white/5 border-white/5" :
-                            "bg-white/10 hover:bg-white/20 border-white/10"
-                          )}
-                          title={user?.webhookUrl ? "Sync to Webhook (Azure/Custom API)" : "Configure Webhook in Settings to Sync"}
-                        >
-                          {isSyncing ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : syncSuccess ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Globe className={cn("w-4 h-4", !user?.webhookUrl ? "text-zinc-500" : "text-white")} />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <AntibodyIcon className="w-3 h-3 text-indigo-400" />
-                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Total mAbs</span>
+                        
+                        <div className="flex bg-white border border-zinc-200 p-1 rounded-xl shadow-sm">
+                          <button 
+                            onClick={handleCopyFasta}
+                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Copy FASTA"
+                          >
+                            {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          <button 
+                            onClick={handleExportCsv}
+                            disabled={isExporting}
+                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-20"
+                            title="Export CSV"
+                          >
+                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400" /> : <Table className="w-4 h-4" />}
+                          </button>
+                          <button 
+                            onClick={handleExportSql}
+                            disabled={isExporting}
+                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-20"
+                            title="Export SQL"
+                          >
+                            <Database className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={handleWebhookSync}
+                            disabled={isSyncing || !user?.webhookUrl}
+                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-10"
+                            title="Sync API"
+                          >
+                            <Globe className="w-4 h-4" />
+                          </button>
                         </div>
-                        <span className="text-lg font-bold text-white">{state.result.antibodies.length}</span>
+                      </div>
+                  </div>
+
+                  <div className="space-y-6">
+                  <div className="mt-8 grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <AntibodyIcon className="w-3.5 h-3.5 text-indigo-500" />
+                          <span className="text-[10px] text-zinc-400 uppercase font-black tracking-tight">Molecules</span>
+                        </div>
+                        <span className="text-xl font-black text-zinc-900 tabular-nums">{state.result.antibodies.length}</span>
                       </div>
 
                       {state.result.extractionTime && (
-                        <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
+                        <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
                           <div className="flex items-center gap-1.5 mb-1">
-                            <Clock className="w-3 h-3 text-amber-400" />
-                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Time Elapsed</span>
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
+                            <span className="text-[10px] text-zinc-400 uppercase font-black tracking-tight">Time</span>
                           </div>
-                          <span className="text-lg font-bold text-white">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
+                          <span className="text-xl font-black text-zinc-900 tabular-nums">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
                         </div>
                       )}
 
-                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <ArrowUpRight className="w-3 h-3 text-blue-400" />
-                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Input Tokens</span>
+                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                        <div className="flex items-center gap-1.5 mb-1 text-zinc-400">
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span className="text-[10px] uppercase font-black tracking-tight">Input</span>
                         </div>
-                        <span className="text-lg font-bold text-white">
+                        <span className="text-xl font-black text-zinc-900 tabular-nums">
                           {state.result.usageMetadata ? state.result.usageMetadata.promptTokenCount.toLocaleString() : '---'}
                         </span>
                       </div>
                       
-                      <div className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
-                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Output Tokens</span>
+                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                        <div className="flex items-center gap-1.5 mb-1 text-zinc-400">
+                          <ArrowDownLeft className="w-3.5 h-3.5" />
+                          <span className="text-[10px] uppercase font-black tracking-tight">Output</span>
                         </div>
-                        <span className="text-lg font-bold text-white">
+                        <span className="text-xl font-black text-zinc-900 tabular-nums">
                           {state.result.usageMetadata ? 
                             (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount).toLocaleString() 
                             : '---'}
                         </span>
-                        {state.result.usageMetadata && (state.result.usageMetadata.thinkingTokenCount || (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount > (state.result.usageMetadata.candidatesTokenCount || 0))) && (
-                          <span className="text-[9px] text-amber-500/70 mt-1">
-                            {state.result.usageMetadata.thinkingTokenCount 
-                              ? `${state.result.usageMetadata.thinkingTokenCount.toLocaleString()} reasoning tokens`
-                              : `${(state.result.usageMetadata.candidatesTokenCount || 0).toLocaleString()} response + ${(state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount - (state.result.usageMetadata.candidatesTokenCount || 0)).toLocaleString()} thinking`}
-                          </span>
-                        )}
                       </div>
 
-                      <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Coins className="w-3 h-3 text-indigo-400" />
-                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
+                      <div className="flex flex-col bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-100">
+                        <div className="flex items-center gap-1.5 mb-1 text-indigo-200">
+                          <Coins className="w-3.5 h-3.5" />
+                          <span className="text-[10px] uppercase font-bold tracking-tight">Cost</span>
                         </div>
-                        <span className="text-lg font-bold text-indigo-100">
+                        <span className="text-xl font-black text-white tabular-nums">
                           {getEstCost(state.result.usageMetadata, state.result.modelUsed || llmOptions.model)}
                         </span>
                       </div>
