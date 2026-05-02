@@ -1037,96 +1037,115 @@ function AppContent() {
         
         if (item.status === 'completed') continue;
 
-        setState(prev => ({
-          ...prev,
-          batch: { 
-            ...prev.batch!, 
-            currentIndex: i, 
-            items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'processing', error: undefined } : it) 
+        let result;
+        let attempts = 0;
+        const maxItemAttempts = 2; // Auto-retry once for transient failures
+
+        while (attempts < maxItemAttempts) {
+          try {
+            setState(prev => ({
+              ...prev,
+              batch: { 
+                ...prev.batch!, 
+                currentIndex: i, 
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'processing', error: undefined } : it) 
+              }
+            }));
+
+            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
+            const readFileData = (f: File): Promise<string> => {
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(f);
+              });
+            };
+
+            const fileData = await readFileData(item.file);
+            
+            let listingData: string | undefined;
+            let listingMimeType: string | undefined;
+            if (sequenceListingFile) {
+              listingData = await readFileData(sequenceListingFile);
+              listingMimeType = sequenceListingFile.type;
+            }
+
+            const itemStartTime = Date.now();
+            
+            // Update status periodically for batch items too
+            const statusTimer = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+            }, 30000);
+
+            const statusTimer2 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+            }, 60000);
+
+            result = await extractWithLLM(
+              { data: fileData, mimeType: item.file.type }, 
+              currentLlmOptions, 
+              pageRange, 
+              listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+              prioritySeqIds
+            );
+            
+            clearTimeout(statusTimer);
+            clearTimeout(statusTimer2);
+            const itemExtractionTime = Date.now() - itemStartTime;
+            result.extractionTime = itemExtractionTime;
+
+            // Enrichment for Batch Mode
+            await enrichResultsWithMetadata(result);
+
+            setState(prev => ({
+              ...prev,
+              result: result,
+              batch: {
+                ...prev.batch!,
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result, extractionTime: itemExtractionTime } : it)
+              }
+            }));
+
+            if (user && user.role !== 'guest') {
+               const { id: _id, ...resultData } = result as any;
+               await addDoc(collection(db, 'extractions'), {
+                 ...resultData,
+                 userId: user.uid,
+                 userDisplayName: user.displayName || 'Batch Processor',
+                 createdAt: Timestamp.now(),
+                 status: 'pending',
+                 batchId: 'batch_' + batchStartTime,
+                 autoSaved: true
+               });
+            }
+            
+            break; // Success! Break the retry loop
+
+          } catch (error: any) {
+            attempts++;
+            const isTransient = error.message?.toLowerCase().includes('capacity') || 
+                               error.message?.toLowerCase().includes('overloaded') || 
+                               error.message?.toLowerCase().includes('timeout');
+                               
+            if (isTransient && attempts < maxItemAttempts) {
+              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}). Auto-retrying transient error in 5s...`, error);
+              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id}...` }));
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              continue;
+            }
+
+            console.error(`[Batch] Item ${item.id} failed permanently after ${attempts} attempts:`, error);
+            setState(prev => ({
+              ...prev,
+              batch: {
+                ...prev.batch!,
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
+              }
+            }));
+            break; // Stop retrying this item
           }
-        }));
-
-        if (!item.file) continue;
-
-       try {
-         setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
-         const readFileData = (f: File): Promise<string> => {
-           return new Promise((resolve, reject) => {
-             const reader = new FileReader();
-             reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
-             reader.onerror = reject;
-             reader.readAsDataURL(f);
-           });
-         };
-
-         const fileData = await readFileData(item.file);
-         
-         let listingData: string | undefined;
-         let listingMimeType: string | undefined;
-         if (sequenceListingFile) {
-           listingData = await readFileData(sequenceListingFile);
-           listingMimeType = sequenceListingFile.type;
-         }
-
-         const itemStartTime = Date.now();
-         
-         // Update status periodically for batch items too
-         const statusTimer = setTimeout(() => {
-           setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
-         }, 30000);
-
-         const statusTimer2 = setTimeout(() => {
-           setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
-         }, 60000);
-
-         const result = await extractWithLLM(
-           { data: fileData, mimeType: item.file.type }, 
-           currentLlmOptions, 
-           pageRange, 
-           listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-           prioritySeqIds
-         );
-         
-         clearTimeout(statusTimer);
-         clearTimeout(statusTimer2);
-         const itemExtractionTime = Date.now() - itemStartTime;
-         result.extractionTime = itemExtractionTime;
-
-         // Enrichment for Batch Mode
-         await enrichResultsWithMetadata(result);
-
-         setState(prev => ({
-           ...prev,
-           result: result,
-           batch: {
-             ...prev.batch!,
-             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result, extractionTime: itemExtractionTime } : it)
-           }
-         }));
-
-         if (user && user.role !== 'guest') {
-            const { id: _id, ...resultData } = result as any;
-            await addDoc(collection(db, 'extractions'), {
-              ...resultData,
-              userId: user.uid,
-              userDisplayName: user.displayName || 'Batch Processor',
-              createdAt: Timestamp.now(),
-              status: 'pending',
-              batchId: 'batch_' + batchStartTime,
-              autoSaved: true
-            });
-         }
-
-       } catch (error: any) {
-         console.error(`Batch item ${item.id} failed:`, error);
-         setState(prev => ({
-           ...prev,
-           batch: {
-             ...prev.batch!,
-             items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
-           }
-         }));
-       }
+        }
 
        // Cooldown period between patents
        if (i < state.batch!.items.length - 1) {
@@ -2381,15 +2400,35 @@ function AppContent() {
                             Queue ({state.batch.items.length} Documents)
                           </p>
                         </div>
-                        {state.batch.currentIndex === state.batch.items.length && (
-                          <button
-                            onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
-                            className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest px-2.5 py-1 rounded-full bg-red-50 transition-all flex items-center gap-1.5"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            Clear Results
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {state.batch.items.some(i => i.status === 'error') && !state.batch.isProcessing && (
+                            <button
+                              onClick={() => {
+                                setState(prev => ({
+                                  ...prev,
+                                  batch: {
+                                    ...prev.batch!,
+                                    items: prev.batch!.items.map(it => it.status === 'error' ? { ...it, status: 'pending', error: undefined } : it)
+                                  }
+                                }));
+                                setTimeout(runBatch, 0);
+                              }}
+                              className="text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-widest px-2.5 py-1 rounded-full bg-indigo-50 transition-all flex items-center gap-1.5"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Retry Failed
+                            </button>
+                          )}
+                          {(state.batch.currentIndex === state.batch.items.length || !state.batch.isProcessing) && (
+                            <button
+                              onClick={() => setState(prev => ({ ...prev, batch: { ...prev.batch!, items: [], currentIndex: -1, isProcessing: false } }))}
+                              className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest px-2.5 py-1 rounded-full bg-red-50 transition-all flex items-center gap-1.5"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Clear Queue
+                            </button>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-50 shadow-sm max-h-[400px] overflow-y-auto overflow-x-hidden custom-scrollbar">

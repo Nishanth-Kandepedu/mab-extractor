@@ -887,22 +887,39 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    const maxAttempts = 120; // 10 mins
+    const maxAttempts = 240; // Increased to 20 mins to allow for server-side queuing
 
     while (attempts < maxAttempts) {
-        const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
-            cache: 'no-store'
-        });
-        if (!statusResponse.ok) throw new Error(`Status check failed: ${statusResponse.status}`);
+        try {
+          const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
+              cache: 'no-store'
+          });
+          if (!statusResponse.ok) {
+            console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            attempts++;
+            continue;
+          }
 
-        const job = await statusResponse.json();
-        if (job.status === 'completed') return job.result;
-        if (job.status === 'failed') throw new Error(job.error || 'Job failed');
+          const job = await statusResponse.json();
+          if (job.status === 'completed') return job.result;
+          if (job.status === 'failed') throw new Error(job.error || 'Job failed');
+          
+          if (attempts % 6 === 0) { // Log every 30 seconds
+            console.log(`[Job ${jobId}] Status: ${job.status}...`);
+          }
+        } catch (e: any) {
+          if (e.message?.includes('failed') || e.message?.includes('check failed')) {
+            // Keep going unless it's a hard failure
+          } else {
+            throw e;
+          }
+        }
         
         await new Promise(resolve => setTimeout(resolve, 5000));
         attempts++;
     }
-    throw new Error("Job timed out.");
+    throw new Error("Job timed out while waiting for AI engine. This can happen during high traffic or for very large documents.");
 }
 
 /**
