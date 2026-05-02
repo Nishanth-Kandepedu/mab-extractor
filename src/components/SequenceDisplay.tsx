@@ -113,12 +113,12 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
             type === 'Heavy' ? "bg-indigo-600" : "bg-emerald-600"
           )} />
           <div className="flex flex-col">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 leading-none">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 leading-none">
               {type} chain domain
             </h3>
             <div className="flex items-center gap-2 mt-1.5">
               {seqId && (
-                <span className="text-[10px] font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-md font-bold shadow-sm">
+                <span className="text-[10px] font-mono bg-zinc-900 text-white px-2 py-0.5 rounded-md font-bold shadow-md">
                   {seqId}
                 </span>
               )}
@@ -132,7 +132,7 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
         </div>
         <div className="flex items-center gap-2">
           {hasNonStandardAminoAcids && (
-            <span className="text-[9px] font-black text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-lg border border-red-100">
+            <span className="text-[9px] font-bold text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-lg border border-red-100">
               Variant AA Detected
             </span>
           )}
@@ -154,7 +154,7 @@ export const SequenceDisplay: React.FC<SequenceDisplayProps> = ({ chain, isEdita
                </button>
              )}
           </div>
-          <span className="text-[10px] font-mono font-black text-zinc-900 bg-zinc-50 border border-zinc-100 px-3 py-1 rounded-lg tabular-nums">
+          <span className="text-[10px] font-mono font-bold text-zinc-900 bg-zinc-50 border border-zinc-200 px-3 py-1 rounded-lg tabular-nums">
             {fullSequence.length} RESIDUES
           </span>
         </div>

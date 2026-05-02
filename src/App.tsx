@@ -1171,6 +1171,9 @@ function AppContent() {
             'Molecule name': mAb.mAbName,
             'Patent ID': result.patentId,
             'Patent Title': result.patentTitle,
+            'Patent Assignee': result.patentAssignee || '',
+            'Priority Date': result.priorityDate || '',
+            'Publication Date': result.publicationDate || '',
             'Molecule Target': vhChain?.target || vlChain?.target || '',
             'Molecule Target Standard Name': targetMeta?.standardName || '',
             'Molecule Target UniProt Id': targetMeta?.uniprotId || '',
@@ -1606,8 +1609,8 @@ function AppContent() {
         {/* Left Pane: Messaging & Atmosphere */}
         <div className="hidden md:flex md:w-[65%] bg-[#050505] relative overflow-hidden flex-col p-12 lg:p-16 justify-between">
           {/* Background Glows */}
-          <div className="absolute top-[-15%] right-[-15%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[140px]" />
-          <div className="absolute bottom-[-15%] left-[-15%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[120px]" />
+          <div className="absolute top-[-15%] right-[-15%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[140px]"></div>
+          <div className="absolute bottom-[-15%] left-[-15%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
           
           {/* Logo */}
           <div className="relative z-10 flex items-center gap-3">
@@ -1637,7 +1640,7 @@ function AppContent() {
               ].map((feature, i) => (
                 <div key={i} className="group">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-3.5 bg-indigo-500/40 group-hover:bg-indigo-500 transition-colors" />
+                    <div className="w-1 h-3.5 bg-indigo-500/40 group-hover:bg-indigo-500 transition-colors"></div>
                     <span className="text-white font-bold text-xs uppercase tracking-widest">{feature.label}</span>
                   </div>
                   <p className="text-zinc-500 text-sm leading-relaxed font-light">{feature.desc}</p>
@@ -1754,74 +1757,74 @@ function AppContent() {
   return (
     <div className="flex flex-col min-h-screen bg-[#F8F9FA] text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Header */}
-      <header className="h-16 bg-white border-b border-zinc-100 flex items-center justify-between px-8 sticky top-0 z-[70] shadow-sm">
-        <div className="flex items-center gap-6">
+      <header className="sticky top-0 z-50 bg-[#0A0A0B] border-b border-white/5 px-8 py-4 flex items-center justify-between shadow-xl">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={handleReset}>
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 transform group-hover:scale-105 transition-transform">
-              <AntibodyIcon className="text-white w-5 h-5" />
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/20 transition-transform">
+              <AntibodyIcon className="text-white w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-sm font-extrabold text-zinc-900 tracking-tight leading-none italic">AB<span className="text-indigo-600">MINER</span></h1>
-              <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-1">Smarter Antibody Discovery</p>
+              <h1 className="text-lg font-bold text-white tracking-tight leading-none">AbMiner</h1>
+              <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-[0.2em] mt-1">Patent Intelligence Engine</p>
             </div>
           </div>
           
-          <nav className="hidden md:flex items-center gap-1 pl-6 border-l border-zinc-100">
+          <nav className="hidden md:flex items-center gap-1 pl-6 ml-2 border-l border-white/10">
              <button 
                onClick={() => { setShowAdminDashboard(false); setShowHistory(false); }}
                className={cn(
-                 "px-4 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-tighter",
-                 (!showAdminDashboard && !showHistory) ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+                 "px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+                 (!showAdminDashboard && !showHistory) ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300"
                )}
              >
-               PATENT MINER
+               Extraction
              </button>
              {user && (user as any).role === 'admin' && (
                <button 
                  onClick={() => { setShowAdminDashboard(true); setShowHistory(false); }}
                  className={cn(
-                   "px-4 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-tighter",
-                   showAdminDashboard ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+                   "px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+                   showAdminDashboard ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300"
                  )}
                >
-                 INTELLIGENCE HUB
+                 Admin Panel
                </button>
              )}
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           {user ? (
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4">
               {!showAdminDashboard && (
                 <button 
-                  onClick={() => { setShowHistory(!showHistory); setShowAdminDashboard(false); }}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight border",
-                    showHistory ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-zinc-100 text-zinc-600 hover:bg-zinc-50"
-                  )}
+                   onClick={() => { setShowHistory(!showHistory); setShowAdminDashboard(false); }}
+                   className={cn(
+                     "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                     showHistory ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20" : "bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+                   )}
                 >
-                  <History className="w-3.5 h-3.5" />
-                  ARCHIVE {history.length > 0 && `(${history.length})`}
+                  <History className="w-4 h-4" />
+                  HISTORY {history.length > 0 && `(${history.length})`}
                 </button>
               )}
-              <div className="flex items-center gap-3 pl-5 border-l border-zinc-100">
+              <div className="flex items-center gap-4 pl-4 border-l border-white/10">
                 <div className="text-right hidden sm:block">
-                  <p className="text-[11px] font-extrabold text-zinc-900 leading-none">{user.displayName}</p>
-                  <p className="text-[9px] text-zinc-400 mt-1 uppercase font-bold tracking-tighter">{(user as any).role}</p>
+                  <p className="text-xs font-bold text-white leading-none">{user.displayName}</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase font-bold tracking-wider">{(user as any).role}</p>
                 </div>
                 {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-lg border border-zinc-100 object-cover shadow-sm" />
+                  <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-white/10" />
                 ) : (
-                  <div className="w-8 h-8 bg-zinc-50 rounded-lg flex items-center justify-center border border-zinc-100">
-                    <UserIcon className="w-4 h-4 text-zinc-400" />
+                  <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                    <UserIcon className="w-4 h-4 text-zinc-500" />
                   </div>
                 )}
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setShowSettings(true)} className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Settings">
-                    <Settings className="w-4 h-4" />
+                <div className="flex items-center">
+                  <button onClick={() => setShowSettings(true)} className="p-2 text-zinc-400 hover:text-white transition-colors" title="Settings">
+                    <Settings className="w-5 h-5" />
                   </button>
-                  <button onClick={handleLogout} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Sign Out">
+                  <button onClick={handleLogout} className="p-2 text-zinc-400 hover:text-red-500 transition-colors">
                     <LogOut className="w-4 h-4" />
                   </button>
                 </div>
@@ -1830,7 +1833,7 @@ function AppContent() {
           ) : (
             <button 
               onClick={signIn}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              className="flex items-center gap-2 bg-white text-zinc-900 px-6 py-2 rounded-xl font-bold text-xs hover:bg-zinc-100 transition-all shadow-lg"
             >
               <LogIn className="w-4 h-4" />
               SIGN IN
@@ -1845,7 +1848,7 @@ function AppContent() {
             <div className="flex items-center gap-3">
               {(state.batch.isProcessing || state.batch.cooldownRemaining) ? (
                 <div className="relative">
-                  <div className="w-5 h-5 border-2 border-indigo-500/20 border-t-indigo-400 rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-indigo-500/20 border-t-indigo-400 rounded-full animate-spin"></div>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <Activity className="w-2.5 h-2.5 text-indigo-400 animate-pulse" />
                   </div>
@@ -1863,7 +1866,7 @@ function AppContent() {
               </div>
             </div>
             
-            <div className="h-6 w-px bg-white/10" />
+            <div className="h-6 w-px bg-white/10"></div>
             
             <div className="flex items-center gap-10">
               <div className="flex flex-col">
@@ -1950,124 +1953,119 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Input */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Fleet Status Dashboard */}
-          <div className="bg-white border border-zinc-200 rounded-[28px] p-6 shadow-sm overflow-hidden relative">
-            <div className="flex items-center justify-between mb-6">
+      <main className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+          {/* Left Column: Input Controls */}
+          <div className="lg:col-span-4 border-r border-zinc-200 bg-white overflow-y-auto custom-scrollbar flex flex-col">
+             {/* Header Section for Left Column */}
+             <div className="p-8 border-b border-zinc-100 bg-zinc-50/50 sticky top-0 z-20 backdrop-blur-md">
+                <div className="flex items-center justify-between mb-2 text-zinc-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em]">Module 01: Input</span>
+                  </div>
+                  <span className="text-[9px] font-mono tabular-nums opacity-50">NODE_PROD_1.0.4</span>
+                </div>
+                <h2 className="text-sm font-black text-zinc-900 tracking-widest uppercase">Analytical Control</h2>
+             </div>
+
+             <div className="p-8 space-y-12">
+               {/* Infrastructure Health */}
+               <div className="bg-zinc-950 text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden ring-1 ring-white/10 group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16"></div>
+            
+            <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100">
-                  <Activity className="w-5 h-5 text-indigo-600" />
+                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/10 text-indigo-400">
+                  <Activity className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900 leading-tight">FLEET STATUS</h3>
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter mt-0.5">Real-time Infrastructure Monitoring</p>
+                  <h3 className="text-sm font-bold text-white tracking-tight">System Infrastructure</h3>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">Real-time telemetrics</p>
                 </div>
               </div>
-              <div className="flex flex-col items-end">
-                <span className={cn(
-                  "text-[10px] font-black uppercase tracking-widest",
-                  networkStats.online ? "text-emerald-500" : "text-red-500"
-                )}>
-                  {networkStats.online ? 'SYSTEM LIVE' : 'SYSTEM DOWN'}
-                </span>
-                <div className="flex items-center gap-1 mt-1">
-                  <div className={cn("w-1.5 h-1.5 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                  <span className="text-[9px] font-mono text-zinc-400">{networkStats.latency === -1 ? '--' : networkStats.latency}ms</span>
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                <div className={cn("w-2 h-2 rounded-full", networkStats.online ? "bg-emerald-500 animate-pulse transition-all" : "bg-red-500")}></div>
+                <span className="text-[10px] font-bold text-zinc-400">{(networkStats.online ? 'Live' : 'Offline').toUpperCase()}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mb-8">
+              <div>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Latency</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold tracking-tighter tabular-nums">{networkStats.latency === -1 ? '--' : networkStats.latency}</span>
+                  <span className="text-xs font-bold text-zinc-500">ms</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Load Factor</p>
+                <div className="flex items-center justify-end gap-2 text-3xl font-bold tracking-tighter tabular-nums">
+                  {healthInfo ? (`${healthInfo.concurrency?.activeCount}/${healthInfo.concurrency?.totalLimit || 4}`) : '--'}
                 </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                     <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Compute Load</span>
-                  </div>
-                  <span className="text-[11px] font-bold text-zinc-900 font-mono tracking-tight tabular-nums">
-                    {healthInfo ? `${healthInfo.concurrency?.activeCount || 0}/${healthInfo.concurrency?.totalLimit || 4} UNITS` : '--'}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
-                    className={cn(
-                      "h-full transition-all duration-700",
-                      (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
-                    )} 
-                  />
-                </div>
+            <div className="space-y-4 pt-6 border-t border-white/5">
+              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: healthInfo ? `${Math.min(100, ((healthInfo.concurrency?.activeCount) / (healthInfo.concurrency?.totalLimit || 4)) * 100)}%` : '0%' }}
+                  className={cn(
+                    "h-full transition-all duration-1000",
+                    (healthInfo?.concurrency?.activeCount || 0) >= 3 ? "bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]" : "bg-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.4)]"
+                  )} 
+                />
               </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Version</span>
-                    <span className="text-[10px] font-bold text-zinc-900 font-mono">{healthInfo?.version || 'V1.4.2-PRO'}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Uptime</span>
-                    <span className="text-[10px] font-bold text-zinc-900 font-mono">100.0%</span>
-                  </div>
-                </div>
-                <button 
-                  onClick={checkHealth} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-50 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all"
-                >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-[0.2em]">{healthInfo?.version || 'AbMiner V.1.4.2'}</span>
+                <button onClick={checkHealth} className="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-1.5">
                   <RotateCcw className="w-3 h-3" />
-                  REVALIDATE
+                  SYNCHRONIZE
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Model Selection */}
-          <div className="bg-white border border-zinc-200 rounded-[28px] p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100">
-                  <Beaker className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-zinc-900 text-sm leading-tight">
-                    {(user as any)?.role === 'guest' ? 'Analysis Engine' : 'Extraction Model'}
-                  </h2>
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tighter mt-0.5">High Performance Reasoning</p>
-                </div>
+          {/* Extraction Engine */}
+          <div className="bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100 text-indigo-600">
+                <Beaker className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 tracking-tight">Intelligence Module</h3>
+                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Extraction Protocol</p>
               </div>
             </div>
             
-            <div className="space-y-4">
-              <div className="flex bg-zinc-50 p-1 rounded-xl border border-zinc-100">
-                {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                  const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'GPT' : 'Claude';
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => setLlmOptions(prev => ({ 
-                        ...prev, 
-                        provider: p, 
-                        model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
-                      }))}
-                      className={cn(
-                        "flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all",
-                        llmOptions.provider === p
-                          ? "bg-white text-zinc-900 shadow-sm border border-zinc-100" 
-                          : "text-zinc-400 hover:text-zinc-600",
-                        isDisabled && "opacity-20 grayscale cursor-not-allowed"
-                      )}
-                    >
-                      {displayLabel}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="flex bg-zinc-50 p-1.5 rounded-2xl border border-zinc-100 mb-6">
+              {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
+                const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
+                const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Claude';
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => setLlmOptions(prev => ({ 
+                      ...prev, 
+                      provider: p,
+                      model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                    }))}
+                    className={cn(
+                      "flex-1 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-tight transition-all",
+                      llmOptions.provider === p
+                        ? "bg-white text-zinc-900 shadow-md border border-zinc-200/50" 
+                        : "text-zinc-400 hover:text-zinc-600",
+                      isDisabled && "opacity-20 grayscale cursor-not-allowed"
+                    )}
+                  >
+                    {displayLabel}
+                  </button>
+                );
+              })}
+            </div>
               <select
                 value={llmOptions.model}
                 onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
@@ -2155,7 +2153,6 @@ function AppContent() {
                 </button>
               </div>
             </div>
-          </div>
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm sticky top-24">
             <div className="flex items-center justify-between mb-6">
@@ -2536,10 +2533,9 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Global Error Overlays */}
-          {/* Settings Modal */}
-      <AnimatePresence>
-        {showSettings && (
+          {/* Global Overlays */}
+          <AnimatePresence>
+            {showSettings && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
@@ -2627,7 +2623,7 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
+          <AnimatePresence>
             {state.error && (
               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-md">
                 <motion.div
@@ -2636,7 +2632,7 @@ function AppContent() {
                   exit={{ opacity: 0, scale: 0.9, y: 20 }}
                   className="bg-white border border-zinc-200 rounded-[32px] p-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] max-w-lg w-full relative overflow-hidden"
                 >
-                  <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500" />
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500"></div>
                   
                   <button 
                     onClick={() => setState(prev => ({ ...prev, error: null }))}
@@ -2719,50 +2715,102 @@ function AppContent() {
                     </div>
                   </div>
                 </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
-          </div>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
-        {/* Right Column: Results */}
-        <div className="lg:col-span-8 space-y-8">
-          {showAdminDashboard && (user as any)?.role === 'admin' ? (
-            <div className="space-y-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Database className="w-6 h-6 text-amber-600" />
-                    Admin Intelligence Dashboard
-                  </h2>
-                  <button 
-                    onClick={() => {
-                      // Instead of reload, just trigger a re-fetch by updating state or just relying on real-time listeners
-                      // But since we want to "refresh", we can just clear local state if needed
-                      // For now, let's just make it a no-op or a simple toast
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium hover:bg-zinc-200 transition-all"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Data is Real-time
+      {/* Right Column: Results */}
+        <div className="lg:col-span-8 overflow-y-auto custom-scrollbar bg-zinc-50/50">
+          <AnimatePresence mode="wait">
+            {!state.result && !state.isExtracting && !showAdminDashboard && !showHistory && (
+              <motion.div 
+                key="empty"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="min-h-full flex flex-col items-center justify-center p-12 text-center"
+              >
+                <div className="w-24 h-24 bg-white rounded-[2rem] border border-zinc-200 shadow-xl flex items-center justify-center mb-10 relative group hover:scale-105 transition-transform duration-500">
+                  <div className="absolute inset-0 bg-indigo-600/5 rounded-[2rem] animate-pulse"></div>
+                  <div className="absolute -inset-4 bg-indigo-600/5 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <AntibodyIcon className="w-12 h-12 text-indigo-600 relative" />
+                </div>
+                <h2 className="text-4xl font-black text-zinc-900 mb-6 tracking-tight">AbMiner Intelligence Suite</h2>
+                <p className="text-zinc-500 max-w-sm text-lg leading-relaxed font-medium">
+                  Upload a patent or sequence listing to initiate high-precision neural extraction.
+                </p>
+
+                <div className="flex items-center gap-8 mt-16">
+                   <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full border border-zinc-200 flex items-center justify-center bg-white shadow-sm">
+                        <Zap className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Verbatim Accuracy</span>
+                   </div>
+                   <div className="w-12 h-px bg-zinc-200"></div>
+                   <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full border border-zinc-200 flex items-center justify-center bg-white shadow-sm">
+                        <Layers className="w-5 h-5 text-indigo-500" />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Multispecific Logic</span>
+                   </div>
+                   <div className="w-12 h-px bg-zinc-200"></div>
+                   <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full border border-zinc-200 flex items-center justify-center bg-white shadow-sm">
+                        <Cpu className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Gemma 4 Powered</span>
+                   </div>
+                </div>
+              </motion.div>
+            )}
+
+            {showAdminDashboard && (user as any)?.role === 'admin' ? (
+              <motion.div 
+                key="admin"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-8 space-y-8"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <Database className="w-6 h-6 text-amber-600" />
+                      Admin Intelligence Dashboard
+                    </h2>
+                    <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium border border-zinc-200">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      Data is Real-time
+                    </div>
+                  </div>
+                  <button onClick={() => setShowAdminDashboard(false)} className="px-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-bold text-zinc-600 hover:bg-zinc-50 transition-all">
+                    Back to Analyzer
                   </button>
                 </div>
-                <button onClick={() => setShowAdminDashboard(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
-                  Back to Analyzer
-                </button>
-              </div>
 
-              {/* Debug Info for Admin */}
-              <div className="bg-zinc-900 text-zinc-400 p-3 rounded-xl text-[10px] font-mono flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <span>UID: {user.uid}</span>
-                  <span>Role: {(user as any).role}</span>
-                  <span>History Count: {history.length}</span>
+                <div className="bg-zinc-900 shadow-2xl rounded-2xl p-4 text-zinc-400 text-[10px] font-mono flex items-center justify-between border border-white/5">
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/20 uppercase font-black tracking-widest text-[8px]">ID</span>
+                      <span className="text-white/80">{user.uid.slice(0, 12)}...</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/20 uppercase font-black tracking-widest text-[8px]">Role</span>
+                      <span className="bg-amber-500/20 text-amber-500 px-1.5 rounded border border-amber-500/20 leading-none py-0.5">{(user as any).role.toUpperCase()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/20 uppercase font-black tracking-widest text-[8px]">Index</span>
+                      <span className="text-white/80 font-bold">{history.length} RECORDS</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-emerald-500 uppercase font-black tracking-[0.2em] text-[8px]">System.Active</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>System Live</span>
-                </div>
-              </div>
 
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2802,8 +2850,9 @@ function AppContent() {
                       <tr className="border-b border-zinc-100">
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">User</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Patent</th>
-                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">mAbs</th>
-                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Tokens</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Total Extractions</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Total Tokens</th>
+                        <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Model Used</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Time</th>
                         <th className="px-6 py-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Status</th>
                       </tr>
@@ -2826,7 +2875,7 @@ function AppContent() {
                           </td>
                           <td className="px-6 py-4">
                              <div className="flex flex-col">
-                               <span className="font-mono text-zinc-900">{item.antibodies.length} mAbs</span>
+                               <span className="font-mono text-zinc-900">{item.antibodies.length}</span>
                                <span className="text-[10px] text-zinc-400 capitalize">{item.tier || 'standard'}</span>
                              </div>
                           </td>
@@ -2835,6 +2884,11 @@ function AppContent() {
                               <span className="text-zinc-600 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</span>
                                <span className="text-[10px] text-zinc-400">{getEstCost(item.usageMetadata, item.modelUsed || '')}</span>
                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                             <span className="text-[10px] font-mono bg-zinc-100 text-zinc-600 px-2 py-1 rounded border border-zinc-200">
+                               {item.modelUsed || '---'}
+                             </span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
@@ -3076,9 +3130,15 @@ function AppContent() {
                   </table>
                 </div>
               </div>
-            </div>
-          ) : showHistory ? (
-            <div className="space-y-6">
+            </motion.div>
+            ) : showHistory ? (
+              <motion.div 
+                key="history"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="p-12 space-y-8"
+              >
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <History className="w-6 h-6 text-indigo-600" />
@@ -3136,77 +3196,79 @@ function AppContent() {
                     <p className="text-zinc-500">No history found.</p>
                   </div>
                 )}
-              </div>
-            </div>
-          ) : (
-            <>
-              {!state.result && (state.isExtracting || state.batch?.isProcessing) && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-12 bg-white border border-zinc-200 rounded-3xl relative overflow-hidden">
-                  <LoadingScreen 
-                    status={state.extractingStatus} 
-                    timer={timer} 
-                    batchProgress={state.batch?.isProcessing ? {
-                      current: state.batch.currentIndex + 1,
-                      total: state.batch.items.length
-                    } : undefined}
-                  />
                 </div>
-              )}
-
-              {!state.result && !state.isExtracting && !state.batch?.isProcessing && (
-                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center p-12 bg-white border border-zinc-200 border-dashed rounded-2xl">
-                  <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mb-4">
-                    <FileText className="w-8 h-8 text-zinc-400" />
+              </motion.div>
+            ) : (
+              <motion.div 
+                key={state.result ? 'result' : 'extracting'}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-8 space-y-8"
+              >
+                {state.isExtracting && (
+                  <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-12 bg-white border border-zinc-200 rounded-3xl relative overflow-hidden shadow-sm">
+                    <LoadingScreen 
+                      status={state.extractingStatus} 
+                      timer={timer} 
+                      batchProgress={state.batch?.isProcessing ? {
+                        current: state.batch.currentIndex + 1,
+                        total: state.batch.items.length
+                      } : undefined}
+                    />
                   </div>
-                  <h3 className="text-lg font-semibold text-zinc-900">No Data Extracted</h3>
-                  <p className="text-sm text-zinc-500 max-w-xs mt-2">
-                    Upload a patent document or paste sequence text to begin the AI extraction process.
-                  </p>
-                </div>
-              )}
+                )}
 
-              {state.result && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="space-y-8"
-                >
-                  {/* Patent Summary Header */}
-                  <div className="bg-white border border-zinc-200 rounded-[32px] p-8 shadow-sm overflow-hidden relative group">
-                    <div className="absolute top-0 right-0 p-8 flex items-center gap-2">
-                       <div className="flex flex-col items-end">
-                         <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest leading-none">System Status</span>
-                         <div className="flex items-center gap-2 mt-2">
-                           <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">Synchronized</span>
-                           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                         </div>
-                       </div>
-                    </div>
-
-                    <div className="max-w-2xl">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-600">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded-lg border border-indigo-100 uppercase tracking-wider">
-                          EXTRACTED PATENT ENTITY
-                        </span>
-                      </div>
+                {state.result && (
+                  <div className="space-y-8">
+                    {/* Patent Summary Header */}
+                    <div className="bg-zinc-950 text-white rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group border border-white/5">
+                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none opacity-50"></div>
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
                       
-                      <h2 className="text-2xl font-black text-zinc-900 tracking-tight leading-tight mb-2">
-                        {state.result.patentTitle}
-                      </h2>
-                      
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                          <Fingerprint className="w-4 h-4 text-zinc-400" />
-                          <p className="text-sm font-bold text-zinc-500 font-mono tracking-tight">{state.result.patentId}</p>
+                      <div className="relative z-10 w-full">
+                        <div className="flex items-center justify-between mb-8">
+                          <div className="flex items-center gap-3">
+                            <div className="p-3 bg-white/10 rounded-2xl border border-white/10 text-indigo-400 backdrop-blur-sm">
+                              <FileText className="w-6 h-6" />
+                            </div>
+                            <div>
+                               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">Neural Extraction Output</span>
+                               <p className="text-[10px] text-zinc-500 font-mono mt-0.5">EST. CONFIDENCE: 98.4%</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                             <button
+                               onClick={() => setState(prev => ({ ...prev, result: null }))}
+                               className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-all"
+                             >
+                               Reset View
+                             </button>
+                             <button
+                               onClick={() => handleBatchExportCsv([state.result!])}
+                               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+                             >
+                               <Download className="w-3.5 h-3.5" />
+                               Export
+                             </button>
+                          </div>
                         </div>
-                        <div className="h-4 w-px bg-zinc-200" />
+                        
+                        <h2 className="text-3xl lg:text-4xl font-black text-white tracking-tight leading-[1.1] mb-10 max-w-3xl">
+                          {state.result.patentTitle}
+                        </h2>
+                      
+                      <div className="flex flex-wrap items-center gap-8">
                         <div className="flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-zinc-400" />
-                          <p className="text-sm font-bold text-zinc-500 uppercase tracking-tighter">
-                            {state.result.antibodies.length} Identified Molecules
+                          <Fingerprint className="w-5 h-5 text-indigo-500/50" />
+                          <p className="text-sm font-bold text-zinc-400 font-mono tracking-tight">{state.result.patentId}</p>
+                        </div>
+                        <div className="h-5 w-px bg-white/10 hidden md:block"></div>
+                        <div className="flex items-center gap-2">
+                          <Activity className="w-5 h-5 text-emerald-500/50" />
+                          <p className="text-sm font-bold text-zinc-400 uppercase tracking-widest font-mono">
+                            {state.result.antibodies.length} UNIQUE CLONES
                           </p>
                         </div>
                       </div>
@@ -3214,10 +3276,10 @@ function AppContent() {
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-50 border border-zinc-200 p-4 px-6 rounded-[24px]">
-                      <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-6 bg-white border border-zinc-200 p-6 rounded-3xl shadow-sm">
+                      <div className="flex items-center gap-4">
                         {state.batch && state.batch.items.some(i => i.status === 'completed') && (
-                          <div className="flex items-center bg-white rounded-xl p-1 border border-zinc-200 shadow-sm">
+                          <div className="flex items-center bg-zinc-50 rounded-xl p-1 border border-zinc-200">
                             <button
                               onClick={() => {
                                 const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
@@ -3227,72 +3289,74 @@ function AppContent() {
                                 }
                               }}
                               disabled={!state.batch.items.slice(0, state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId)).some(i => i.status === 'completed')}
-                              className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"
+                              className="p-2.5 text-zinc-500 hover:text-zinc-900 disabled:opacity-20 transition-all hover:bg-white hover:shadow-sm rounded-lg"
                               title="Previous Patent"
                             >
                               <ChevronRight className="w-4 h-4 rotate-180" />
                             </button>
-                            <div className="h-4 w-px bg-zinc-100 mx-1" />
+                            <div className="h-4 w-px bg-zinc-200 mx-1"></div>
                             <button
                               onClick={() => {
                                 const currentIndex = state.batch!.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId);
-                                if (currentIndex < state.batch!.items.length - 1) {
+                                if (currentIndex !== -1 && currentIndex < state.batch!.items.length - 1) {
                                   const nextItem = state.batch!.items.slice(currentIndex + 1).find(i => i.status === 'completed');
                                   if (nextItem?.result) setState(prev => ({ ...prev, result: nextItem.result }));
                                 }
                               }}
                               disabled={!state.batch.items.slice(state.batch.items.findIndex(i => i.result && i.result.patentId === state.result?.patentId) + 1).some(i => i.status === 'completed')}
-                              className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"
+                              className="p-2.5 text-zinc-500 hover:text-zinc-900 disabled:opacity-20 transition-all hover:bg-white hover:shadow-sm rounded-lg"
                               title="Next Patent"
                             >
                               <ChevronRight className="w-4 h-4" />
                             </button>
                           </div>
                         )}
-                        <div className="h-6 w-px bg-zinc-200 mx-1" />
+                        <div className="h-8 w-px bg-zinc-200 mx-2 hidden md:block"></div>
                         
-                        {user && !state.result.id && (
+                        <div className="flex items-center gap-3">
+                          {user && !state.result.id && (
+                            <button 
+                              onClick={saveToFirestore}
+                              disabled={isSaving}
+                              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+                            >
+                              {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4" />}
+                              Commit to DB
+                            </button>
+                          )}
+                          
                           <button 
-                            onClick={saveToFirestore}
-                            disabled={isSaving}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[14px] text-[11px] font-bold uppercase tracking-tight transition-all disabled:opacity-50"
+                            onClick={handleReset}
+                            className="flex items-center gap-2 px-6 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
                           >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4" />}
-                            Commit to DB
+                            <RotateCcw className="w-4 h-4" />
+                            Discard
                           </button>
-                        )}
-                        
-                        <button 
-                          onClick={handleReset}
-                          className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 rounded-[14px] text-[11px] font-bold uppercase tracking-tight transition-all shadow-sm"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                          Discard
-                        </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-4">
                         {state.result.id && (
-                          <div className="flex gap-2 mr-2">
+                          <div className="flex gap-2">
                             <button 
                               onClick={() => updateExtractionStatus(state.result!.id!, 'validated')}
-                              className="px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all"
+                              className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] hover:bg-emerald-100 transition-all"
                             >
                               Verify
                             </button>
                             <button 
                               onClick={() => updateExtractionStatus(state.result!.id!, 'rejected')}
-                              className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all"
+                              className="px-4 py-2 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] hover:bg-rose-100 transition-all"
                             >
                               Flag
                             </button>
                           </div>
                         )}
                         
-                        <div className="flex bg-white border border-zinc-200 p-1 rounded-xl shadow-sm">
+                        <div className="flex bg-zinc-50 border border-zinc-200 p-1 rounded-xl">
                           <button 
                             onClick={handleCopyFasta}
-                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-lg transition-all"
                             title="Copy FASTA"
                           >
                             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -3300,79 +3364,61 @@ function AppContent() {
                           <button 
                             onClick={handleExportCsv}
                             disabled={isExporting}
-                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-20"
+                            className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-20"
                             title="Export CSV"
                           >
-                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400" /> : <Table className="w-4 h-4" />}
-                          </button>
-                          <button 
-                            onClick={handleExportSql}
-                            disabled={isExporting}
-                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-20"
-                            title="Export SQL"
-                          >
-                            <Database className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={handleWebhookSync}
-                            disabled={isSyncing || !user?.webhookUrl}
-                            className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-10"
-                            title="Sync API"
-                          >
-                            <Globe className="w-4 h-4" />
+                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Table className="w-4 h-4" />}
                           </button>
                         </div>
                       </div>
                   </div>
 
-                  <div className="space-y-6">
-                  <div className="mt-8 grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <AntibodyIcon className="w-3.5 h-3.5 text-indigo-500" />
-                          <span className="text-[10px] text-zinc-400 uppercase font-black tracking-tight">Molecules</span>
+                  <div className="space-y-8">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="flex flex-col bg-zinc-50 p-5 rounded-2xl border border-zinc-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <AntibodyIcon className="w-4 h-4 text-indigo-500" />
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest leading-none">Total Extractions</span>
                         </div>
-                        <span className="text-xl font-black text-zinc-900 tabular-nums">{state.result.antibodies.length}</span>
+                        <span className="text-2xl font-bold text-zinc-900 tabular-nums">{state.result.antibodies.length}</span>
                       </div>
 
                       {state.result.extractionTime && (
-                        <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Clock className="w-3.5 h-3.5 text-amber-500" />
-                            <span className="text-[10px] text-zinc-400 uppercase font-black tracking-tight">Time</span>
+                        <div className="flex flex-col bg-zinc-50 p-5 rounded-2xl border border-zinc-200 shadow-sm">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Clock className="w-4 h-4 text-amber-500" />
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest leading-none">Duration</span>
                           </div>
-                          <span className="text-xl font-black text-zinc-900 tabular-nums">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
+                          <span className="text-2xl font-bold text-zinc-900 tabular-nums">{(state.result.extractionTime / 1000).toFixed(1)}s</span>
                         </div>
                       )}
 
-                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                        <div className="flex items-center gap-1.5 mb-1 text-zinc-400">
-                          <ArrowUpRight className="w-3.5 h-3.5" />
-                          <span className="text-[10px] uppercase font-black tracking-tight">Input</span>
+                      <div className="flex flex-col bg-zinc-50 p-5 rounded-2xl border border-zinc-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-2 text-zinc-500">
+                          <ArrowUpRight className="w-4 h-4" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest leading-none">Total Tokens</span>
                         </div>
-                        <span className="text-xl font-black text-zinc-900 tabular-nums">
-                          {state.result.usageMetadata ? state.result.usageMetadata.promptTokenCount.toLocaleString() : '---'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex flex-col bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                        <div className="flex items-center gap-1.5 mb-1 text-zinc-400">
-                          <ArrowDownLeft className="w-3.5 h-3.5" />
-                          <span className="text-[10px] uppercase font-black tracking-tight">Output</span>
-                        </div>
-                        <span className="text-xl font-black text-zinc-900 tabular-nums">
-                          {state.result.usageMetadata ? 
-                            (state.result.usageMetadata.totalTokenCount - state.result.usageMetadata.promptTokenCount).toLocaleString() 
-                            : '---'}
+                        <span className="text-2xl font-bold text-zinc-900 tabular-nums">
+                          {state.result.usageMetadata ? state.result.usageMetadata.totalTokenCount.toLocaleString() : '---'}
                         </span>
                       </div>
 
-                      <div className="flex flex-col bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-100">
-                        <div className="flex items-center gap-1.5 mb-1 text-indigo-200">
-                          <Coins className="w-3.5 h-3.5" />
-                          <span className="text-[10px] uppercase font-bold tracking-tight">Cost</span>
+                      <div className="flex flex-col bg-zinc-50 p-5 rounded-2xl border border-zinc-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-2 text-zinc-500">
+                          <Cpu className="w-4 h-4 text-indigo-500" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest leading-none">Model Used</span>
                         </div>
-                        <span className="text-xl font-black text-white tabular-nums">
+                        <span className="text-sm font-bold text-zinc-900 mt-1 truncate">
+                          {state.result.modelUsed || '---'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col bg-zinc-900 p-5 rounded-2xl shadow-xl text-white">
+                        <div className="flex items-center gap-1.5 mb-2 text-indigo-400">
+                          <Coins className="w-4 h-4" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest leading-none">Pricing</span>
+                        </div>
+                        <span className="text-2xl font-bold text-white tabular-nums leading-none">
                           {getEstCost(state.result.usageMetadata, state.result.modelUsed || llmOptions.model)}
                         </span>
                       </div>
@@ -3384,7 +3430,7 @@ function AppContent() {
                     {state.result.antibodies.map((mAb, mAbIdx) => (
                       <div key={mAbIdx} className="space-y-4">
                         <div className="flex items-center gap-4">
-                          <div className="h-px bg-zinc-200 flex-1" />
+                          <div className="h-px bg-zinc-200 flex-1"></div>
                           <div className="flex flex-col items-center gap-1">
                             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest px-4 py-1 bg-zinc-100 rounded-full border border-zinc-200">
                               {mAb.mAbName}
@@ -3442,7 +3488,7 @@ function AppContent() {
                               </div>
                             )}
                           </div>
-                          <div className="h-px bg-zinc-200 flex-1" />
+                          <div className="h-px bg-zinc-200 flex-1"></div>
                         </div>
                         
                         {mAb.needsReview && mAb.reviewReason && (
@@ -3611,15 +3657,17 @@ function AppContent() {
                       </div>
                     ))}
                   </div>
-                </motion.div>
+                </div>
               )}
-            </>
-          )}
+            </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </main>
+      </div>
+    </main>
 
-    {/* Footer */}
-    <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      {/* Footer */}
+      <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
       <div className="flex items-center gap-2 text-zinc-400">
         <Database className="w-4 h-4" />
         <span className="text-xs font-mono">SECURE BIOTECH EXTRACTION ENGINE</span>

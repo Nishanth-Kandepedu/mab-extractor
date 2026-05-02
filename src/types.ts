@@ -130,6 +130,10 @@ export interface ExtractionResult {
   accountId?: string;
   patentId: string;
   patentTitle: string;
+  applicationNumber?: string;
+  priorityDate?: string;
+  publicationDate?: string;
+  patentAssignee?: string;
   antibodies: Antibody[];
   createdAt?: string;
   status?: 'pending' | 'validated' | 'rejected';
