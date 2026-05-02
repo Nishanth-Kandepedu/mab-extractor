@@ -316,10 +316,6 @@ export async function extractWithLLM(
       properties: {
         patentId: { type: "STRING" },
         patentTitle: { type: "STRING" },
-        applicationNumber: { type: "STRING" },
-        priorityDate: { type: "STRING" },
-        publicationDate: { type: "STRING" },
-        patentAssignee: { type: "STRING" },
         antibodies: {
           type: "ARRAY",
           items: {
@@ -399,16 +395,12 @@ export async function extractWithLLM(
       console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
     }
 
-    const { patentId, patentTitle, applicationNumber, priorityDate, publicationDate, patentAssignee, antibodies, usageMetadata } = await executeLLMJob(payload);
+    const { patentId, patentTitle, antibodies, usageMetadata } = await executeLLMJob(payload);
   
   // Post-processing and Validation
   const result: ExtractionResult = {
     patentId: patentId || "Unknown",
     patentTitle: patentTitle || "Untitled Patent",
-    applicationNumber,
-    priorityDate,
-    publicationDate,
-    patentAssignee,
     antibodies: antibodies || [],
     usageMetadata
   };

@@ -6,12 +6,6 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-@layer base {
-  body {
-    @apply bg-[#F8F9FA] text-zinc-900 antialiased;
-  }
-}
-
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
