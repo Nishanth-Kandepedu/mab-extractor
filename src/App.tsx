@@ -880,30 +880,32 @@ function AppContent() {
             }
           });
 
-          // 2. For the overall mAb, pick the non-CD3 target as primary if it's a bispecific,
-          // or just the most frequent one otherwise.
-          const targetCounts: Record<string, number> = {};
-          mAb.chains.forEach(c => {
-            if (c.target) {
-              const t = c.target.toLowerCase().trim();
-              targetCounts[t] = (targetCounts[t] || 0) + 1;
+          // 2. Identify the "Primary" target for enrichment metadata
+          // If the model provided a top-level target, use that first
+          let topTargetStr = mAb.target?.toLowerCase().trim();
+          
+          if (!topTargetStr) {
+            const targetCounts: Record<string, number> = {};
+            mAb.chains.forEach(c => {
+              if (c.target) {
+                const t = c.target.toLowerCase().trim();
+                targetCounts[t] = (targetCounts[t] || 0) + 1;
+              }
+            });
+
+            const uniqueTargetsForMab = Object.keys(targetCounts);
+            if (uniqueTargetsForMab.length > 1) {
+              // Bispecific logic: Prefer the "payload" or "antigen" target over the CD3 recruiter
+              topTargetStr = uniqueTargetsForMab.find(t => !t.includes('cd3'));
+              if (!topTargetStr) topTargetStr = uniqueTargetsForMab[0];
+            } else {
+              topTargetStr = uniqueTargetsForMab[0];
             }
-          });
-
-          const uniqueTargetsForMab = Object.keys(targetCounts);
-          let topTarget: string | undefined;
-
-          if (uniqueTargetsForMab.length > 1) {
-            // Bispecific logic: Prefer the "payload" or "antigen" target over the CD3 recruiter
-            topTarget = uniqueTargetsForMab.find(t => !t.includes('cd3'));
-            if (!topTarget) topTarget = uniqueTargetsForMab[0];
-          } else {
-            topTarget = uniqueTargetsForMab[0];
           }
           
-          if (topTarget && targetMap.has(topTarget)) {
-            mAb.targetMetadata = targetMap.get(topTarget);
-            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Primary: ${topTarget})`);
+          if (topTargetStr && targetMap.has(topTargetStr)) {
+            mAb.targetMetadata = targetMap.get(topTargetStr);
+            console.log(`[Enrichment] Applied metadata for ${mAb.mAbName} (Primary: ${topTargetStr})`);
           }
         }
       } else {
@@ -1184,13 +1186,14 @@ function AppContent() {
           const vhChain = mAb.chains.find(c => c.type === 'Heavy');
           const vlChain = mAb.chains.find(c => c.type === 'Light');
           
-          const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
+          const targetMeta = mAb.targetMetadata || vhChain?.targetMetadata || vlChain?.targetMetadata;
+          const moleculeTarget = mAb.target || vhChain?.target || vlChain?.target || '';
 
           const row: any = {
             'Molecule name': mAb.mAbName,
             'Patent ID': result.patentId,
             'Patent Title': result.patentTitle,
-            'Molecule Target': vhChain?.target || vlChain?.target || '',
+            'Molecule Target': moleculeTarget,
             'Molecule Target Standard Name': targetMeta?.standardName || '',
             'Molecule Target UniProt Id': targetMeta?.uniprotId || '',
             'Molecule Target Gene Symbols': targetMeta?.geneSymbols.join(', ') || '',
@@ -1367,13 +1370,14 @@ function AppContent() {
         const vlChain = mAb.chains.find(c => c.type === 'Light');
         
         // Pick metadata from the heavy chain's target if available, or the light chain, or the mAb overall
-        const targetMeta = vhChain?.targetMetadata || vlChain?.targetMetadata || mAb.targetMetadata;
+        const targetMeta = mAb.targetMetadata || vhChain?.targetMetadata || vlChain?.targetMetadata;
+        const moleculeTarget = mAb.target || vhChain?.target || vlChain?.target || '';
 
         const row: any = {
           'Molecule name': mAb.mAbName,
           'Patent ID': state.result?.patentId,
           'Patent Title': state.result?.patentTitle,
-          'Molecule Target': vhChain?.target || vlChain?.target || '',
+          'Molecule Target': moleculeTarget,
           'Molecule Target Standard Name': targetMeta?.standardName || '',
           'Molecule Target UniProt Id': targetMeta?.uniprotId || '',
           'Molecule Target Gene Symbols': targetMeta?.geneSymbols.join(', ') || '',

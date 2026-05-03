@@ -73,10 +73,10 @@ IMPORTANT EXTRACTION RULES:
     - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
 17. TABLE SCANNING HIERARCHY:
-    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies (e.g., mAb12999P2, mAb14226). These MUST be extracted as separate entries.
-    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies (e.g., bsAb7075, REGN7075).
+    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies. These MUST be extracted as separate entries.
+    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies.
     - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing for verbatim accuracy.
-    - STEP 4: If a clone name like "mAb12999P2" appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in Table 1 and Table 3 is a mandatory mining target.
+    - STEP 4: If a clone name appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in the primary summary tables is a mandatory mining target.
 
 18. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
@@ -322,6 +322,7 @@ export async function extractWithLLM(
             type: "OBJECT",
             properties: {
               mAbName: { type: "STRING" },
+              target: { type: "STRING" },
               chains: {
                 type: "ARRAY",
                 items: {
@@ -482,10 +483,20 @@ export async function extractWithLLM(
             // We look for VTVSS/VEIK which should be between 100-130 usually
             if (match.index > 90 && (bestIndex === -1 || match.index < bestIndex)) {
               // Extract the base motif length (e.g., VTVSS is 5)
-              // match[0] might include trailing stuff because of the regex, 
-              // but we only want to truncate AFTER the conserved part.
-              // VTVSS is index 0-4, so we truncate at index 5.
               const baseMotifLength = motif.source.split('[')[0].length;
+              
+              // HEURISTIC: Before truncating, check if what follows looks like a linker 
+              // or another variable domain (indicative of a bispecific polypeptide)
+              const tail = seq.substring(match.index + baseMotifLength);
+              const looksLikeBispecific = 
+                 /^(GGGGS|GGSGG|GSGGG)/i.test(tail) || // Linker signatures
+                 /^(QVQ|DIQ|QSV|DVQ|EIV|SYA|RNV)/i.test(tail.substring(0, 20)); // V-domain signatures
+              
+              if (looksLikeBispecific && !isCH1 && !isCL) {
+                 // Skip truncation for potentially multispecific single polypeptide
+                 continue; 
+              }
+
               bestIndex = match.index + baseMotifLength;
               matchedMotif = match[0].substring(0, baseMotifLength);
             }
@@ -581,35 +592,28 @@ export async function extractWithLLM(
 
       // Systematic Fixes - Flag for review instead of forcing changes
       if (chain.type === 'Light') {
-        // Position 12 (0-indexed: 11) L -> V potential error
-        if (seq.length > 11 && seq[11] === 'L') {
-          needsReview = true;
-          reviewReason += " [Potential L->V error at pos 12]";
-        }
-        
         // VL Length Validation
         if (seq.length < 100 || seq.length > 130) {
-          needsReview = true;
-          reviewReason += ` [VL length anomaly: ${seq.length}]`;
-          if (seq.length > 150) {
-            reviewReason += " [Likely constant region included]";
+          // Allow longer sequences if they look bispecific (handled in truncation logic, but here we check for flagging)
+          if (!mAb.target?.toLowerCase().includes('and') && !mAb.target?.toLowerCase().includes('bispecific') && seq.length > 140) {
+            needsReview = true;
+            reviewReason += ` [VL length anomaly: ${seq.length}]`;
+            if (seq.length > 150) {
+              reviewReason += " [Likely constant region included]";
+            }
           }
         }
       }
 
       if (chain.type === 'Heavy') {
-        // Position 75 (0-indexed: 74) T -> I potential error
-        if (seq.length > 74 && seq[74] === 'I') {
-          needsReview = true;
-          reviewReason += " [Potential T->I error at pos 75]";
-        }
-
         // VH Length Validation
         if (seq.length < 105 || seq.length > 140) {
-          needsReview = true;
-          reviewReason += ` [VH length anomaly: ${seq.length}]`;
-          if (seq.length > 160) {
-            reviewReason += " [Likely constant region included]";
+          if (!mAb.target?.toLowerCase().includes('and') && !mAb.target?.toLowerCase().includes('bispecific') && seq.length > 200) {
+            needsReview = true;
+            reviewReason += ` [VH length anomaly: ${seq.length}]`;
+            if (seq.length > 250) {
+              reviewReason += " [Likely constant region included]";
+            }
           }
         }
       }
@@ -617,22 +621,11 @@ export async function extractWithLLM(
       return { ...chain, fullSequence: seq };
     });
 
-    // Problematic Variant Check
-    if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
-      needsReview = true;
-      reviewReason += ` [Known problematic VH variant: ${mAb.mAbName}. VH chain often split or misread in tables.]`;
-    }
-
-    if (mAb.mAbName === "2218") {
-      needsReview = true;
-      reviewReason += " [Known problematic VL variant: 2218. VL chain often incomplete or missing in tables.]";
-    }
-
     // Confidence-based flagging
-    if (mAb.confidence < 70) {
-      needsReview = true;
-      reviewReason += ` [Low confidence: ${mAb.confidence}]`;
-    }
+      if (mAb.confidence < 70) {
+        needsReview = true;
+        reviewReason += ` [Low confidence: ${mAb.confidence}]`;
+      }
 
     return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
   });
