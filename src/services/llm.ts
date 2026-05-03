@@ -122,7 +122,7 @@ export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
   isSarMode?: boolean;
-  isDeepScanMode?: boolean;
+  isMethodicalMode?: boolean; // New option for "learn slow" / thorough extraction
 }
 
 /**
@@ -249,10 +249,6 @@ export async function extractWithLLM(
   try {
     const { provider, model } = options;
 
-    if (options.isDeepScanMode && typeof input !== 'string' && input.mimeType === 'application/pdf') {
-      return await performDeepScanExtraction(input, options, sequenceListing, prioritySeqIds);
-    }
-
   const contextPrompt = pageContext ? ` Focus specifically on the information found on or near: ${pageContext}.` : "";
   const priorityPrompt = prioritySeqIds ? `\n\nCRITICAL TARGETS: The user has flagged the following identifiers (SEQ ID NOs or Clone Names) as missing or priority: ${prioritySeqIds}. You MUST find and extract these specific sequences verbatim from the document or sequence listing, ensuring every mentioned ID/Clone is represented in the output.` : "";
   
@@ -309,7 +305,11 @@ export async function extractWithLLM(
 
     const isGemma4 = model === 'gemma-4';
     const useSarExtra = isGemma4 && options.isSarMode;
-    const activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
+    let activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
+
+    if (options.isMethodicalMode) {
+      activeInstruction += "\n\nMETHODICAL EXTRACTION MODE: You must proceed through the document page-by-page. Do not skip any antibodies. If you encounter a large table, you MUST extract every row. Take as much time as needed. Verbatim accuracy is more important than speed. If there are hundreds of clones, ensure all are included.";
+    }
 
     const responseSchema: any = {
       type: "OBJECT",
@@ -636,214 +636,17 @@ export async function extractWithLLM(
 
     return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
   });
-
   result.modelUsed = model || 'gemini-3.1-pro-preview';
   result.isSarMode = options.isSarMode;
   return result;
   } catch (e: any) {
     console.error("[Extraction] Fetch error details:", e);
     const msg = e.message?.toLowerCase() || "";
-    if (msg.includes('fetch') || msg.includes('network') || msg.includes('aborted')) {
-      throw new Error("Network Error: The extraction request was blocked or timed out. This is common on custom domains (like .bio) due to proxy limits. Try using a smaller text selection or use the default Railway URL (abminer.up.railway.app) if this persists.");
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('aborted') || msg.includes('proxy mirror timeout')) {
+      throw new Error("Proxy Timeout: The extraction link was interrupted. This usually happens when patents have 'too many clones' or the output is extremely large. We've increased the session timeout. Try enabling 'Methodical Mode' or using a smaller page range if this persists.");
     }
     throw e;
   }
-}
-
-/**
- * Orchestrates a multi-step extraction by first surveying relevant pages and then performing targeted analysis.
- */
-async function performDeepScanExtraction(
-  input: { data: string; mimeType: string },
-  options: LLMOptions,
-  sequenceListing?: { data: string; mimeType: string },
-  prioritySeqIds?: string
-): Promise<ExtractionResult> {
-  console.log("[Deep Scan] Initiating specialized discovery pass...");
-  
-  const totalPages = await getPdfPageCount(input.data);
-  if (totalPages <= 0) {
-    throw new Error("Could not determine page count for Deep Scan.");
-  }
-
-  // 1. Discovery Pass - Find where the "meat" is
-  let discoveryPages: number[] = [];
-  try {
-    discoveryPages = await performDiscoveryPass(input, options, totalPages);
-    console.log(`[Deep Scan] Discovery pass identified ${discoveryPages.length} potentially relevant pages.`);
-  } catch (err) {
-    console.warn("[Deep Scan] Discovery pass failed, falling back to incremental scan.", err);
-    // Fallback: process every 15 pages to be safe but efficient
-    for (let i = 1; i <= totalPages; i += 15) discoveryPages.push(i);
-  }
-
-  // 2. Add Default High-Probabilty Pages (Title, metadata, and early tables)
-  const mandatoryPages = new Set<number>();
-  // First 10 pages usually contain critical title, ID, and early summary tables
-  for (let i = 1; i <= Math.min(10, totalPages); i++) mandatoryPages.add(i);
-  
-  // Last 10 pages (was 5) often contain claims or end of sequence listing
-  for (let i = Math.max(1, totalPages - 10); i <= totalPages; i++) mandatoryPages.add(i);
-
-  if (discoveryPages.length === 0) {
-    console.warn("[Deep Scan] Discovery pass found nothing. Including broad fallback scan.");
-    // Last 15 pages often contain the sequence listing if it's integrated
-    for (let i = Math.max(1, totalPages - 25); i <= totalPages; i++) mandatoryPages.add(i);
-  }
-  
-  // Add a 2-page buffer around every discovered page for context (was 1)
-  discoveryPages.forEach(p => {
-      mandatoryPages.add(Math.max(1, p - 2));
-      mandatoryPages.add(Math.max(1, p - 1));
-      mandatoryPages.add(p);
-      mandatoryPages.add(Math.min(totalPages, p + 1));
-      mandatoryPages.add(Math.min(totalPages, p + 2));
-  });
-
-  // SAFETY FALLBACK: If discovery pass returned very little for a large document, 
-  // we add a distributed scan to ensure we don't miss entire sections.
-  if (totalPages > 30 && mandatoryPages.size < 12) {
-    console.warn("[Deep Scan] Discovery pass found exceptionally few targets. Adding distributed samples for coverage safety.");
-    for (let i = 1; i <= totalPages; i += 15) {
-        mandatoryPages.add(i);
-        mandatoryPages.add(Math.min(totalPages, i + 1));
-    }
-  }
-  
-  // Sort and remove duplicates
-  const sortedPages = Array.from(mandatoryPages).sort((a, b) => a - b).filter(p => p > 0 && p <= totalPages);
-  
-  // 3. Cluster adjacent pages into chunks (to preserve context across page breaks)
-  const pageClusters: string[] = [];
-  if (sortedPages.length > 0) {
-    let currentStart = sortedPages[0];
-    let currentPrev = sortedPages[0];
-    
-    for (let i = 1; i <= sortedPages.length; i++) {
-        const p = sortedPages[i];
-        // If gap is more than 2 pages (was 3), or cluster exceeds 5 pages (was 25), break it
-        // Smaller clusters (max 5 pages) preserve high focus and avoid token pressure/summarization
-        if (p === undefined || (p - currentPrev > 2) || (p - currentStart >= 5)) {
-            pageClusters.push(`${currentStart}-${currentPrev}`);
-            if (p !== undefined) {
-                currentStart = p;
-                currentPrev = p;
-            }
-        } else {
-            currentPrev = p;
-        }
-    }
-  }
-
-  console.log(`[Deep Scan] Target clusters: ${pageClusters.join(", ")}`);
-
-  const allAntibodies: Antibody[] = [];
-  let patentId = "Unknown";
-  let patentTitle = "Untitled Patent";
-  let totalPromptTokens = 0;
-  let totalCandidatesTokens = 0;
-
-  // 4. Chunked Extraction Pass
-  // Divide the identified pages into smaller batches to preserve high focus and verbatim accuracy.
-  for (let i = 0; i < pageClusters.length; i++) {
-    const range = pageClusters[i];
-    console.log(`[Deep Scan] Extraction Pass ${i+1}/${pageClusters.length}: Pages ${range}`);
-    
-    try {
-      if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit buffer
-      
-      const chunkResult = await extractWithLLM(
-        input, 
-        { ...options, isDeepScanMode: false }, // Use standard mode for detailed extraction
-        range,
-        sequenceListing,
-        prioritySeqIds
-      );
-
-      if (chunkResult.patentId !== "Unknown") patentId = chunkResult.patentId;
-      if (chunkResult.patentTitle !== "Untitled Patent" && chunkResult.patentTitle !== "Untitled") {
-        patentTitle = chunkResult.patentTitle;
-      }
-      
-      if (chunkResult.usageMetadata) {
-        totalPromptTokens += chunkResult.usageMetadata.promptTokenCount;
-        totalCandidatesTokens += chunkResult.usageMetadata.candidatesTokenCount;
-      }
-
-      allAntibodies.push(...chunkResult.antibodies);
-      console.log(`[Deep Scan] Pass ${i+1} found ${chunkResult.antibodies.length} clones.`);
-    } catch (err) {
-      console.error(`[Deep Scan] Error in extraction pass ${i+1} (${range}):`, err);
-    }
-  }
-
-  if (allAntibodies.length === 0) {
-    throw new Error("Deep Scan completed but no clones were extracted. Ensure the PDF contains text or high-quality OCR.");
-  }
-
-  // 5. Synthesis & Deduplication
-  const consolidatedAntibodies = await synthesizeAntibodies(allAntibodies, options);
-
-  return {
-    patentId,
-    patentTitle,
-    antibodies: consolidatedAntibodies,
-    modelUsed: options.model,
-    isSarMode: options.isSarMode,
-    usageMetadata: {
-      promptTokenCount: totalPromptTokens,
-      candidatesTokenCount: totalCandidatesTokens,
-      totalTokenCount: totalPromptTokens + totalCandidatesTokens
-    }
-  };
-}
-
-/**
- * Performs a broad 'scout' pass of the document to find page numbers containing mAb definitions.
- */
-async function performDiscoveryPass(
-    input: { data: string; mimeType: string },
-    options: LLMOptions,
-    totalPages: number
-): Promise<number[]> {
-    const scoutPrompt = `
-You are a patent indexing specialist. Your mission is to find ALL page numbers where antibody sequences and clone definitions are located.
-
-CRITICAL TARGETS:
-1. TABLES of antibody clones (e.g., "Table 1", "Table 3", "Table 6", "Table 8", "Table 10", "Table 12").
-2. SEQUENCE LISTING definitions (where SEQ ID NO: X is followed by a peptide/DNA sequence).
-3. mAb identifier lists (e.g., columns labeled "Antibody ID", "Clone Name", "mAb ID", "Antibody Molecule", "Ig ID").
-4. CDR definitions (tables mapping SEQ IDs to CDR1, CDR2, CDR3).
-5. EXAMPLE sections that list specific clones (e.g., "Example 1", "Example 12").
-6. CLAIMS that reference specific SEQ ID NOs or Clone Names.
-7. ANY page containing large blocks of single-letter or three-letter amino acids.
-8. EXPERIMENTAL RESULTS tables where clone names reappear.
-
-OUTPUT: Return a JSON object with a unique list of relevant page numbers. You MUST identify EVERY page that looks like it has a table or a sequence listing. Do not be conservative. 
-Total pages in doc: ${totalPages}.
-`;
-
-    const payload = JSON.stringify({
-        provider: options.provider,
-        model: options.model,
-        input: [
-            { inlineData: { data: input.data, mimeType: input.mimeType } },
-            { text: scoutPrompt }
-        ],
-        responseSchema: {
-            type: "OBJECT",
-            properties: {
-                relevantPages: {
-                    type: "ARRAY",
-                    items: { type: "INTEGER" }
-                }
-            },
-            required: ["relevantPages"]
-        }
-    });
-
-    const result = await executeLLMJob(payload);
-    return Array.isArray(result.relevantPages) ? result.relevantPages : [];
 }
 
 /**
@@ -887,7 +690,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    const maxAttempts = 240; // Increased to 20 mins to allow for server-side queuing
+    // Increased to 60 mins (720 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
+    const maxAttempts = 720; 
 
     while (attempts < maxAttempts) {
         try {
@@ -920,138 +724,6 @@ async function executeLLMJob(payload: string): Promise<any> {
         attempts++;
     }
     throw new Error("Job timed out while waiting for AI engine. This can happen during high traffic or for very large documents.");
-}
-
-/**
- * Uses the LLM to synthesize and deduplicate antibodies found across multiple chunks.
- */
-async function synthesizeAntibodies(antibodies: Antibody[], options: LLMOptions): Promise<Antibody[]> {
-  // If we have very few antibodies, we can potentially skip LLM synthesis and just do basic merging
-  if (antibodies.length < 3) return antibodies;
-
-  // For very long lists, we might need to chunk the synthesis too, but let's start with a single pass
-  const summaryPayload = antibodies.map(a => ({
-    name: a.mAbName,
-    summary: a.summary,
-    chains: a.chains.map(c => ({ 
-      type: c.type, 
-      seqId: c.seqId, 
-      target: c.target,
-      len: c.fullSequence.length,
-      // We don't send full sequences to synthesis as it's too much data, 
-      // but we send enough to identify if they are duplicates
-      head: c.fullSequence.substring(0, 10),
-      tail: c.fullSequence.slice(-10)
-    }))
-  }));
-
-  const synthPrompt = `
-You are a master antibody data synthesizer. Your task is to merge and deduplicate a list of antibody components extracted from different parts of a large patent.
-
-INPUT DATA: A list of monoclonal antibodies (mAbs) and their chains. Some entries might be duplicates (same name, same sequences), and some might be partials (e.g., mAb 1 with only a Heavy chain in one entry and mAb 1 with only a Light chain in another).
-
-RULES:
-1. Deduplicate by mAbName and Sequence identity.
-2. If two entries have the same mAbName, MERGE their chains.
-3. If a name is "mAb 1" and another is "mAb 1 (REGN7075)", they are likely the same. Use the most descriptive name.
-4. Ensure every monoclonal antibody represents a unique clone.
-5. If sequences are slightly different (OCR errors), use the one with higher precision (e.g. from sequence listing).
-
-OUTPUT: Return a JSON array of the original indices that should be merged or kept. 
-Actually, to keep it simple and avoid another LLM call with a complex schema, let's perform a programmatic merge first.
-`;
-
-  // Programmatic merge based on name and sequence characteristics
-  const merged = new Map<string, Antibody>();
-  
-  for (const mAb of antibodies) {
-    // Normalize name for keying
-    const nameKey = mAb.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
-    
-    // We try to find an existing entry with the same name first
-    // If name matches, we check if the sequences are compatible
-    let existingKey: string | null = null;
-    
-    for (const [key, existing] of merged.entries()) {
-        const existingNameKey = existing.mAbName.toLowerCase().replace(/[\s\-_]/g, '');
-        // Exact name match or one is a subset of another (e.g. "2A6" and "mAb 2A6")
-        if (existingNameKey === nameKey || 
-            (nameKey.length > 2 && existingNameKey.includes(nameKey)) ||
-            (existingNameKey.length > 2 && nameKey.includes(existingNameKey))) {
-            
-            // Check sequence compatibility
-            const newVh = mAb.chains.find(c => c.type === 'Heavy');
-            const newVl = mAb.chains.find(c => c.type === 'Light');
-            const extVh = existing.chains.find(c => c.type === 'Heavy');
-            const extVl = existing.chains.find(c => c.type === 'Light');
-            
-            let compatible = true;
-            // If both have Heavy chains, they must be similar
-            if (newVh && extVh) {
-                const s1 = newVh.fullSequence.substring(0, 30);
-                const s2 = extVh.fullSequence.substring(0, 30);
-                if (s1 !== s2 && !s1.includes(s2) && !s2.includes(s1)) compatible = false;
-            }
-            // If both have Light chains, they must be similar
-            if (newVl && extVl && compatible) {
-                const s1 = newVl.fullSequence.substring(0, 30);
-                const s2 = extVl.fullSequence.substring(0, 30);
-                if (s1 !== s2 && !s1.includes(s2) && !s2.includes(s1)) compatible = false;
-            }
-            
-            if (compatible) {
-                existingKey = key;
-                break;
-            }
-        }
-    }
-    
-    if (existingKey) {
-      const existing = merged.get(existingKey)!;
-      // Merge chains
-      for (const newChain of mAb.chains) {
-        const existingChain = existing.chains.find(c => c.type === newChain.type);
-        if (existingChain) {
-            // Keep the longer/better sequence
-            if (newChain.fullSequence.length > existingChain.fullSequence.length) {
-                const index = existing.chains.indexOf(existingChain);
-                existing.chains[index] = newChain;
-            }
-        } else {
-            existing.chains.push(newChain);
-        }
-      }
-      
-      // Prefer the more descriptive name
-      if (mAb.mAbName.length > existing.mAbName.length) {
-          existing.mAbName = mAb.mAbName;
-      }
-
-      // Combine metadata
-      if (mAb.summary && !existing.summary.includes(mAb.summary.substring(0, 20))) {
-        existing.summary += " | " + mAb.summary;
-      }
-      if (mAb.evidenceLocation && !existing.evidenceLocation?.includes(mAb.evidenceLocation)) {
-        existing.evidenceLocation += ", " + mAb.evidenceLocation;
-      }
-      existing.confidence = Math.max(existing.confidence, mAb.confidence);
-      
-      // Merge SAR data if exists
-      if (mAb.experimentalData) {
-          existing.experimentalData = [...(existing.experimentalData || []), ...mAb.experimentalData];
-      }
-    } else {
-      // Create a stable key for this new entry
-      const vh = mAb.chains.find(c => c.type === 'Heavy');
-      const vl = mAb.chains.find(c => c.type === 'Light');
-      const vhProfile = vh ? vh.fullSequence.substring(0, 40) : "no_vh";
-      const vlProfile = vl ? vl.fullSequence.substring(0, 40) : "no_vl";
-      const finalKey = `${nameKey}_${vhProfile}_${vlProfile}`;
-      merged.set(finalKey, { ...mAb });
-    }
-  }
-
-  return Array.from(merged.values());
 }
 
 /**

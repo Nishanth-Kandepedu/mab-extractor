@@ -190,8 +190,8 @@ async function startServer() {
   // Enable CORS for all origins
   app.use(cors());
 
-  app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  app.use(express.json({ limit: '200mb' }));
+  app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
   // Force HTTPS and security headers in production
   if (process.env.NODE_ENV === 'production') {
@@ -409,7 +409,10 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
-  server.timeout = 600000;
+  // Increase global timeout to 30 minutes for high-volume patent processing
+  server.timeout = 1800000;
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 130000;
 }
 
 startServer();
