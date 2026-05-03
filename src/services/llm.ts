@@ -24,13 +24,15 @@ IMPORTANT EXTRACTION RULES:
    - TRUNCATION RULE: Truncate the sequence immediately after the J-segment motifs:
      * VH: Ends after ...VTVSS or ...WGXG.
      * VL (Kappa/Lambda): Ends after ...VEIK, ...VFGXG, or ...FGGGTK.
-   - If the source contains the full chain, you MUST truncate it to the variable domain (max ~130 AA). Anything beyond the J-motif (VTVSS/VEIK) is a constant region and MUST be deleted from the extracted sequence. Extract ONLY the Fv.
-   - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
+   - VARIABLE DOMAIN ONLY (Fv): You MUST extract the ENTIRE Variable Domain. High-quality VH is usually 115-125 AA; VL is 105-115 AA. 
+   - If the source contains the full chain, you MUST truncate it to the variable domain. However, if a polypeptide contains MULTIPLE variable domains (e.g., bispecific fusion), you MUST extract the whole construct without truncating between the domains.
+   - LENGTH LIMIT: Standard single variable domains are NEVER longer than 135 AA. If longer, examine for Constant Region boundary.
 
 4. Table Structure & Coverage:
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
     - Some antibodies may have their sequences split across multiple rows or pages.
-    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
+    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence. Do NOT cut off the end (VTVSS/VEIK).
+    - VERBATIM EXTRACTION: Every single character must be extracted exactly. No approximation.
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
@@ -484,7 +486,19 @@ export async function extractWithLLM(
             if (match.index > 90 && (bestIndex === -1 || match.index < bestIndex)) {
               // Extract the base motif length (e.g., VTVSS is 5)
               const baseMotifLength = motif.source.split('[')[0].length;
+
+              // HEURISTIC: Before truncating, check if what follows looks like a linker 
+              // or another variable domain (indicative of a bispecific polypeptide)
+              const tail = seq.substring(match.index + baseMotifLength);
+              const looksLikeBispecific = 
+                 /^(GGGGS|GGSGG|GSGGG|GGSG)/i.test(tail) || // Linker signatures
+                 /^(QVQ|DIQ|QSV|DVQ|EIV|SYA|RNV|EVQ)/i.test(tail.substring(0, 20)); // V-domain signatures
               
+              if (looksLikeBispecific && !isCH1 && !isCL && seq.length > 200) {
+                 // Skip truncation for potentially multispecific single polypeptide
+                 continue; 
+              }
+
               bestIndex = match.index + baseMotifLength;
               matchedMotif = match[0].substring(0, baseMotifLength);
             }
@@ -578,12 +592,22 @@ export async function extractWithLLM(
         reviewReason += ` [Non-standard amino acids detected: ${chain.nonStandardAminoAcids.join(', ')}]`;
       }
 
-      // Systematic Fixes - Restoring L11V and T74I corrections for OCR stability
+      // Systematic Fixes - Restoring L12V and T75I corrections for OCR stability
       if (chain.type === 'Light') {
-        // Position 12 (0-indexed: 11) L -> V potential error
+        // Position 12 (0-indexed: 11) L -> V potential error in Framework 1
+        // Pattern: Q S A L [L] Q P A S V S G -> Q S A L [V] Q P A S V S G is nearly universal for some human germlines
         if (seq.length > 11 && seq[11] === 'L') {
-          needsReview = true;
-          reviewReason += " [Potential L->V error at pos 12]";
+          const before = seq.substring(0, 11);
+          const after = seq.substring(12, 16);
+          if (before.includes("QSAL") && (after.includes("QPAS") || after.includes("QPPS"))) {
+            const chars = seq.split('');
+            chars[11] = 'V';
+            seq = chars.join('');
+            reviewReason += " [OCR Fix: L12V]";
+          } else {
+            needsReview = true;
+            reviewReason += " [Potential L->V error at pos 12]";
+          }
         }
 
         // VL Length Validation
@@ -600,10 +624,19 @@ export async function extractWithLLM(
       }
 
       if (chain.type === 'Heavy') {
-        // Position 75 (0-indexed: 74) T -> I potential error
+        // Position 75 (0-indexed: 74) T -> I potential error in Framework 3
         if (seq.length > 74 && seq[74] === 'I') {
-          needsReview = true;
-          reviewReason += " [Potential T->I error at pos 75]";
+            const patch = seq.substring(70, 85);
+            if (patch.includes("SRDN") || patch.includes("STAY") || patch.includes("NTLY")) {
+                // This is Framework 3, T is standard here (NTLYLQMNS...)
+                const chars = seq.split('');
+                chars[74] = 'T';
+                seq = chars.join('');
+                reviewReason += " [OCR Fix: I75T]";
+            } else {
+              needsReview = true;
+              reviewReason += " [Potential T->I error at pos 75]";
+            }
         }
 
         // VH Length Validation
