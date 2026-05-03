@@ -485,18 +485,6 @@ export async function extractWithLLM(
               // Extract the base motif length (e.g., VTVSS is 5)
               const baseMotifLength = motif.source.split('[')[0].length;
               
-              // HEURISTIC: Before truncating, check if what follows looks like a linker 
-              // or another variable domain (indicative of a bispecific polypeptide)
-              const tail = seq.substring(match.index + baseMotifLength);
-              const looksLikeBispecific = 
-                 /^(GGGGS|GGSGG|GSGGG)/i.test(tail) || // Linker signatures
-                 /^(QVQ|DIQ|QSV|DVQ|EIV|SYA|RNV)/i.test(tail.substring(0, 20)); // V-domain signatures
-              
-              if (looksLikeBispecific && !isCH1 && !isCL) {
-                 // Skip truncation for potentially multispecific single polypeptide
-                 continue; 
-              }
-
               bestIndex = match.index + baseMotifLength;
               matchedMotif = match[0].substring(0, baseMotifLength);
             }
@@ -590,8 +578,14 @@ export async function extractWithLLM(
         reviewReason += ` [Non-standard amino acids detected: ${chain.nonStandardAminoAcids.join(', ')}]`;
       }
 
-      // Systematic Fixes - Flag for review instead of forcing changes
+      // Systematic Fixes - Restoring L11V and T74I corrections for OCR stability
       if (chain.type === 'Light') {
+        // Position 12 (0-indexed: 11) L -> V potential error
+        if (seq.length > 11 && seq[11] === 'L') {
+          needsReview = true;
+          reviewReason += " [Potential L->V error at pos 12]";
+        }
+
         // VL Length Validation
         if (seq.length < 100 || seq.length > 130) {
           // Allow longer sequences if they look bispecific (handled in truncation logic, but here we check for flagging)
@@ -606,6 +600,12 @@ export async function extractWithLLM(
       }
 
       if (chain.type === 'Heavy') {
+        // Position 75 (0-indexed: 74) T -> I potential error
+        if (seq.length > 74 && seq[74] === 'I') {
+          needsReview = true;
+          reviewReason += " [Potential T->I error at pos 75]";
+        }
+
         // VH Length Validation
         if (seq.length < 105 || seq.length > 140) {
           if (!mAb.target?.toLowerCase().includes('and') && !mAb.target?.toLowerCase().includes('bispecific') && seq.length > 200) {
