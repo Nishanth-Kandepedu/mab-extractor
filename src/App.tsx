@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
 import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -178,16 +178,6 @@ function AppContent() {
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const batchProcessingRef = useRef(false);
-  const batchItemsRef = useRef(state.batch?.items || []);
-
-  useEffect(() => {
-    batchItemsRef.current = state.batch?.items || [];
-    // Synchronize the component's state flag with our ref for logic handling
-    if (!state.batch?.isProcessing) {
-      batchProcessingRef.current = false;
-    }
-  }, [state.batch?.items, state.batch?.isProcessing]);
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
@@ -1031,12 +1021,10 @@ function AppContent() {
 
   const runBatch = useCallback(async () => {
     if (!state.batch || state.batch.items.length === 0) return;
-    if (batchProcessingRef.current) return;
+    if (state.batch.isProcessing) return; // Prevent double trigger
     
-    batchProcessingRef.current = true;
     setTimer(0);
     const batchStartTime = Date.now();
-    
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
@@ -1044,22 +1032,17 @@ function AppContent() {
 
     const currentLlmOptions = { ...llmOptions };
     
-    // We use a "find next pending" strategy to handle retries and dynamic queue changes correctly.
-    while (true) {
-        // ALWAYS peek at the latest status from the Ref to avoid stale closure bugs
-        const nextIndex = batchItemsRef.current.findIndex(it => it.status === 'pending');
-        if (nextIndex === -1) break;
+    // We fetch items from state inside the loop to react to status changes (like manual retries)
+    for (let i = 0; i < state.batch.items.length; i++) {
+        // Refresh items list from current state
+        const currentItems = state.batch.items;
+        const item = currentItems[i];
         
-        const i = nextIndex;
-        const totalItems = batchItemsRef.current.length;
-        const latestItem = batchItemsRef.current[i];
-        
-        // Skip if already done or currently being handled by another potential process (safety check)
-        if (latestItem.status === 'completed' || latestItem.status === 'processing') continue;
+        if (item.status === 'completed') continue;
 
         let result;
         let attempts = 0;
-        const maxItemAttempts = 2;
+        const maxItemAttempts = 2; // Auto-retry once for transient failures
 
         while (attempts < maxItemAttempts) {
           try {
@@ -1072,8 +1055,7 @@ function AppContent() {
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: `Processing ${i+1}/${totalItems}: Scanning patterns...` }));
-            
+            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
             const readFileData = (f: File): Promise<string> => {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1083,7 +1065,7 @@ function AppContent() {
               });
             };
 
-            const fileData = await readFileData(latestItem.file);
+            const fileData = await readFileData(item.file);
             
             let listingData: string | undefined;
             let listingMimeType: string | undefined;
@@ -1094,16 +1076,17 @@ function AppContent() {
 
             const itemStartTime = Date.now();
             
+            // Update status periodically for batch items too
             const statusTimer = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: `Processing ${i+1}/${totalItems}: Identifying CDRs...` }));
+              setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
             }, 30000);
 
             const statusTimer2 = setTimeout(() => {
-              setState(prev => ({ ...prev, extractingStatus: `Processing ${i+1}/${totalItems}: Validating entries...` }));
+              setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
             }, 60000);
 
             result = await extractWithLLM(
-              { data: fileData, mimeType: latestItem.file.type }, 
+              { data: fileData, mimeType: item.file.type }, 
               currentLlmOptions, 
               pageRange, 
               listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
@@ -1115,6 +1098,7 @@ function AppContent() {
             const itemExtractionTime = Date.now() - itemStartTime;
             result.extractionTime = itemExtractionTime;
 
+            // Enrichment for Batch Mode
             await enrichResultsWithMetadata(result);
 
             setState(prev => ({
@@ -1139,7 +1123,7 @@ function AppContent() {
                });
             }
             
-            break; 
+            break; // Success! Break the retry loop
 
           } catch (error: any) {
             attempts++;
@@ -1148,12 +1132,13 @@ function AppContent() {
                                error.message?.toLowerCase().includes('timeout');
                                
             if (isTransient && attempts < maxItemAttempts) {
-              setState(prev => ({ ...prev, extractingStatus: `Transient error on item ${i+1}. Retrying...` }));
+              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}). Auto-retrying transient error in 5s...`, error);
+              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id}...` }));
               await new Promise(resolve => setTimeout(resolve, 5000));
               continue;
             }
 
-            console.error(`[Batch] Item ${latestItem.id} failed:`, error);
+            console.error(`[Batch] Item ${item.id} failed permanently after ${attempts} attempts:`, error);
             setState(prev => ({
               ...prev,
               batch: {
@@ -1161,36 +1146,32 @@ function AppContent() {
                 items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
               }
             }));
-            break;
+            break; // Stop retrying this item
           }
         }
 
-        // Cooldown period between patents if more are pending
-        const hasMorePending = batchItemsRef.current.some(it => it.status === 'pending');
-        if (hasMorePending) {
-          const COOLDOWN_SECONDS = 30;
-          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
-            if (!batchProcessingRef.current) break;
-            
-            setState(prev => ({
-              ...prev,
-              batch: { ...prev.batch!, cooldownRemaining: seconds }
-            }));
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-          setState(prev => ({
-            ...prev,
-            batch: { ...prev.batch!, cooldownRemaining: undefined }
-          }));
-        }
+       // Cooldown period between patents
+       if (i < state.batch!.items.length - 1) {
+         const COOLDOWN_SECONDS = 30;
+         for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
+           setState(prev => ({
+             ...prev,
+             batch: { ...prev.batch!, cooldownRemaining: seconds }
+           }));
+           await new Promise(resolve => setTimeout(resolve, 1000));
+         }
+         setState(prev => ({
+           ...prev,
+           batch: { ...prev.batch!, cooldownRemaining: undefined }
+         }));
+       }
     }
 
-    batchProcessingRef.current = false;
     setState(prev => ({
       ...prev,
-      batch: { ...prev.batch!, isProcessing: false, currentIndex: prev.batch!.items.length, endTime: Date.now() }
+      batch: { ...prev.batch!, isProcessing: false, currentIndex: state.batch!.items.length, endTime: Date.now() }
     }));
-  }, [llmOptions, user, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
+  }, [llmOptions, user, state.batch?.items, pageRange, sequenceListingFile, prioritySeqIds, enrichResultsWithMetadata]);
 
   const handleBatchExportCsv = useCallback(async () => {
     if (!state.batch) return;
