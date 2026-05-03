@@ -24,15 +24,13 @@ IMPORTANT EXTRACTION RULES:
    - TRUNCATION RULE: Truncate the sequence immediately after the J-segment motifs:
      * VH: Ends after ...VTVSS or ...WGXG.
      * VL (Kappa/Lambda): Ends after ...VEIK, ...VFGXG, or ...FGGGTK.
-   - VARIABLE DOMAIN ONLY (Fv): You MUST extract the ENTIRE Variable Domain. High-quality VH is usually 115-125 AA; VL is 105-115 AA. 
-   - If the source contains the full chain, you MUST truncate it to the variable domain. However, if a polypeptide contains MULTIPLE variable domains (e.g., bispecific fusion), you MUST extract the whole construct without truncating between the domains.
-   - LENGTH LIMIT: Standard single variable domains are NEVER longer than 135 AA. If longer, examine for Constant Region boundary.
+   - If the source contains the full chain, you MUST truncate it to the variable domain (max ~130 AA). Anything beyond the J-motif (VTVSS/VEIK) is a constant region and MUST be deleted from the extracted sequence. Extract ONLY the Fv.
+   - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
 
 4. Table Structure & Coverage:
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
     - Some antibodies may have their sequences split across multiple rows or pages.
-    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence. Do NOT cut off the end (VTVSS/VEIK).
-    - VERBATIM EXTRACTION: Every single character must be extracted exactly. No approximation.
+    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
 
@@ -75,10 +73,10 @@ IMPORTANT EXTRACTION RULES:
     - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
 17. TABLE SCANNING HIERARCHY:
-    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies. These MUST be extracted as separate entries.
-    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies.
+    - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies (e.g., mAb12999P2, mAb14226). These MUST be extracted as separate entries.
+    - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies (e.g., bsAb7075, REGN7075).
     - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing for verbatim accuracy.
-    - STEP 4: If a clone name appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in the primary summary tables is a mandatory mining target.
+    - STEP 4: If a clone name like "mAb12999P2" appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in Table 1 and Table 3 is a mandatory mining target.
 
 18. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
@@ -324,7 +322,6 @@ export async function extractWithLLM(
             type: "OBJECT",
             properties: {
               mAbName: { type: "STRING" },
-              target: { type: "STRING" },
               chains: {
                 type: "ARRAY",
                 items: {
@@ -485,20 +482,10 @@ export async function extractWithLLM(
             // We look for VTVSS/VEIK which should be between 100-130 usually
             if (match.index > 90 && (bestIndex === -1 || match.index < bestIndex)) {
               // Extract the base motif length (e.g., VTVSS is 5)
+              // match[0] might include trailing stuff because of the regex, 
+              // but we only want to truncate AFTER the conserved part.
+              // VTVSS is index 0-4, so we truncate at index 5.
               const baseMotifLength = motif.source.split('[')[0].length;
-
-              // HEURISTIC: Before truncating, check if what follows looks like a linker 
-              // or another variable domain (indicative of a bispecific polypeptide)
-              const tail = seq.substring(match.index + baseMotifLength);
-              const looksLikeBispecific = 
-                 /^(GGGGS|GGSGG|GSGGG|GGSG)/i.test(tail) || // Linker signatures
-                 /^(QVQ|DIQ|QSV|DVQ|EIV|SYA|RNV|EVQ)/i.test(tail.substring(0, 20)); // V-domain signatures
-              
-              if (looksLikeBispecific && !isCH1 && !isCL && seq.length > 200) {
-                 // Skip truncation for potentially multispecific single polypeptide
-                 continue; 
-              }
-
               bestIndex = match.index + baseMotifLength;
               matchedMotif = match[0].substring(0, baseMotifLength);
             }
@@ -592,61 +579,37 @@ export async function extractWithLLM(
         reviewReason += ` [Non-standard amino acids detected: ${chain.nonStandardAminoAcids.join(', ')}]`;
       }
 
-      // Systematic Fixes - Restoring L12V and T75I corrections for OCR stability
+      // Systematic Fixes - Flag for review instead of forcing changes
       if (chain.type === 'Light') {
-        // Position 12 (0-indexed: 11) L -> V potential error in Framework 1
-        // Pattern: Q S A L [L] Q P A S V S G -> Q S A L [V] Q P A S V S G is nearly universal for some human germlines
+        // Position 12 (0-indexed: 11) L -> V potential error
         if (seq.length > 11 && seq[11] === 'L') {
-          const before = seq.substring(0, 11);
-          const after = seq.substring(12, 16);
-          if (before.includes("QSAL") && (after.includes("QPAS") || after.includes("QPPS"))) {
-            const chars = seq.split('');
-            chars[11] = 'V';
-            seq = chars.join('');
-            reviewReason += " [OCR Fix: L12V]";
-          } else {
-            needsReview = true;
-            reviewReason += " [Potential L->V error at pos 12]";
-          }
+          needsReview = true;
+          reviewReason += " [Potential L->V error at pos 12]";
         }
-
+        
         // VL Length Validation
         if (seq.length < 100 || seq.length > 130) {
-          // Allow longer sequences if they look bispecific (handled in truncation logic, but here we check for flagging)
-          if (!mAb.target?.toLowerCase().includes('and') && !mAb.target?.toLowerCase().includes('bispecific') && seq.length > 140) {
-            needsReview = true;
-            reviewReason += ` [VL length anomaly: ${seq.length}]`;
-            if (seq.length > 150) {
-              reviewReason += " [Likely constant region included]";
-            }
+          needsReview = true;
+          reviewReason += ` [VL length anomaly: ${seq.length}]`;
+          if (seq.length > 150) {
+            reviewReason += " [Likely constant region included]";
           }
         }
       }
 
       if (chain.type === 'Heavy') {
-        // Position 75 (0-indexed: 74) T -> I potential error in Framework 3
+        // Position 75 (0-indexed: 74) T -> I potential error
         if (seq.length > 74 && seq[74] === 'I') {
-            const patch = seq.substring(70, 85);
-            if (patch.includes("SRDN") || patch.includes("STAY") || patch.includes("NTLY")) {
-                // This is Framework 3, T is standard here (NTLYLQMNS...)
-                const chars = seq.split('');
-                chars[74] = 'T';
-                seq = chars.join('');
-                reviewReason += " [OCR Fix: I75T]";
-            } else {
-              needsReview = true;
-              reviewReason += " [Potential T->I error at pos 75]";
-            }
+          needsReview = true;
+          reviewReason += " [Potential T->I error at pos 75]";
         }
 
         // VH Length Validation
         if (seq.length < 105 || seq.length > 140) {
-          if (!mAb.target?.toLowerCase().includes('and') && !mAb.target?.toLowerCase().includes('bispecific') && seq.length > 200) {
-            needsReview = true;
-            reviewReason += ` [VH length anomaly: ${seq.length}]`;
-            if (seq.length > 250) {
-              reviewReason += " [Likely constant region included]";
-            }
+          needsReview = true;
+          reviewReason += ` [VH length anomaly: ${seq.length}]`;
+          if (seq.length > 160) {
+            reviewReason += " [Likely constant region included]";
           }
         }
       }
@@ -654,11 +617,22 @@ export async function extractWithLLM(
       return { ...chain, fullSequence: seq };
     });
 
+    // Problematic Variant Check
+    if (mAb.mAbName.startsWith("2419-12") || mAb.mAbName === "4439") {
+      needsReview = true;
+      reviewReason += ` [Known problematic VH variant: ${mAb.mAbName}. VH chain often split or misread in tables.]`;
+    }
+
+    if (mAb.mAbName === "2218") {
+      needsReview = true;
+      reviewReason += " [Known problematic VL variant: 2218. VL chain often incomplete or missing in tables.]";
+    }
+
     // Confidence-based flagging
-      if (mAb.confidence < 70) {
-        needsReview = true;
-        reviewReason += ` [Low confidence: ${mAb.confidence}]`;
-      }
+    if (mAb.confidence < 70) {
+      needsReview = true;
+      reviewReason += ` [Low confidence: ${mAb.confidence}]`;
+    }
 
     return { ...mAb, needsReview, reviewReason: reviewReason.trim() };
   });

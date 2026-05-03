@@ -63,7 +63,6 @@ export interface TargetMetadata {
 
 export interface Antibody {
   mAbName: string;
-  target?: string;
   chains: Chain[];
   confidence: number;
   summary: string;
