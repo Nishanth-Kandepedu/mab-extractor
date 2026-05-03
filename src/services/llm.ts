@@ -12,10 +12,10 @@ IMPORTANT EXTRACTION RULES:
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
 
 2. SINGLE DOMAIN / VHH HANDLING (Nanobodies): 
-   - Some patents use VHH or Single Domain antibodies.
-   - These ONLY have a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
-   - If a table lists "VHH", treat it as a standalone Heavy chain.
-   - A single VHH antibody object MUST contain exactly ONE "Heavy" chain in the chains array.
+   - Some patents describe VHH or Single Domain antibodies (Nanobodies).
+   - These consist ONLY of a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
+   - TABLE HINT: If a table lists "VHH", treat it as a standalone Heavy chain.
+   - VALIDATION: A VHH antibody object MUST contain exactly ONE "Heavy" chain in the chains array. NEVER create a placeholder Light chain for VHH.
 
 3. VL Chain Special Handling:
    - VL chains may appear in a DIFFERENT TABLE than VH chains.
@@ -39,7 +39,7 @@ IMPORTANT EXTRACTION RULES:
     - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
-    - FOR 100+ CLONES: You must persist through long tables. Ensure every row is represented.
+    - FOR 100+ CLONES: Scale your throughput. Use very concise descriptions in the "summary" field (max 10 words) to save tokens for sequences. You MUST represent every row.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
@@ -264,7 +264,7 @@ export async function extractWithLLM(
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
+    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You must identify and extract every unique mAb/clone ID mentioned in the document. Do not omit any parental clones. Maintain 100% verbatim accuracy for sequences.\n\n${input}`;
   } else {
     // For Gemini/Gemma infrastructure, we support multimodal inputs
     if (provider !== 'gemini' && provider !== 'gemma') {
@@ -304,9 +304,9 @@ export async function extractWithLLM(
       } else {
         parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
       }
-      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt} Identify Parental clones in Tables 1/3 and Bispecifics in Table 6. Extract all separately. Verbatim accuracy is mandatory.` });
+      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
     } else {
-      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt} Ensure every mAb ID in Tables 1/3 and every bsAb in Table 6 is captured separately.` });
+      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
     }
 
     formattedInput = parts;
@@ -393,7 +393,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
+      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : "MINIMAL",
       responseSchema: responseSchema,
     });
 
