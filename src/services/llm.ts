@@ -122,7 +122,7 @@ export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
   isSarMode?: boolean;
-  isMethodicalMode?: boolean; // New option for "learn slow" / thorough extraction
+  isExtendedMode?: boolean; // New option for high-volume session stability
 }
 
 /**
@@ -305,11 +305,7 @@ export async function extractWithLLM(
 
     const isGemma4 = model === 'gemma-4';
     const useSarExtra = isGemma4 && options.isSarMode;
-    let activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
-
-    if (options.isMethodicalMode) {
-      activeInstruction += "\n\nMETHODICAL EXTRACTION MODE: You must proceed through the document page-by-page. Do not skip any antibodies. If you encounter a large table, you MUST extract every row. Take as much time as needed. Verbatim accuracy is more important than speed. If there are hundreds of clones, ensure all are included.";
-    }
+    const activeInstruction = useSarExtra ? (SYSTEM_INSTRUCTION + GEMMA_4_EXTRA_INSTRUCTION) : SYSTEM_INSTRUCTION;
 
     const responseSchema: any = {
       type: "OBJECT",

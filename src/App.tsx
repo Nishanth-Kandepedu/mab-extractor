@@ -166,7 +166,7 @@ function AppContent() {
     provider: 'gemma',
     model: 'gemma-4',
     isSarMode: false,
-    isMethodicalMode: false
+    isExtendedMode: false
   });
   const [pageRange, setPageRange] = useState('');
   const [prioritySeqIds, setPrioritySeqIds] = useState('');
@@ -251,7 +251,7 @@ function AppContent() {
     if (error.includes('503')) return "The extraction service is temporarily unavailable. Please try again shortly.";
     if (error.includes('429')) return "Too many requests. Please wait a moment before trying again.";
     if (error.includes('timeout') || error.includes('proxy mirror timeout')) {
-      return "Proxy Timeout: The document contains 'too many clones' which overloaded the mirror link. Try enabling 'Methodical Mode' (Learn Slow) which increases session stability, or use a specific page range.";
+      return "Proxy Timeout: The document contains 'too many clones' which overloaded the mirror link. Try enabling 'Extended Mode' which increases session stability, or use a specific page range.";
     }
     if (error.includes('fetch')) return "Network error: Could not reach the extraction server. Check your connection.";
     return error;
@@ -2161,23 +2161,23 @@ function AppContent() {
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-50">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-[#d97706]">Methodical Mode</span>
-                    <span className="px-1 bg-amber-50 text-amber-600 text-[8px] font-bold uppercase rounded border border-amber-100 leading-none py-0.5">Learn Slow</span>
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-[#d97706]">Extended Mode</span>
+                    <span className="px-1 bg-amber-50 text-amber-600 text-[8px] font-bold uppercase rounded border border-amber-100 leading-none py-0.5">Stability</span>
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-semibold leading-tight mt-0.5">High-volume thoroughness</span>
+                  <span className="text-[10px] text-zinc-400 font-semibold leading-tight mt-0.5">Session backup for high-volume clones</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setLlmOptions(prev => ({ ...prev, isMethodicalMode: !prev.isMethodicalMode }))}
+                  onClick={() => setLlmOptions(prev => ({ ...prev, isExtendedMode: !prev.isExtendedMode }))}
                   className={cn(
                     "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none",
-                    llmOptions.isMethodicalMode ? "bg-amber-500 shadow-sm shadow-amber-100" : "bg-zinc-200"
+                    llmOptions.isExtendedMode ? "bg-amber-500 shadow-sm shadow-amber-100" : "bg-zinc-200"
                   )}
                 >
                   <span
                     className={cn(
                       "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-in-out",
-                      llmOptions.isMethodicalMode ? "translate-x-5" : "translate-x-0"
+                      llmOptions.isExtendedMode ? "translate-x-5" : "translate-x-0"
                     )}
                   />
                 </button>

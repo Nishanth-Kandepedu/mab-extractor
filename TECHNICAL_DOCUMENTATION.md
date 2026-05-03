@@ -81,7 +81,7 @@ A specialized UI component that renders amino acid sequences with highlighted CD
 
 ## 7. High-Volume Extraction & Timeout Handling
 To handle complex patents with hundreds of clones, the system uses several stability strategies:
-- **Methodical Mode (Learn Slow):** A specialized mode that injects rigorous "page-by-page" logic into the LLM, preventing the omission of antibody clones in high-density patent tables.
+- **Extended Mode:** Enables long-lived session handling without prompt-level logic changes, relying on high-reliability polling and server-side stability.
 - **Extended Session Stability:** Server-side timeouts have been increased to 30 minutes, and client-side polling extended to 60 minutes to handle complex extractions.
 - **Body Size Scaling:** Support for large PDF uploads up to 200MB.
 
