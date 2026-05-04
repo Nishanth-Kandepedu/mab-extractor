@@ -80,9 +80,11 @@ A specialized UI component that renders amino acid sequences with highlighted CD
 ---
 
 ## 7. High-Volume Extraction & Timeout Handling
-To handle complex patents with hundreds of clones, the system uses several stability strategies:
-- **Extended Mode:** Enables long-lived session handling without prompt-level logic changes, relying on high-reliability polling and server-side stability.
-- **Extended Session Stability:** Server-side timeouts have been increased to 30 minutes, and client-side polling extended to 60 minutes to handle complex extractions.
+To handle complex patents with hundreds of clones while maintaining system stability:
+- **Per-Patent Timeout:** Individual extraction tasks are capped at **10 minutes**. This prevents "problematic" or infinite-hanging patents from stalling the entire processing queue. If a patent fails this limit, it is logged as a specific timeout error, allowing the rest of the batch to continue.
+- **Batch Processing Reliability:** The batch engine uses a persistent polling loop with exponential backoff and up to 3 automatic retries for transient network or capacity errors.
+- **Smart Cooldown:** Integrated gaps between requests ensure API rate limits are respected without unnecessary idling.
+- **Extended Session Stability:** Server-side global timeouts are set to 30 minutes to accommodate concurrency queuing, while individual workers enforce the 10-minute constraint.
 - **Body Size Scaling:** Support for large PDF uploads up to 200MB.
 
 ---
