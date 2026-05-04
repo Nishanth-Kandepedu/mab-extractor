@@ -125,8 +125,8 @@ function extractJson(text: string): any {
       try {
         return repairAndParseJson(candidate);
       } catch (e2) {
-        console.error("JSON Repair failed. Snippet:", cleanText.substring(0, 200));
-        throw new Error("The AI response was too large or complex to be parsed as JSON. This usually happens when a patent has too many antibody clones. Try selecting a smaller page range or enabling Extended Mode.");
+        console.error("JSON Repair failed. Snippet:", cleanText.substring(0, 100));
+        throw new Error("The AI response was too large or complex to be parsed as JSON. This usually happens when a patent has too many antibody clones (>50). Try selecting a smaller page range or enabling Extended Mode.");
       }
     }
   }
@@ -135,15 +135,31 @@ function extractJson(text: string): any {
 }
 
 /**
- * Attempts to repair truncated JSON.
+ * Attempts to repair truncated JSON, handling unclosed strings and structures.
  */
 function repairAndParseJson(jsonStr: string): any {
   let repaired = jsonStr.trim();
   
-  // Remove trailing commas which are common in truncated JSON
+  // 1. Handle unclosed quotes if truncated inside a string
+  let insideQuote = false;
+  let escaped = false;
+  for (let i = 0; i < repaired.length; i++) {
+    if (repaired[i] === '\\' && !escaped) {
+      escaped = true;
+    } else {
+      if (repaired[i] === '"' && !escaped) {
+        insideQuote = !insideQuote;
+      }
+      escaped = false;
+    }
+  }
+  if (insideQuote) repaired += '"';
+
+  // 2. Remove trailing commas
   repaired = repaired.replace(/,\s*$/, "");
   repaired = repaired.replace(/,\s*([}\]])/g, "$1");
 
+  // 3. Close structures
   const stack: string[] = [];
   for (let i = 0; i < repaired.length; i++) {
     const char = repaired[i];
@@ -152,12 +168,12 @@ function repairAndParseJson(jsonStr: string): any {
     } else if (char === '}' || char === ']') {
       const last = stack.pop();
       if ((char === '}' && last !== '{') || (char === ']' && last !== '[')) {
-        // Mismatched - continue anyway
+        // Mismatch, push back
+        if (last) stack.push(last);
       }
     }
   }
 
-  // Close remaining open structures in reverse order
   while (stack.length > 0) {
     const last = stack.pop();
     if (last === '{') repaired += '}';
@@ -167,14 +183,12 @@ function repairAndParseJson(jsonStr: string): any {
   try {
     return JSON.parse(repaired);
   } catch (e) {
-    // If it still fails, try one more aggressive trim to the last valid closing character
+    // Aggressive fallback to last closing brace
     const lastClosing = Math.max(repaired.lastIndexOf('}'), repaired.lastIndexOf(']'));
     if (lastClosing !== -1) {
       try {
         return JSON.parse(repaired.substring(0, lastClosing + 1));
-      } catch (e2) {
-        throw e; // Give up
-      }
+      } catch (e2) {}
     }
     throw e;
   }
@@ -241,17 +255,17 @@ async function startServer() {
       const jobStartTime = Date.now();
       let retryCount = 0;
       const MAX_RETRIES = 2;
-      const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minute absolute timeout per job
+      const JOB_TIMEOUT_MS = 12 * 60 * 1000; // Increased to 12 minutes absolute timeout per job
 
       // Global timeout for the entire job process
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`Job timed out after 10 minutes. This document may be too large or complex for a single pass.`)), JOB_TIMEOUT_MS)
+        setTimeout(() => reject(new Error(`Extraction timed out after 12 minutes. This document is too high-volume for a single pass. Try reducing the page range.`)), JOB_TIMEOUT_MS)
       );
 
       const runExtraction = async (): Promise<void> => {
         const extractionPromise = (async () => {
           try {
-            console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
+            console.log(`[Job ${jobId}] Starting attempt ${retryCount + 1}`);
 
             if (provider === 'gemini' || provider === 'gemma') {
               const apiKey = findKey('GEMINI_API_KEY');

@@ -693,8 +693,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 60 mins (720 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
-    const maxAttempts = 720; 
+    // absolute client-side timeout of 15 mins for polling (slightly longer than server limit)
+    const maxAttempts = 180; // 180 * 5s = 15 minutes
 
     while (attempts < maxAttempts) {
         try {

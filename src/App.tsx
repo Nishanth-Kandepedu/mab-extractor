@@ -500,13 +500,25 @@ function AppContent() {
       return;
     }
     
-    // Immediate update
-    setTimer(Math.floor((Date.now() - startTime) / 1000));
-    
-    const interval = setInterval(() => {
-      setTimer(Math.floor((Date.now() - startTime) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
+    // Use a reference to ensure the interval always has the latest value
+    const updateTimer = () => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      if (elapsed >= 0) setTimer(elapsed);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    // Visibility change listener to force update when returning to tab
+    const handleVisibilityChange = () => {
+      if (!document.hidden) updateTimer();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [startTime]);
 
   const handleGuestLogin = async (e: React.FormEvent) => {
@@ -1036,6 +1048,28 @@ function AppContent() {
     const now = Date.now();
     setStartTime(now);
     const batchStartTime = now;
+    
+    const readFileData = (f: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(f);
+      });
+    };
+
+    // Pre-read sequence listing if exists to avoid doing it inside the loop
+    let listingData: string | undefined;
+    let listingMimeType: string | undefined;
+    if (sequenceListingFile) {
+      try {
+        listingData = await readFileData(sequenceListingFile);
+        listingMimeType = sequenceListingFile.type;
+      } catch (e) {
+        console.error("Failed to pre-read sequence listing:", e);
+      }
+    }
+
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
@@ -1043,11 +1077,13 @@ function AppContent() {
 
     const currentLlmOptions = { ...llmOptions };
     
-    // We fetch items from state inside the loop to react to status changes (like manual retries)
-    for (let i = 0; i < state.batch.items.length; i++) {
-        // Refresh items list from current state
-        const currentItems = state.batch.items;
-        const item = currentItems[i];
+    // Loop through all items in the batch
+    const itemsCount = state.batch.items.length;
+    for (let i = 0; i < itemsCount; i++) {
+        // Refresh items list from the MOST RECENT state to handle dynamic updates
+        // We use a local closure for the index 'i' but we must check item status
+        // Since we are in the loop, we can just use the index.
+        const item = state.batch.items[i];
         
         if (item.status === 'completed') continue;
 
@@ -1057,34 +1093,20 @@ function AppContent() {
 
         while (attempts < maxItemAttempts) {
           try {
+            const currentItemIdx = i; // local closure
             setState(prev => ({
               ...prev,
               batch: { 
                 ...prev.batch!, 
-                currentIndex: i, 
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'processing', error: undefined } : it) 
+                currentIndex: currentItemIdx, 
+                items: prev.batch!.items.map((it, idx) => idx === currentItemIdx ? { ...it, status: 'processing', error: undefined } : it) 
               }
             }));
 
             setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
-            const readFileData = (f: File): Promise<string> => {
-              return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(f);
-              });
-            };
-
-            const fileData = await readFileData(item.file);
             
-            let listingData: string | undefined;
-            let listingMimeType: string | undefined;
-            if (sequenceListingFile) {
-              listingData = await readFileData(sequenceListingFile);
-              listingMimeType = sequenceListingFile.type;
-            }
-
+            // Read actual item file
+            const fileData = await readFileData(item.file);
             const itemStartTime = Date.now();
             
             // Update status periodically for batch items too
