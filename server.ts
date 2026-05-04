@@ -258,7 +258,7 @@ async function startServer() {
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
-              model: targetModel || 'gemini-3-flash-preview',
+              model: targetModel || 'gemini-1.5-pro',
               contents,
               config: {
                 systemInstruction,
