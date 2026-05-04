@@ -1152,7 +1152,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < state.batch!.items.length - 1) {
-         const COOLDOWN_SECONDS = 30;
+         const COOLDOWN_SECONDS = 10;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
