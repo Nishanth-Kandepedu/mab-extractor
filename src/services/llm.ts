@@ -295,6 +295,11 @@ export async function extractWithLLM(
           mimeType: input.mimeType,
         },
       });
+
+      // If user provided pre-extracted text (e.g. from pdfjs-dist), append it as a reference part
+      if (typeof input.data === 'string' && (input as any).extractedText) {
+        parts.push({ text: `STRUCTURAL TEXT EXTRACTION (Reference for Tables):\n${(input as any).extractedText}` });
+      }
     } else {
       // It's a text file readout
       parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
