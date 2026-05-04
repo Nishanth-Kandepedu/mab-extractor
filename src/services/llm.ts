@@ -1,8 +1,8 @@
 import { ExtractionResult, Antibody } from "../types";
 import { getPdfPages, getPdfPageCount } from "../lib/pdf";
 
-export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents (including Chinese patents). 
-Your goal is 100% Verbatim Accuracy and 100% Coverage of all antibodies/clones mentioned.
+export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
+Your goal is 100% Verbatim Accuracy and 100% Coverage.
 
 IMPORTANT EXTRACTION RULES:
 
@@ -12,9 +12,9 @@ IMPORTANT EXTRACTION RULES:
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
 
 2. SINGLE DOMAIN / VHH HANDLING (Nanobodies): 
-   - Many Chinese patents (and others) describe VHH or Single Domain antibodies (Nanobodies).
+   - Some patents describe VHH or Single Domain antibodies (Nanobodies).
    - These consist ONLY of a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
-   - TABLE HINT: If a table lists "VHH", "VHH 序列", or "Nanobody", treat it as a standalone Heavy chain.
+   - TABLE HINT: If a table lists "VHH", treat it as a standalone Heavy chain.
    - VALIDATION: A VHH antibody object MUST contain exactly ONE "Heavy" chain in the chains array. NEVER create a placeholder Light chain for VHH.
 
 3. VL Chain Special Handling:
@@ -33,39 +33,44 @@ IMPORTANT EXTRACTION RULES:
    - If the source contains the full chain, you MUST truncate it to the variable domain (max ~130 AA). Anything beyond the J-motif (VTVSS/VEIK) is a constant region and MUST be deleted from the extracted sequence. Extract ONLY the Fv.
    - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
 
-5. Table Structure & Coverage (Chinese Patent Context):
-    - TABLE-FIRST PROTOCOL: Exhaustively scan 表 1, 表 2, 表 4, 表 5, 表 6 before other text.
-    - CHINESE HEADERS: "抗体编号" (mAb ID), "可变区序列" (Variable Seq), "氨基酸序列" (AA Seq), "序列编号" (SEQ ID NO).
-    - HIGH DENSITY (30-100+ CLONES): Chinese patents often list 30-70 clones in one table. You MUST extract every mAb ID.
-    - ABBREVIATION RULE: If a patent has >20 clones, the "summary" field MUST be 3 words or less (e.g., "Anti-CLL-1 VHH") for every entry to save token/time budget.
-    - EXTENDED TABLES: Some clones have sequences split across multiple rows (e.g. VH at row 5, VL at row 10). Merge them by mAb ID.
-    - MANDATORY COMPLETENESS: Do not truncate the list of antibodies. Process the table from first row to last.
-    - VERBATIM ACCURACY: Verbatim mining of sequences is your top priority.
+5. Table Structure & Coverage:
+    - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
+    - Some antibodies may have their sequences split across multiple rows or pages.
+    - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
+    - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
+    - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
+    - FOR 30+ CLONES: To prevent 8k token overflows and 1-hour session timeouts, you MUST use "COMPACT JSON" style. Use keyword-only entries for "summary", "epitope", and "antibodyOrigin". Do not write full sentences. Prioritize valid sequence data above all else. 
+    - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM").
 
 6. Mandatory SEQ ID & Evidence:
-    - You MUST extract the "SEQ ID NO" (序列编号) for every sequence found.
+    - You MUST extract the "SEQ ID NO" for every sequence found.
     - Capture the exact page number and table ID (if applicable) for every sequence.
     - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
-7. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., CLL-1, IL-33, APRIL, HER2, PD-L1). 
-    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules.
-    - CHINESE TARGETS: "抗 CLL-1" means target is "CLL-1". "抗 APRIL" means target is "APRIL".
-    - Include the target standard name (if found) in every chain object.
+7. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
+    - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules, receptors, or ligands.
+    - RECEPTOR VS LIGAND: Be extremely careful not to swap the receptor and ligand. If the antibody binds to "CD3", its target is "CD3" (or "CD3E/P07766"), NOT the other arm's target (like MICA) or the cell it's on.
+    - Example: In a bispecific "Anti-CD3 x Anti-MICA", the CD3-binding arm has target "CD3", and the MICA-binding arm has target "MICA". DO NOT assign "MICA" to both.
+    - Example: If an antibody blocks "IFN-gamma signaling" and the patent measures "STAT1 phosphorylation", the target is "IFN-gamma", NOT "STAT1".
+    - You must extract the antigen that the antibody is designed to bind to. 
+    - Include this target in every chain object.
 
 8. ID-Mapping & Cross-Referencing Strategy: 
-    - First, identify every unique mAb ID (e.g., "VHH1", "mAb 1", "2419") from the tables.
-    - ANTI-LAZINESS: Do NOT rely on candidate summaries in the text which often omit many clones. If a clone exists in a table, it MUST be in your output.
+    - First, identify every unique mAb ID (e.g., "mAb 1", "2419") from the tables. You MUST extract sequences for every ID found.
+    - CROSS-REFERENCE: Many antibodies have multiple names (e.g., "mAb 1" is "REGN7075"). You MUST map these names together in the "mAbName" field (e.g., "mAb 1 (REGN7075)") or ensure both are mentioned in the summary.
+    - ANTI-LAZINESS: Do NOT rely on candidate summaries in the text which often omit the "parental" clones listed in the tables. If a clone exists in a table, it MUST be in your output.
 
-9. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-10. Length-Check Validation: Character count must match the source Variable Domain exactly.
-11. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra cycles here.
+9. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+10. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
+11. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
 12. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
 13. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-14. Non-Standard Amino Acids: Extract exactly as they appear.
+14. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
 15. Amino Acid Format:
-    - Use ONLY single-letter amino acid codes.
-    - If the document uses three-letter codes (e.g., Glu), you MUST convert them to single-letter codes (E).
-    - CLEAN all spaces/numbers/punctuation from sequences.
+    - Use ONLY single-letter amino acid codes (e.g., A, C, D, E...).
+    - DO NOT USE three-letter codes (e.g., Ala, Cys, Asp, Glu, GLY). If the document uses three-letter codes, you MUST convert them to single-letter codes in your output.
+    - If a sequence contains spaces or other punctuation, CLEAN IT.
+    - VERBATIM ACCURACY: You must never summarize or approximate a sequence. Every character must match the source exactly.
 16. Return the data in valid JSON format.
 17. CRITICAL: Ensure the JSON is valid and complete.
 
@@ -99,6 +104,12 @@ IMPORTANT EXTRACTION RULES:
       * "Rabbit" -> "Oryctolagus cuniculus"
     - Identify the ANTIBODY ORIGIN (the species or method used to generate the antibody). Examples: "Humanized", "Chimeric", "Fully Human", "Mouse", "Phage Display", "Transgenic Mouse".
     - If any are not explicitly found, leave as an empty string.
+
+22. MULTI-LANGUAGE HANDLING (e.g., Chinese):
+    - Many patents are in Chinese (CN), Japanese (JP), or Korean (KR).
+    - You MUST translate the mAb names, targets, and experimental metadata to English in the JSON output.
+    - Translate: "单克隆抗体" -> "mAb", "重链" -> "Heavy chain", "轻链" -> "Light chain", "抗体" -> "Antibody", "靶点" -> "Target", "序列" -> "Sequence", "实施例" -> "Example".
+    - Sequences (A, C, D, E...) are universal; do not translate them.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -389,7 +400,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : "MINIMAL",
+      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : undefined,
       responseSchema: responseSchema,
     });
 
@@ -693,17 +704,14 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // absolute client-side timeout of 15 mins for polling (slightly longer than server limit)
-    const maxAttempts = 180; // 180 * 5s = 15 minutes
+    // Increased to 3 hours (2160 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
+    const maxAttempts = 2160; 
 
     while (attempts < maxAttempts) {
         try {
           const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
               cache: 'no-store'
           });
-          if (statusResponse.status === 404) {
-            throw new Error(`Job ${jobId} not found on server. This can happen if the background process restarted. Retrying extraction...`);
-          }
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
             await new Promise(resolve => setTimeout(resolve, 5000));

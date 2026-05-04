@@ -197,7 +197,6 @@ function AppContent() {
   const intendedRoleRef = React.useRef<string | null>(null);
 
   const [timer, setTimer] = useState(0);
-  const [startTime, setStartTime] = useState<number | null>(null);
   const [sessionLogged, setSessionLogged] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [healthInfo, setHealthInfo] = useState<any>(null);
@@ -493,38 +492,17 @@ function AppContent() {
     }
   }, [user, sessionLogged]);
 
-  // Timer Logic - Wall clock based for background stability
+  // Timer Logic
   useEffect(() => {
-    if (!startTime) {
-      setTimer(0);
-      return;
+    let interval: NodeJS.Timeout;
+    if (state.isExtracting || state.batch?.isProcessing) {
+      if (state.isExtracting) setTimer(0);
+      interval = setInterval(() => {
+        setTimer(t => t + 1);
+      }, 1000);
     }
-    
-    // Use a reference to ensure the interval always has the latest value
-    const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      if (elapsed >= 0) setTimer(elapsed);
-    };
-
-    updateTimer();
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        updateTimer();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Some browsers throttle intervals in background. 
-    // We can use a more frequent interval to catch up if needed, 
-    // or just rely on the wall clock calculation.
-    const interval = setInterval(updateTimer, 1000);
-    
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [startTime]);
+    return () => clearInterval(interval);
+  }, [state.isExtracting, state.batch?.isProcessing]);
 
   const handleGuestLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -945,9 +923,6 @@ function AppContent() {
     const activeOptions = overrideOptions || llmOptions;
     console.log('Running extraction:', file.name, 'with range:', pageRange, 'Model:', activeOptions.model);
 
-    const now = Date.now();
-    setStartTime(now);
-
     setState(prev => ({ ...prev, isExtracting: true, extractingStatus: "Scanning for variable region patterns...", result: null, error: null }));
     
     try {
@@ -995,7 +970,6 @@ function AppContent() {
       // Enrichment with UniProt Target Metadata
       await enrichResultsWithMetadata(result);
 
-      setStartTime(null);
       setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractingStatus: undefined }));
       setShowHistory(false);
 
@@ -1041,7 +1015,6 @@ function AppContent() {
       }
     } catch (err: any) {
       console.error('Final extraction error:', err);
-      setStartTime(null);
       setState(prev => ({ ...prev, isExtracting: false, result: null, error: err.message || String(err) }));
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
@@ -1050,66 +1023,57 @@ function AppContent() {
     if (!state.batch || state.batch.items.length === 0) return;
     if (state.batch.isProcessing) return; // Prevent double trigger
     
-    const now = Date.now();
-    setStartTime(now);
-    const batchStartTime = now;
-    
-    const readFileData = (f: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(f);
-      });
-    };
-
-    // Pre-read sequence listing if exists to avoid doing it inside the loop
-    let listingData: string | undefined;
-    let listingMimeType: string | undefined;
-    if (sequenceListingFile) {
-      try {
-        listingData = await readFileData(sequenceListingFile);
-        listingMimeType = sequenceListingFile.type;
-      } catch (e) {
-        console.error("Failed to pre-read sequence listing:", e);
-      }
-    }
-
-    // Status updates
+    setTimer(0);
+    const batchStartTime = Date.now();
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
     }));
 
-    // Sequential loop through items
-    const items = [...state.batch.items];
-    const batchLlmOptions = { ...llmOptions };
+    const currentLlmOptions = { ...llmOptions };
     
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+    // We fetch items from state inside the loop to react to status changes (like manual retries)
+    for (let i = 0; i < state.batch.items.length; i++) {
+        // Refresh items list from current state
+        const currentItems = state.batch.items;
+        const item = currentItems[i];
         
-        // Skip already done (in case of re-run)
         if (item.status === 'completed') continue;
 
         let result;
         let attempts = 0;
-        const maxItemAttempts = 2; 
+        const maxItemAttempts = 2; // Auto-retry once for transient failures
 
         while (attempts < maxItemAttempts) {
           try {
-            const currentIdx = i;
             setState(prev => ({
               ...prev,
               batch: { 
                 ...prev.batch!, 
-                currentIndex: currentIdx, 
-                items: prev.batch!.items.map((it, idx) => idx === currentIdx ? { ...it, status: 'processing', error: undefined } : it) 
+                currentIndex: i, 
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'processing', error: undefined } : it) 
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: "Initializing neural mining..." }));
+            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
+            const readFileData = (f: File): Promise<string> => {
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(f);
+              });
+            };
 
             const fileData = await readFileData(item.file);
+            
+            let listingData: string | undefined;
+            let listingMimeType: string | undefined;
+            if (sequenceListingFile) {
+              listingData = await readFileData(sequenceListingFile);
+              listingMimeType = sequenceListingFile.type;
+            }
+
             const itemStartTime = Date.now();
             
             // Update status periodically for batch items too
@@ -1123,7 +1087,7 @@ function AppContent() {
 
             result = await extractWithLLM(
               { data: fileData, mimeType: item.file.type }, 
-              batchLlmOptions, 
+              currentLlmOptions, 
               pageRange, 
               listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
               prioritySeqIds
@@ -1165,7 +1129,6 @@ function AppContent() {
             attempts++;
             const isTransient = error.message?.toLowerCase().includes('capacity') || 
                                error.message?.toLowerCase().includes('overloaded') || 
-                               error.message?.toLowerCase().includes('not found') ||
                                error.message?.toLowerCase().includes('timeout');
                                
             if (isTransient && attempts < maxItemAttempts) {
@@ -1204,7 +1167,6 @@ function AppContent() {
        }
     }
 
-    setStartTime(null);
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: false, currentIndex: state.batch!.items.length, endTime: Date.now() }
