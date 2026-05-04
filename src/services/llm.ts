@@ -41,6 +41,7 @@ IMPORTANT EXTRACTION RULES:
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
     - FOR 30+ CLONES: To prevent 8k token overflows and 1-hour session timeouts, you MUST use "COMPACT JSON" style. Use keyword-only entries for "summary", "epitope", and "antibodyOrigin". Do not write full sentences. Prioritize valid sequence data above all else. 
     - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM").
+    - FOR 50+ CLONES (HIGH VOLUME): You MUST use "NANO-JSON" strategy. Use extremely short fields: "summary" (max 2 words), "evidenceStatement" (e.g., "p11 T1"), and omit redunant target info for subsequent clones. The goal is to fit all sequences into the output window.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
@@ -400,7 +401,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : undefined,
+      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : "MINIMAL",
       responseSchema: responseSchema,
     });
 

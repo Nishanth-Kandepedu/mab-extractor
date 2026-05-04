@@ -246,8 +246,13 @@ function AppContent() {
         return parsed.error.message;
       }
     } catch(e) {}
-    if (error.includes('token count exceeds') || error.includes('262144')) 
-      return "Document too large for Gemma 4 (256k limit). Please switch to Gemini 3.1 Pro (1M+ limit) or use a text-only subset.";
+    if (error.includes('token count exceeds')) 
+      return "Document too large for Gemma 4 (256k limit). Please switch to Gemini 3.1 Pro (1M+ limit).";
+    if (error.includes('timeout') || error.includes('3 hours'))
+      return "The extraction session timed out (3 hours limit). This large patent should be processed in smaller page chunks (e.g., 5-10 pages at a time).";
+    if (error.includes('No antibodies extracted') || error.includes('0 antibodies'))
+      return "No data extracted. This can happen if the AI engine is overloaded or the patent format is unusual. Try enabling 'Extended Mode' for deeper analysis.";
+
     if (error.includes('503')) return "The extraction service is temporarily unavailable. Please try again shortly.";
     if (error.includes('429')) return "Too many requests. Please wait a moment before trying again.";
     if (error.includes('timeout') || error.includes('proxy mirror timeout')) {
