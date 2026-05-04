@@ -197,6 +197,7 @@ function AppContent() {
   const intendedRoleRef = React.useRef<string | null>(null);
 
   const [timer, setTimer] = useState(0);
+  const [startTime, setStartTime] = useState<number | null>(null);
   const [sessionLogged, setSessionLogged] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [healthInfo, setHealthInfo] = useState<any>(null);
@@ -492,17 +493,21 @@ function AppContent() {
     }
   }, [user, sessionLogged]);
 
-  // Timer Logic
+  // Timer Logic - Wall clock based for background stability
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (state.isExtracting || state.batch?.isProcessing) {
-      if (state.isExtracting) setTimer(0);
-      interval = setInterval(() => {
-        setTimer(t => t + 1);
-      }, 1000);
+    if (!startTime) {
+      setTimer(0);
+      return;
     }
+    
+    // Immediate update
+    setTimer(Math.floor((Date.now() - startTime) / 1000));
+    
+    const interval = setInterval(() => {
+      setTimer(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
     return () => clearInterval(interval);
-  }, [state.isExtracting, state.batch?.isProcessing]);
+  }, [startTime]);
 
   const handleGuestLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -923,6 +928,9 @@ function AppContent() {
     const activeOptions = overrideOptions || llmOptions;
     console.log('Running extraction:', file.name, 'with range:', pageRange, 'Model:', activeOptions.model);
 
+    const now = Date.now();
+    setStartTime(now);
+
     setState(prev => ({ ...prev, isExtracting: true, extractingStatus: "Scanning for variable region patterns...", result: null, error: null }));
     
     try {
@@ -970,6 +978,7 @@ function AppContent() {
       // Enrichment with UniProt Target Metadata
       await enrichResultsWithMetadata(result);
 
+      setStartTime(null);
       setState(prev => ({ ...prev, isExtracting: false, result, error: null, extractingStatus: undefined }));
       setShowHistory(false);
 
@@ -1015,6 +1024,7 @@ function AppContent() {
       }
     } catch (err: any) {
       console.error('Final extraction error:', err);
+      setStartTime(null);
       setState(prev => ({ ...prev, isExtracting: false, result: null, error: err.message || String(err) }));
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
@@ -1023,8 +1033,9 @@ function AppContent() {
     if (!state.batch || state.batch.items.length === 0) return;
     if (state.batch.isProcessing) return; // Prevent double trigger
     
-    setTimer(0);
-    const batchStartTime = Date.now();
+    const now = Date.now();
+    setStartTime(now);
+    const batchStartTime = now;
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
@@ -1168,6 +1179,7 @@ function AppContent() {
        }
     }
 
+    setStartTime(null);
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: false, currentIndex: state.batch!.items.length, endTime: Date.now() }

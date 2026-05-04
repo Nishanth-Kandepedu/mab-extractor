@@ -34,12 +34,12 @@ IMPORTANT EXTRACTION RULES:
    - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
 
 5. Table Structure & Coverage (Chinese Patent Context):
-    - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., 表 1, 表 4, Table 6) before processing summarizing text. Tables are the source of truth.
-    - CHINESE HEADERS: Recognize "抗体编号" (mAb ID), "可变区序列" (Variable Region Seq), "氨基酸序列" (AA Seq), "序列编号" (SEQ ID NO).
-    - HIGH CLONE COUNT (30+): Many Chinese patents contain 30-50+ antibodies in a single table. You MUST extract ALL of them. 
-    - TOKEN-SAVING STRATEGY: If a patent has 30+ antibodies, keep descriptions in the "summary" field extremely short (e.g. "Anti-CLL-1 VHH") to prioritize the literal sequences and mAb IDs.
-    - EXTENDED TABLES: Some antibodies may have their sequences split across multiple rows or pages. Ensure you capture the COMPLETE Variable Domain sequence.
-    - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans 10+ pages, continue extraction until the end of the table.
+    - TABLE-FIRST PROTOCOL: Exhaustively scan 表 1, 表 2, 表 4, 表 5, 表 6 before other text.
+    - CHINESE HEADERS: "抗体编号" (mAb ID), "可变区序列" (Variable Seq), "氨基酸序列" (AA Seq), "序列编号" (SEQ ID NO).
+    - HIGH DENSITY (30-100+ CLONES): Chinese patents often list 30-70 clones in one table. You MUST extract every mAb ID.
+    - ABBREVIATION RULE: If a patent has >20 clones, the "summary" field MUST be 3 words or less (e.g., "Anti-CLL-1 VHH") for every entry to save token/time budget.
+    - EXTENDED TABLES: Some clones have sequences split across multiple rows (e.g. VH at row 5, VL at row 10). Merge them by mAb ID.
+    - MANDATORY COMPLETENESS: Do not truncate the list of antibodies. Process the table from first row to last.
     - VERBATIM ACCURACY: Verbatim mining of sequences is your top priority.
 
 6. Mandatory SEQ ID & Evidence:
