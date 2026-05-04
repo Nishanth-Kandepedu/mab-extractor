@@ -1033,20 +1033,16 @@ function AppContent() {
     const currentLlmOptions = { ...llmOptions };
     
     // We fetch items from state inside the loop to react to status changes (like manual retries)
-      for (let i = 0; i < state.batch.items.length; i++) {
+    for (let i = 0; i < state.batch.items.length; i++) {
         // Refresh items list from current state
         const currentItems = state.batch.items;
         const item = currentItems[i];
         
         if (item.status === 'completed') continue;
-        if (item.status === 'failed' && item.error === 'Extraction Timed Out. This specific patent is too complex or the AI engine stalled (10 min limit reached).') {
-          console.warn(`[Batch] Skipping previously timed-out problematic patent: ${item.id}`);
-          continue;
-        }
 
         let result;
         let attempts = 0;
-        const maxItemAttempts = 3; // Increased retries for "can't fail randomly"
+        const maxItemAttempts = 2; // Auto-retry once for transient failures
 
         while (attempts < maxItemAttempts) {
           try {
@@ -1059,8 +1055,7 @@ function AppContent() {
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: `Processing ${item.file.name} (Attempt ${attempts + 1})...` }));
-            
+            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
             const readFileData = (f: File): Promise<string> => {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1081,18 +1076,25 @@ function AppContent() {
 
             const itemStartTime = Date.now();
             
-            // Execute extraction with explicit timeout check in client too
-            const extractionTask = extractWithLLM(
+            // Update status periodically for batch items too
+            const statusTimer = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Identifying CDR motifs..." }));
+            }, 30000);
+
+            const statusTimer2 = setTimeout(() => {
+              setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
+            }, 60000);
+
+            result = await extractWithLLM(
               { data: fileData, mimeType: item.file.type }, 
               currentLlmOptions, 
               pageRange, 
               listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
               prioritySeqIds
             );
-
-            // The server now has a 10min timeout, the client will wait for it
-            result = await extractionTask;
             
+            clearTimeout(statusTimer);
+            clearTimeout(statusTimer2);
             const itemExtractionTime = Date.now() - itemStartTime;
             result.extractionTime = itemExtractionTime;
 
@@ -1125,38 +1127,32 @@ function AppContent() {
 
           } catch (error: any) {
             attempts++;
-            const errorMessage = error.message || String(error);
-            const isTimeout = errorMessage.includes('Timed Out') || errorMessage.includes('10 min limit');
-            const isTransient = errorMessage.toLowerCase().includes('capacity') || 
-                               errorMessage.toLowerCase().includes('overloaded') || 
-                               errorMessage.toLowerCase().includes('timeout') ||
-                               errorMessage.toLowerCase().includes('fetch') ||
-                               errorMessage.toLowerCase().includes('network');
+            const isTransient = error.message?.toLowerCase().includes('capacity') || 
+                               error.message?.toLowerCase().includes('overloaded') || 
+                               error.message?.toLowerCase().includes('timeout');
                                
-            if (isTransient && !isTimeout && attempts < maxItemAttempts) {
-              const delay = Math.pow(2, attempts) * 2000;
-              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}/${maxItemAttempts}). Retrying in ${delay/1000}s...`, error);
-              setState(prev => ({ ...prev, extractingStatus: `Network glitch. Retrying ${item.file.name}...` }));
-              await new Promise(resolve => setTimeout(resolve, delay));
+            if (isTransient && attempts < maxItemAttempts) {
+              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}). Auto-retrying transient error in 5s...`, error);
+              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id}...` }));
+              await new Promise(resolve => setTimeout(resolve, 5000));
               continue;
             }
 
-            console.error(`[Batch] Item ${item.id} failed permanently:`, error);
+            console.error(`[Batch] Item ${item.id} failed permanently after ${attempts} attempts:`, error);
             setState(prev => ({
               ...prev,
               batch: {
                 ...prev.batch!,
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: errorMessage } : it)
+                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
               }
             }));
             break; // Stop retrying this item
           }
         }
 
-       // Smart cooldown: shorter if the request was fast, longer if slow. 
-       // Also skip if it's the last item.
+       // Cooldown period between patents
        if (i < state.batch!.items.length - 1) {
-         const COOLDOWN_SECONDS = 5; // Reduced from 30 for efficiency
+         const COOLDOWN_SECONDS = 30;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
