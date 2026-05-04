@@ -220,8 +220,8 @@ function AppContent() {
   };
 
   const getEstCost = (usage: any, modelUsed: string) => {
-    if (!usage) return '---';
-    const rateKey = Object.keys(MODEL_RATES).find(k => modelUsed.includes(k)) || 'gemini-3.1-pro-preview';
+    if (!usage || !modelUsed) return '---';
+    const rateKey = Object.keys(MODEL_RATES).find(k => modelUsed.includes(k)) || 'gemini-3-flash-preview';
     const rates = (MODEL_RATES as any)[rateKey] as { input: number, output: number, free?: boolean };
     
     if (rates.free) return 'FREE';

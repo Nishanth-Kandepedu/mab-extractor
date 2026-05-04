@@ -40,8 +40,7 @@ IMPORTANT EXTRACTION RULES:
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
     - FOR 30+ CLONES: To prevent 8k token overflows and 1-hour session timeouts, you MUST use "COMPACT JSON" style. Use keyword-only entries for "summary", "epitope", and "antibodyOrigin". Do not write full sentences. Prioritize valid sequence data above all else. 
-    - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM").
-    - FOR 50+ CLONES (HIGH VOLUME): Coverage is the Priority. Use "NANO-JSON": mAbName, SEQ IDs, and Sequences MUST be 100% accurate, but "summary" and "epitope" fields should be keyword-only (max 2 words). Omit shared metadata. This prevents output truncation and maximizes throughput.
+    - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM"). Structural fields like "target" in chains are MANDATORY for every entry.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
@@ -401,7 +400,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: (model?.includes('3.1') || isGemma4) ? (options.isExtendedMode ? "HIGH" : "LOW") : undefined,
+      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : undefined,
       responseSchema: responseSchema,
     });
 
@@ -705,8 +704,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Reduced to 30 mins (360 attempts * 5s) - 3 hours was too aggressive and likely hitting platform limits
-    const maxAttempts = 360; 
+    // Increased to 60 mins (720 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
+    const maxAttempts = 720; 
 
     while (attempts < maxAttempts) {
         try {
