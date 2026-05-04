@@ -263,10 +263,8 @@ async function startServer() {
               config: {
                 systemInstruction,
                 temperature: 0,
-                thinkingConfig: thinkingLevel ? { 
-                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
-                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
-                                 ThinkingLevel.MINIMAL 
+                thinkingConfig: (thinkingLevel === 'HIGH' || thinkingLevel === 'LOW') ? { 
+                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : ThinkingLevel.LOW
                 } : undefined,
                 maxOutputTokens: 65536,
                 responseMimeType: "application/json",
