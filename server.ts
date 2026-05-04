@@ -255,11 +255,9 @@ async function startServer() {
       const jobStartTime = Date.now();
       let retryCount = 0;
       const MAX_RETRIES = 2;
-      const JOB_TIMEOUT_MS = 12 * 60 * 1000; // Increased to 12 minutes absolute timeout per job
-
-      // Global timeout for the entire job process
+      const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes as requested
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`Extraction timed out after 12 minutes. This document is too high-volume for a single pass. Try reducing the page range.`)), JOB_TIMEOUT_MS)
+        setTimeout(() => reject(new Error(`Extraction timed out after 10 minutes. This document is too high-volume for a single pass. Try reducing the page range.`)), JOB_TIMEOUT_MS)
       );
 
       const runExtraction = async (): Promise<void> => {

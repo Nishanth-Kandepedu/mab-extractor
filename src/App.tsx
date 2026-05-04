@@ -507,14 +507,19 @@ function AppContent() {
     };
 
     updateTimer();
-    const interval = setInterval(updateTimer, 1000);
 
-    // Visibility change listener to force update when returning to tab
     const handleVisibilityChange = () => {
-      if (!document.hidden) updateTimer();
+      if (!document.hidden) {
+        updateTimer();
+      }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Some browsers throttle intervals in background. 
+    // We can use a more frequent interval to catch up if needed, 
+    // or just rely on the wall clock calculation.
+    const interval = setInterval(updateTimer, 1000);
+    
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -1070,42 +1075,40 @@ function AppContent() {
       }
     }
 
+    // Status updates
     setState(prev => ({
       ...prev,
       batch: { ...prev.batch!, isProcessing: true, startTime: batchStartTime }
     }));
 
-    const currentLlmOptions = { ...llmOptions };
+    // Sequential loop through items
+    const items = [...state.batch.items];
+    const batchLlmOptions = { ...llmOptions };
     
-    // Loop through all items in the batch
-    const itemsCount = state.batch.items.length;
-    for (let i = 0; i < itemsCount; i++) {
-        // Refresh items list from the MOST RECENT state to handle dynamic updates
-        // We use a local closure for the index 'i' but we must check item status
-        // Since we are in the loop, we can just use the index.
-        const item = state.batch.items[i];
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         
+        // Skip already done (in case of re-run)
         if (item.status === 'completed') continue;
 
         let result;
         let attempts = 0;
-        const maxItemAttempts = 2; // Auto-retry once for transient failures
+        const maxItemAttempts = 2; 
 
         while (attempts < maxItemAttempts) {
           try {
-            const currentItemIdx = i; // local closure
+            const currentIdx = i;
             setState(prev => ({
               ...prev,
               batch: { 
                 ...prev.batch!, 
-                currentIndex: currentItemIdx, 
-                items: prev.batch!.items.map((it, idx) => idx === currentItemIdx ? { ...it, status: 'processing', error: undefined } : it) 
+                currentIndex: currentIdx, 
+                items: prev.batch!.items.map((it, idx) => idx === currentIdx ? { ...it, status: 'processing', error: undefined } : it) 
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
-            
-            // Read actual item file
+            setState(prev => ({ ...prev, extractingStatus: "Initializing neural mining..." }));
+
             const fileData = await readFileData(item.file);
             const itemStartTime = Date.now();
             
@@ -1120,7 +1123,7 @@ function AppContent() {
 
             result = await extractWithLLM(
               { data: fileData, mimeType: item.file.type }, 
-              currentLlmOptions, 
+              batchLlmOptions, 
               pageRange, 
               listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
               prioritySeqIds
