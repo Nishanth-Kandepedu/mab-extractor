@@ -1085,33 +1085,21 @@ function AppContent() {
               setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
             }, 60000);
 
-            // 10-minute timeout per patent as requested to handle "problematic" documents
-            const PATENT_TIMEOUT_MS = 10 * 60 * 1000;
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Skipped: Patent processing exceeded 10-minute limit. Skipping to next document.")), PATENT_TIMEOUT_MS)
+            result = await extractWithLLM(
+              { data: fileData, mimeType: item.file.type }, 
+              currentLlmOptions, 
+              pageRange, 
+              listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+              prioritySeqIds
             );
-
-            result = await Promise.race([
-              (async () => {
-                const extractionResult = await extractWithLLM(
-                  { data: fileData, mimeType: item.file.type }, 
-                  currentLlmOptions, 
-                  pageRange, 
-                  listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-                  prioritySeqIds
-                );
-                
-                // Enrichment for Batch Mode
-                await enrichResultsWithMetadata(extractionResult);
-                return extractionResult;
-              })(),
-              timeoutPromise
-            ]) as ExtractionResult;
             
             clearTimeout(statusTimer);
             clearTimeout(statusTimer2);
             const itemExtractionTime = Date.now() - itemStartTime;
             result.extractionTime = itemExtractionTime;
+
+            // Enrichment for Batch Mode
+            await enrichResultsWithMetadata(result);
 
             setState(prev => ({
               ...prev,
@@ -1139,10 +1127,9 @@ function AppContent() {
 
           } catch (error: any) {
             attempts++;
-            const isSkip = error.message?.startsWith('Skipped:');
-            const isTransient = !isSkip && (error.message?.toLowerCase().includes('capacity') || 
+            const isTransient = error.message?.toLowerCase().includes('capacity') || 
                                error.message?.toLowerCase().includes('overloaded') || 
-                               error.message?.toLowerCase().includes('timeout'));
+                               error.message?.toLowerCase().includes('timeout');
                                
             if (isTransient && attempts < maxItemAttempts) {
               console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}). Auto-retrying transient error in 5s...`, error);

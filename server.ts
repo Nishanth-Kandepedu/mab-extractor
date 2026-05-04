@@ -258,7 +258,7 @@ async function startServer() {
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
-              model: targetModel || 'gemini-3.1-pro-preview',
+              model: targetModel || 'gemini-1.5-pro',
               contents,
               config: {
                 systemInstruction,
@@ -266,7 +266,7 @@ async function startServer() {
                 thinkingConfig: (thinkingLevel === 'HIGH' || thinkingLevel === 'LOW') ? { 
                   thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : ThinkingLevel.LOW
                 } : undefined,
-                maxOutputTokens: 65536,
+                maxOutputTokens: 8192,
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
               },
