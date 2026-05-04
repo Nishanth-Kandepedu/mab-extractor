@@ -258,15 +258,17 @@ async function startServer() {
               : [{ role: 'user', parts: input }];
 
             const response = await ai.models.generateContent({
-              model: targetModel || 'gemini-1.5-pro',
+              model: targetModel || 'gemini-3.1-pro-preview',
               contents,
               config: {
                 systemInstruction,
                 temperature: 0,
-                thinkingConfig: (thinkingLevel === 'HIGH' || thinkingLevel === 'LOW') ? { 
-                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : ThinkingLevel.LOW
+                thinkingConfig: thinkingLevel ? { 
+                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
+                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
+                                 ThinkingLevel.MINIMAL 
                 } : undefined,
-                maxOutputTokens: 8192,
+                maxOutputTokens: 65536,
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
               },
