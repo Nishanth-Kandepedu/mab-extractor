@@ -241,15 +241,14 @@ async function startServer() {
       const jobStartTime = Date.now();
       let retryCount = 0;
       const MAX_RETRIES = 2;
-      const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minute timeout per user request
+      const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minute absolute timeout per job
+
+      // Global timeout for the entire job process
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`Job timed out after 10 minutes. This document may be too large or complex for a single pass.`)), JOB_TIMEOUT_MS)
+      );
 
       const runExtraction = async (): Promise<void> => {
-        // Create an AbortController for the internal fetch/AI calls if they support it
-        // For now we use a simple timeout race for the whole process
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Job timed out after 10 minutes. This document may be too large or complex for a single pass.`)), JOB_TIMEOUT_MS)
-        );
-
         const extractionPromise = (async () => {
           try {
             console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);

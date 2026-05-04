@@ -1129,6 +1129,7 @@ function AppContent() {
             attempts++;
             const isTransient = error.message?.toLowerCase().includes('capacity') || 
                                error.message?.toLowerCase().includes('overloaded') || 
+                               error.message?.toLowerCase().includes('not found') ||
                                error.message?.toLowerCase().includes('timeout');
                                
             if (isTransient && attempts < maxItemAttempts) {
@@ -1152,7 +1153,7 @@ function AppContent() {
 
        // Cooldown period between patents
        if (i < state.batch!.items.length - 1) {
-         const COOLDOWN_SECONDS = 10;
+         const COOLDOWN_SECONDS = 30;
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,

@@ -36,9 +36,11 @@ IMPORTANT EXTRACTION RULES:
 5. Table Structure & Coverage (Chinese Patent Context):
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., 表 1, 表 4, Table 6) before processing summarizing text. Tables are the source of truth.
     - CHINESE HEADERS: Recognize "抗体编号" (mAb ID), "可变区序列" (Variable Region Seq), "氨基酸序列" (AA Seq), "序列编号" (SEQ ID NO).
-    - Some antibodies may have their sequences split across multiple rows or pages. Ensure you capture the COMPLETE Variable Domain sequence.
+    - HIGH CLONE COUNT (30+): Many Chinese patents contain 30-50+ antibodies in a single table. You MUST extract ALL of them. 
+    - TOKEN-SAVING STRATEGY: If a patent has 30+ antibodies, keep descriptions in the "summary" field extremely short (e.g. "Anti-CLL-1 VHH") to prioritize the literal sequences and mAb IDs.
+    - EXTENDED TABLES: Some antibodies may have their sequences split across multiple rows or pages. Ensure you capture the COMPLETE Variable Domain sequence.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans 10+ pages, continue extraction until the end of the table.
-    - FOR 100+ CLONES: Maintain high throughput. Use very concise descriptions in the "summary" field (max 10 words) to save output budget for sequences. You MUST represent every unique mAb ID found in the primary sequence tables.
+    - VERBATIM ACCURACY: Verbatim mining of sequences is your top priority.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" (序列编号) for every sequence found.
@@ -699,6 +701,9 @@ async function executeLLMJob(payload: string): Promise<any> {
           const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
               cache: 'no-store'
           });
+          if (statusResponse.status === 404) {
+            throw new Error(`Job ${jobId} not found on server. This can happen if the background process restarted. Retrying extraction...`);
+          }
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
             await new Promise(resolve => setTimeout(resolve, 5000));
