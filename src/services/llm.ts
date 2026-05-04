@@ -41,7 +41,7 @@ IMPORTANT EXTRACTION RULES:
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
     - FOR 30+ CLONES: To prevent 8k token overflows and 1-hour session timeouts, you MUST use "COMPACT JSON" style. Use keyword-only entries for "summary", "epitope", and "antibodyOrigin". Do not write full sentences. Prioritize valid sequence data above all else. 
     - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM").
-    - FOR 50+ CLONES (HIGH VOLUME): You MUST use "NANO-JSON" strategy. Use extremely short fields: "summary" (max 2 words), "evidenceStatement" (e.g., "p11 T1"), and omit redunant target info for subsequent clones. The goal is to fit all sequences into the output window.
+    - FOR 50+ CLONES (HIGH VOLUME): Coverage is the Priority. Use "NANO-JSON": mAbName, SEQ IDs, and Sequences MUST be 100% accurate, but "summary" and "epitope" fields should be keyword-only (max 2 words). Omit shared metadata. This prevents output truncation and maximizes throughput.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
@@ -401,7 +401,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : "MINIMAL",
+      thinkingLevel: (model?.includes('3.1') || isGemma4) ? (options.isExtendedMode ? "HIGH" : "LOW") : undefined,
       responseSchema: responseSchema,
     });
 
@@ -705,8 +705,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 3 hours (2160 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
-    const maxAttempts = 2160; 
+    // Reduced to 30 mins (360 attempts * 5s) - 3 hours was too aggressive and likely hitting platform limits
+    const maxAttempts = 360; 
 
     while (attempts < maxAttempts) {
         try {
