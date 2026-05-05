@@ -39,14 +39,14 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 10 at a time
-const limit = pLimit(10);
+// Concurrency control: Limit heavy LLM extractions to 2 at a time to prevent OOM
+const limit = pLimit(2);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
 
 async function getJob(jobId: string) {
-  // Always check cache first for speed
+  // Try cache first
   if (jobsCache.has(jobId)) return jobsCache.get(jobId);
   
   if (db) {
@@ -54,25 +54,30 @@ async function getJob(jobId: string) {
       const doc = await db.collection('extraction_jobs').doc(jobId).get();
       if (doc.exists) {
         const data = doc.data();
+        // Sync to cache
         jobsCache.set(jobId, data);
         return data;
       }
     } catch (e) {
-      console.error(`[Firebase] Error fetching job ${jobId}:`, e);
+      console.error(`[Firestore] Error fetching job ${jobId}:`, e);
     }
   }
   return null;
 }
 
 async function updateJob(jobId: string, data: any) {
-  const updated = { ...data, updatedAt: Date.now() };
+  const now = Date.now();
+  const existing = await getJob(jobId) || {};
+  const updated = { ...existing, ...data, updatedAt: now };
+  
+  // Keep memory cache updated
   jobsCache.set(jobId, updated);
   
   if (db) {
     try {
       await db.collection('extraction_jobs').doc(jobId).set(updated, { merge: true });
     } catch (e) {
-      console.error(`[Firebase] Error updating job ${jobId}:`, e);
+      console.error(`[Firestore] Error updating job ${jobId}:`, e);
     }
   }
 }
@@ -240,13 +245,23 @@ async function startServer() {
     limit(async () => {
       const jobStartTime = Date.now();
       let retryCount = 0;
-      const MAX_RETRIES = 2;
+      const MAX_RETRIES = 1; // Reduced retries for speed
+      const JOB_DEADLINE = 1800000; // 30 mins hard deadline
 
       const runExtraction = async (): Promise<void> => {
+        let heartbeatInterval: NodeJS.Timeout | null = null;
+        
         try {
-          console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
+          console.log(`[Job ${jobId}] Starting attempt ${retryCount + 1}`);
+          await updateJob(jobId, { status: 'processing', heartbeat: Date.now() });
 
-          if (provider === 'gemini' || provider === 'gemma') {
+          // Background heartbeat to prevent stale detection
+          heartbeatInterval = setInterval(async () => {
+            await updateJob(jobId, { heartbeat: Date.now() });
+          }, 60000);
+
+          const extractionPromise = (async () => {
+            if (provider === 'gemini' || provider === 'gemma') {
             const apiKey = findKey('GEMINI_API_KEY');
             if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
 
@@ -353,7 +368,14 @@ async function startServer() {
               };
             }
             await updateJob(jobId, { status: 'completed', result });
-          }
+            }
+          })();
+
+          const deadlinePromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Internal Deadline: Extraction exceeded 30 minute limit.")), JOB_DEADLINE)
+          );
+
+          await Promise.race([extractionPromise, deadlinePromise]);
         } catch (error: any) {
           const errorMessage = error.message || String(error);
           const lowerError = errorMessage.toLowerCase();
@@ -397,6 +419,17 @@ async function startServer() {
     const { jobId } = req.params;
     const job = await getJob(jobId);
     if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    // Check for stale jobs (Processing but no heartbeat for 10 minutes)
+    if (job.status === 'processing' && job.heartbeat) {
+      const STALE_TIMEOUT = 600000; // 10 minutes
+      if (Date.now() - job.heartbeat > STALE_TIMEOUT) {
+        const timeoutError = "The extraction process was interrupted on the server. This often happens due to memory limits with extremely large documents. Please try again with a smaller page range or enable 'Extended Mode'.";
+        await updateJob(jobId, { status: 'failed', error: timeoutError });
+        return res.json({ ...job, status: 'failed', error: timeoutError });
+      }
+    }
+
     res.json(job);
   });
 

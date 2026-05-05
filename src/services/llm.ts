@@ -720,6 +720,16 @@ async function executeLLMJob(payload: string, timeoutMs: number = 600000, signal
               cache: 'no-store',
               signal
           });
+          
+          if (statusResponse.status === 404) {
+            // Transient 404: The server might be slow to write the job state to disk/Firestore
+            if (attempts > 5) throw new Error("Job state lost. The server may have restarted.");
+            console.warn(`[Extraction] Job ${jobId} not found yet. Retrying...`);
+            await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+            attempts++;
+            continue;
+          }
+
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
             await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));

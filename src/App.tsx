@@ -1097,16 +1097,26 @@ function AppContent() {
             const controller = new AbortController();
             batchAbortController.current = controller;
 
-            result = await extractWithLLM(
-              { data: fileData, mimeType: item.file.type }, 
-              currentLlmOptions, 
-              pageRange, 
-              listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-              prioritySeqIds,
-              controller.signal
-            );
-            
-            batchAbortController.current = null;
+            // Front-end safety timeout: 35 minutes
+            const FE_SAFETY_TIMEOUT = 2100000;
+            const feTimeout = setTimeout(() => {
+              controller.abort();
+              console.error("[Batch] Item timed out (frontend safety trigger).");
+            }, FE_SAFETY_TIMEOUT);
+
+            try {
+              result = await extractWithLLM(
+                { data: fileData, mimeType: item.file.type }, 
+                currentLlmOptions, 
+                pageRange, 
+                listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+                prioritySeqIds,
+                controller.signal
+              );
+            } finally {
+              clearTimeout(feTimeout);
+              batchAbortController.current = null;
+            }
             clearTimeout(statusTimer);
             clearTimeout(statusTimer2);
             const itemExtractionTime = Date.now() - itemStartTime;
