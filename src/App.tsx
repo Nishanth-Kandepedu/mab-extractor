@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe, FastForward } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
-import { getPdfPages, getPdfPageCount } from './lib/pdf';
 import { fetchTargetMetadata } from './services/uniprot';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
@@ -196,7 +195,6 @@ function AppContent() {
   const [requestStatus, setRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const intendedRoleRef = React.useRef<string | null>(null);
-  const batchAbortController = React.useRef<AbortController | null>(null);
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
@@ -937,29 +935,13 @@ function AppContent() {
         });
       };
 
-      let fileData = await readFile(file);
-      
-      // Local Crop for Single Mode
-      if (file.type === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
-        setState(prev => ({ ...prev, extractingStatus: "Optimizing PDF (Local Crop)..." }));
-        try {
-          fileData = await getPdfPages(fileData, pageRange);
-          console.log(`[Single] Local crop applied. Reduced payload.`);
-        } catch (cropErr) {
-          console.warn("[Single] Local crop failed.", cropErr);
-        }
-      }
-
+      const fileData = await readFile(file);
       let listingData: string | undefined;
       let listingMimeType: string | undefined;
 
       if (sequenceListingFile) {
         listingData = await readFile(sequenceListingFile);
         listingMimeType = sequenceListingFile.type;
-        
-        if (listingMimeType === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
-           try { listingData = await getPdfPages(listingData, pageRange); } catch (e) {}
-        }
       }
       
       const startTime = Date.now();
@@ -1037,14 +1019,6 @@ function AppContent() {
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
 
-  const handleSkipItem = () => {
-    if (batchAbortController.current) {
-      console.log("[Batch] User requested skip of current item.");
-      batchAbortController.current.abort();
-      batchAbortController.current = null;
-    }
-  };
-
   const runBatch = useCallback(async () => {
     if (!state.batch || state.batch.items.length === 0) return;
     if (state.batch.isProcessing) return; // Prevent double trigger
@@ -1072,12 +1046,6 @@ function AppContent() {
 
         while (attempts < maxItemAttempts) {
           try {
-            // Check for explicit cancel or skip signals via signal or state
-            if (batchAbortController.current?.signal.aborted) {
-               console.log("[Batch] Abort signal caught in loop.");
-               break;
-            }
-
             setState(prev => ({
               ...prev,
               batch: { 
@@ -1087,8 +1055,7 @@ function AppContent() {
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: "Analyzing document structure..." }));
-            
+            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
             const readFileData = (f: File): Promise<string> => {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1098,33 +1065,13 @@ function AppContent() {
               });
             };
 
-            let fileData = await readFileData(item.file);
+            const fileData = await readFileData(item.file);
             
-            // Systemic Optimization: Client-side PDF cropping
-            // If pageRange is specified, crop the PDF locally before sending to server
-            // This massively reduces upload time and server memory strain for large docs
-            if (item.file.type === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
-              setState(prev => ({ ...prev, extractingStatus: "Preparing document sections..." }));
-              try {
-                fileData = await getPdfPages(fileData, pageRange);
-                console.log(`[Batch] Local crop applied for ${item.id}. Reduced to range: ${pageRange}`);
-              } catch (cropErr) {
-                console.warn("[Batch] Local crop failed, using original full PDF.", cropErr);
-              }
-            }
-
             let listingData: string | undefined;
             let listingMimeType: string | undefined;
             if (sequenceListingFile) {
               listingData = await readFileData(sequenceListingFile);
               listingMimeType = sequenceListingFile.type;
-
-              // Also crop sequence listing if applicable
-              if (listingMimeType === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
-                try {
-                  listingData = await getPdfPages(listingData, pageRange);
-                } catch (e) {}
-              }
             }
 
             const itemStartTime = Date.now();
@@ -1138,29 +1085,14 @@ function AppContent() {
               setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
             }, 60000);
 
-            const controller = new AbortController();
-            batchAbortController.current = controller;
-
-            // Front-end safety timeout: 35 minutes
-            const FE_SAFETY_TIMEOUT = 2100000;
-            const feTimeout = setTimeout(() => {
-              controller.abort();
-              console.error("[Batch] Item timed out (frontend safety trigger).");
-            }, FE_SAFETY_TIMEOUT);
-
-            try {
-              result = await extractWithLLM(
-                { data: fileData, mimeType: item.file.type }, 
-                currentLlmOptions, 
-                pageRange, 
-                listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-                prioritySeqIds,
-                controller.signal
-              );
-            } finally {
-              clearTimeout(feTimeout);
-              batchAbortController.current = null;
-            }
+            result = await extractWithLLM(
+              { data: fileData, mimeType: item.file.type }, 
+              currentLlmOptions, 
+              pageRange, 
+              listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
+              prioritySeqIds
+            );
+            
             clearTimeout(statusTimer);
             clearTimeout(statusTimer2);
             const itemExtractionTime = Date.now() - itemStartTime;
@@ -1976,17 +1908,9 @@ function AppContent() {
                       Cooling system: Resuming in {state.batch.cooldownRemaining}s...
                     </span>
                   ) : state.batch.isProcessing ? (
-                    <div className="flex items-center gap-4">
-                       <span className="text-indigo-400 font-black whitespace-nowrap">Processing {state.batch.currentIndex + 1}/{state.batch.items.length}</span>
-                       <span className="text-zinc-400 truncate max-w-[150px]">{state.batch.items[state.batch.currentIndex]?.id}</span>
-                       <button
-                         onClick={handleSkipItem}
-                         className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-red-500/20 active:scale-95 ml-2"
-                         title="Skip current patent and move to next"
-                       >
-                         <FastForward className="w-3 h-3" />
-                         Skip Current
-                       </button>
+                    <div className="flex items-center gap-2">
+                       <span className="text-indigo-400 font-black">Processing {state.batch.currentIndex + 1}/{state.batch.items.length}</span>
+                       <span className="text-zinc-400 truncate max-w-[200px]">{state.batch.items[state.batch.currentIndex]?.id}</span>
                     </div>
                   ) : (
                     <span className="text-emerald-400 font-black">Consolidation Ready</span>

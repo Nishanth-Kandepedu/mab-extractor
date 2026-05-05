@@ -39,8 +39,8 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 2 at a time to prevent OOM
-const limit = pLimit(2);
+// Concurrency control: Limit heavy LLM extractions to 2 at a time
+const limit = pLimit(4);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -54,30 +54,25 @@ async function getJob(jobId: string) {
       const doc = await db.collection('extraction_jobs').doc(jobId).get();
       if (doc.exists) {
         const data = doc.data();
-        // Sync to cache
         jobsCache.set(jobId, data);
         return data;
       }
     } catch (e) {
-      console.error(`[Firestore] Error fetching job ${jobId}:`, e);
+      console.error(`[Firebase] Error fetching job ${jobId}:`, e);
     }
   }
   return null;
 }
 
 async function updateJob(jobId: string, data: any) {
-  const now = Date.now();
-  const existing = await getJob(jobId) || {};
-  const updated = { ...existing, ...data, updatedAt: now };
-  
-  // Keep memory cache updated
+  const updated = { ...data, updatedAt: Date.now() };
   jobsCache.set(jobId, updated);
   
   if (db) {
     try {
       await db.collection('extraction_jobs').doc(jobId).set(updated, { merge: true });
     } catch (e) {
-      console.error(`[Firestore] Error updating job ${jobId}:`, e);
+      console.error(`[Firebase] Error updating job ${jobId}:`, e);
     }
   }
 }
@@ -245,135 +240,112 @@ async function startServer() {
     limit(async () => {
       const jobStartTime = Date.now();
       let retryCount = 0;
-      const MAX_RETRIES = 1; // Reduced retries for speed
-      const JOB_DEADLINE = 1800000; // 30 mins hard deadline
+      const MAX_RETRIES = 2;
 
       const runExtraction = async (): Promise<void> => {
-        let heartbeatInterval: NodeJS.Timeout | null = null;
-
         try {
-          console.log(`[Job ${jobId}] Starting attempt ${retryCount + 1}`);
-          await updateJob(jobId, { status: 'processing', heartbeat: Date.now() });
+          console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
-          // Background heartbeat to prevent stale detection while model works
-          heartbeatInterval = setInterval(async () => {
-            try {
-              await updateJob(jobId, { heartbeat: Date.now() });
-            } catch (hErr) {
-              console.error(`[Job ${jobId}] Heartbeat update failed:`, hErr);
-            }
-          }, 60000);
+          if (provider === 'gemini' || provider === 'gemma') {
+            const apiKey = findKey('GEMINI_API_KEY');
+            if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
 
-          const extractionTask = (async () => {
-            if (provider === 'gemini' || provider === 'gemma') {
-              const apiKey = findKey('GEMINI_API_KEY');
-              if (!apiKey || apiKey === 'undefined') throw new Error('Missing Gemini API Key.');
+            const ai = new GoogleGenAI({ apiKey });
+            
+            // Unify request structure for all Gemini/Gemma models
+            const contents = typeof input === 'string' 
+              ? [{ role: 'user', parts: [{ text: input }] }] 
+              : [{ role: 'user', parts: input }];
 
-              const ai = new GoogleGenAI({ apiKey });
-              
-              const contents = typeof input === 'string' 
-                ? [{ role: 'user', parts: [{ text: input }] }] 
-                : [{ role: 'user', parts: input }];
-
-              const generatePromise = ai.models.generateContent({
-                model: targetModel || 'gemini-3.1-pro-preview',
-                contents,
-                config: {
-                  systemInstruction,
-                  temperature: 0,
-                  thinkingConfig: thinkingLevel ? { 
-                    thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
-                                  thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
-                                  ThinkingLevel.MINIMAL 
-                  } : undefined,
-                  maxOutputTokens: 65536,
-                  responseMimeType: "application/json",
-                  responseSchema: responseSchema,
-                },
-              });
-
-              // Allow 25 minutes for the AI call itself
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 1500000));
-              const response = await Promise.race([generatePromise, timeoutPromise]) as any;
-
-              const text = response.text;
-              const usage = response.usageMetadata;
-              
-              if (!text) throw new Error("Empty response from AI engine");
-              
-              const result = extractJson(text);
-              const count = result.antibodies?.length || 0;
-              console.log(`[Job ${jobId}] Extracted ${count} antibodies successfully`);
-              
-              if (usage) {
-                result.usageMetadata = {
-                  promptTokenCount: usage.promptTokenCount,
-                  candidatesTokenCount: usage.candidatesTokenCount,
-                  thinkingTokenCount: (usage as any).thinkingTokenCount,
-                  cachedContentTokenCount: (usage as any).cachedContentTokenCount,
-                  totalTokenCount: usage.totalTokenCount
-                };
-              }
-              
-              await updateJob(jobId, { status: 'completed', result });
-            } else if (provider === 'openai') {
-              const apiKey = findKey('OPENAI_API_KEY');
-              if (!apiKey) throw new Error('Missing OpenAI API Key.');
-              const openai = new OpenAI({ apiKey });
-              const generatePromise = openai.chat.completions.create({
-                model: model || 'gpt-4o',
-                messages: [
-                  { role: 'system', content: systemInstruction },
-                  { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
-                ],
-                response_format: { type: 'json_object' },
+            const response = await ai.models.generateContent({
+              model: targetModel || 'gemini-3.1-pro-preview',
+              contents,
+              config: {
+                systemInstruction,
                 temperature: 0,
-              });
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 600000));
-              const response = await Promise.race([generatePromise, timeoutPromise]) as any;
-              const content = response.choices[0].message.content || '{}';
-              const usage = response.usage;
-              const result = extractJson(content);
-              if (usage) {
-                result.usageMetadata = {
-                  promptTokenCount: usage.prompt_tokens,
-                  candidatesTokenCount: usage.completion_tokens,
-                  totalTokenCount: usage.total_tokens
-                };
-              }
-              await updateJob(jobId, { status: 'completed', result });
-            } else if (provider === 'anthropic') {
-              const apiKey = findKey('ANTHROPIC_API_KEY');
-              if (!apiKey) throw new Error('Missing Anthropic API Key.');
-              const anthropic = new Anthropic({ apiKey });
-              const generatePromise = anthropic.messages.create({
-                model: model || 'claude-3-5-sonnet-latest',
-                max_tokens: 4096,
-                system: systemInstruction,
-                messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
-                temperature: 0,
-              });
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 600000));
-              const response = await Promise.race([generatePromise, timeoutPromise]) as any;
-              const content = response.content[0].type === 'text' ? response.content[0].text : '';
-              const usage = response.usage;
-              const result = extractJson(content || '{}');
-              if (usage) {
-                result.usageMetadata = {
-                  promptTokenCount: usage.input_tokens,
-                  candidatesTokenCount: usage.output_tokens,
-                  totalTokenCount: usage.input_tokens + usage.output_tokens
-                };
-              }
-              await updateJob(jobId, { status: 'completed', result });
+                thinkingConfig: thinkingLevel ? { 
+                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
+                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
+                                 ThinkingLevel.MINIMAL 
+                } : undefined,
+                maxOutputTokens: 65536,
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+              },
+            });
+
+            const text = response.text;
+            const usage = response.usageMetadata;
+            
+            if (!text) throw new Error("Empty response from AI engine");
+            
+            const result = extractJson(text);
+            const count = result.antibodies?.length || 0;
+            console.log(`[Job ${jobId}] Extracted ${count} antibodies successfully`);
+            
+            if (!result.antibodies || result.antibodies.length === 0) {
+              console.warn(`[Job ${jobId}] Model returned 0 antibodies. Raw text snippet: ${text.substring(0, 500)}`);
+              // We don't throw here to let the UI show 0 results, but we log it for debug
             }
-          })();
 
-          const deadlinePromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Internal Deadline: Extraction exceeded 30 minute limit.")), JOB_DEADLINE)
-          );
-
-          await Promise.race([extractionTask, deadlinePromise]);
+            if (usage) {
+              result.usageMetadata = {
+                promptTokenCount: usage.promptTokenCount,
+                candidatesTokenCount: usage.candidatesTokenCount,
+                thinkingTokenCount: (usage as any).thinkingTokenCount,
+                cachedContentTokenCount: (usage as any).cachedContentTokenCount,
+                totalTokenCount: usage.totalTokenCount
+              };
+            }
+            
+            await updateJob(jobId, { status: 'completed', result });
+          } else if (provider === 'openai') {
+            const apiKey = findKey('OPENAI_API_KEY');
+            if (!apiKey) throw new Error('Missing OpenAI API Key.');
+            const openai = new OpenAI({ apiKey });
+            const response = await openai.chat.completions.create({
+              model: model || 'gpt-4o',
+              messages: [
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0,
+            });
+            const content = response.choices[0].message.content || '{}';
+            const usage = response.usage;
+            const result = extractJson(content);
+            if (usage) {
+              result.usageMetadata = {
+                promptTokenCount: usage.prompt_tokens,
+                candidatesTokenCount: usage.completion_tokens,
+                totalTokenCount: usage.total_tokens
+              };
+            }
+            await updateJob(jobId, { status: 'completed', result });
+          } else if (provider === 'anthropic') {
+            const apiKey = findKey('ANTHROPIC_API_KEY');
+            if (!apiKey) throw new Error('Missing Anthropic API Key.');
+            const anthropic = new Anthropic({ apiKey });
+            const response = await anthropic.messages.create({
+              model: model || 'claude-3-5-sonnet-latest',
+              max_tokens: 4096,
+              system: systemInstruction,
+              messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
+              temperature: 0,
+            });
+            const content = response.content[0].type === 'text' ? response.content[0].text : '';
+            const usage = response.usage;
+            const result = extractJson(content || '{}');
+            if (usage) {
+              result.usageMetadata = {
+                promptTokenCount: usage.input_tokens,
+                candidatesTokenCount: usage.output_tokens,
+                totalTokenCount: usage.input_tokens + usage.output_tokens
+              };
+            }
+            await updateJob(jobId, { status: 'completed', result });
+          }
         } catch (error: any) {
           const errorMessage = error.message || String(error);
           const lowerError = errorMessage.toLowerCase();
@@ -417,17 +389,6 @@ async function startServer() {
     const { jobId } = req.params;
     const job = await getJob(jobId);
     if (!job) return res.status(404).json({ error: 'Job not found' });
-    
-    // Check for stale jobs (Processing but no heartbeat for 10 minutes)
-    if (job.status === 'processing' && job.heartbeat) {
-      const STALE_TIMEOUT = 600000; // 10 minutes
-      if (Date.now() - job.heartbeat > STALE_TIMEOUT) {
-        const timeoutError = "The extraction process was interrupted on the server. This often happens due to memory limits with extremely large documents. Please try again with a smaller page range or enable 'Extended Mode'.";
-        await updateJob(jobId, { status: 'failed', error: timeoutError });
-        return res.json({ ...job, status: 'failed', error: timeoutError });
-      }
-    }
-
     res.json(job);
   });
 

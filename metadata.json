@@ -1,5 +1,5 @@
 {
   "name": "AbMiner",
-  "description": "The Neural Extraction Engine for Patents. High-fidelity antibody sequence mining with systemic resilience and batch processing.",
+  "description": "High-quality AI mining of antibody sequences and evidence from patent documents.",
   "requestFramePermissions": []
 }
