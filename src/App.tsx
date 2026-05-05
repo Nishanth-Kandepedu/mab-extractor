@@ -1127,9 +1127,10 @@ function AppContent() {
 
           } catch (error: any) {
             attempts++;
+            const isTimeout = error.message?.toLowerCase().includes('timeout');
             const isTransient = error.message?.toLowerCase().includes('capacity') || 
                                error.message?.toLowerCase().includes('overloaded') || 
-                               error.message?.toLowerCase().includes('timeout');
+                               isTimeout;
                                
             if (isTransient && attempts < maxItemAttempts) {
               const baseDelay = Math.pow(2, attempts - 1) * 5000;
@@ -1142,15 +1143,24 @@ function AppContent() {
               continue;
             }
 
+            // Batch Triage: If still failing or it was a timeout, mark specifically for Triage/Extended Mode
+            const failureReason = isTimeout 
+              ? 'Timeout: Requires Extended Mode' 
+              : (error.message || String(error));
+
             console.error(`[Batch] Item ${item.id} failed permanently after ${attempts} attempts:`, error);
             setState(prev => ({
               ...prev,
               batch: {
                 ...prev.batch!,
-                items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'error', error: error.message || String(error) } : it)
+                items: prev.batch!.items.map((it, idx) => idx === i ? { 
+                  ...it, 
+                  status: 'error', 
+                  error: failureReason 
+                } : it)
               }
             }));
-            break; // Stop retrying this item
+            break; // Stop retrying this item, move to the next in queue
           }
         }
 
