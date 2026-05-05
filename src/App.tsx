@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import ReactGA from 'react-ga4';
-import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe } from 'lucide-react';
+import { FileText, Upload, Database, Download, AlertCircle, Loader2, ChevronRight, Search, FileUp, Copy, Check, LogIn, LogOut, History, Save, Table, User as UserIcon, RotateCcw, ExternalLink, X, Clock, Coins, ArrowUpRight, ArrowDownLeft, Activity, Beaker, CheckCircle2, Zap, CircleDollarSign, Layers, Fingerprint, Settings, Globe, FastForward } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
@@ -195,6 +195,7 @@ function AppContent() {
   const [requestStatus, setRequestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const intendedRoleRef = React.useRef<string | null>(null);
+  const batchAbortController = React.useRef<AbortController | null>(null);
 
   const [timer, setTimer] = useState(0);
   const [sessionLogged, setSessionLogged] = useState(false);
@@ -1019,6 +1020,14 @@ function AppContent() {
     }
   }, [llmOptions, pageRange, sequenceListingFile, prioritySeqIds, user]);
 
+  const handleSkipItem = () => {
+    if (batchAbortController.current) {
+      console.log("[Batch] User requested skip of current item.");
+      batchAbortController.current.abort();
+      batchAbortController.current = null;
+    }
+  };
+
   const runBatch = useCallback(async () => {
     if (!state.batch || state.batch.items.length === 0) return;
     if (state.batch.isProcessing) return; // Prevent double trigger
@@ -1085,14 +1094,19 @@ function AppContent() {
               setState(prev => ({ ...prev, extractingStatus: "Validating multiple antibody entries..." }));
             }, 60000);
 
+            const controller = new AbortController();
+            batchAbortController.current = controller;
+
             result = await extractWithLLM(
               { data: fileData, mimeType: item.file.type }, 
               currentLlmOptions, 
               pageRange, 
               listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
-              prioritySeqIds
+              prioritySeqIds,
+              controller.signal
             );
             
+            batchAbortController.current = null;
             clearTimeout(statusTimer);
             clearTimeout(statusTimer2);
             const itemExtractionTime = Date.now() - itemStartTime;
@@ -1908,9 +1922,17 @@ function AppContent() {
                       Cooling system: Resuming in {state.batch.cooldownRemaining}s...
                     </span>
                   ) : state.batch.isProcessing ? (
-                    <div className="flex items-center gap-2">
-                       <span className="text-indigo-400 font-black">Processing {state.batch.currentIndex + 1}/{state.batch.items.length}</span>
-                       <span className="text-zinc-400 truncate max-w-[200px]">{state.batch.items[state.batch.currentIndex]?.id}</span>
+                    <div className="flex items-center gap-4">
+                       <span className="text-indigo-400 font-black whitespace-nowrap">Processing {state.batch.currentIndex + 1}/{state.batch.items.length}</span>
+                       <span className="text-zinc-400 truncate max-w-[150px]">{state.batch.items[state.batch.currentIndex]?.id}</span>
+                       <button
+                         onClick={handleSkipItem}
+                         className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-red-500/20 active:scale-95 ml-2"
+                         title="Skip current patent and move to next"
+                       >
+                         <FastForward className="w-3 h-3" />
+                         Skip Current
+                       </button>
                     </div>
                   ) : (
                     <span className="text-emerald-400 font-black">Consolidation Ready</span>

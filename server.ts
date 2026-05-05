@@ -39,8 +39,8 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 2 at a time
-const limit = pLimit(4);
+// Concurrency control: Limit heavy LLM extractions to 10 at a time
+const limit = pLimit(10);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -257,7 +257,7 @@ async function startServer() {
               ? [{ role: 'user', parts: [{ text: input }] }] 
               : [{ role: 'user', parts: input }];
 
-            const response = await ai.models.generateContent({
+            const generatePromise = ai.models.generateContent({
               model: targetModel || 'gemini-3.1-pro-preview',
               contents,
               config: {
@@ -273,6 +273,10 @@ async function startServer() {
                 responseSchema: responseSchema,
               },
             });
+
+            // Implement a server-side timeout race for the AI call (e.g., 20 minutes)
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 1200000));
+            const response = await Promise.race([generatePromise, timeoutPromise]) as any;
 
             const text = response.text;
             const usage = response.usageMetadata;
@@ -303,7 +307,7 @@ async function startServer() {
             const apiKey = findKey('OPENAI_API_KEY');
             if (!apiKey) throw new Error('Missing OpenAI API Key.');
             const openai = new OpenAI({ apiKey });
-            const response = await openai.chat.completions.create({
+            const generatePromise = openai.chat.completions.create({
               model: model || 'gpt-4o',
               messages: [
                 { role: 'system', content: systemInstruction },
@@ -312,6 +316,8 @@ async function startServer() {
               response_format: { type: 'json_object' },
               temperature: 0,
             });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 600000));
+            const response = await Promise.race([generatePromise, timeoutPromise]) as any;
             const content = response.choices[0].message.content || '{}';
             const usage = response.usage;
             const result = extractJson(content);
@@ -327,13 +333,15 @@ async function startServer() {
             const apiKey = findKey('ANTHROPIC_API_KEY');
             if (!apiKey) throw new Error('Missing Anthropic API Key.');
             const anthropic = new Anthropic({ apiKey });
-            const response = await anthropic.messages.create({
+            const generatePromise = anthropic.messages.create({
               model: model || 'claude-3-5-sonnet-latest',
               max_tokens: 4096,
               system: systemInstruction,
               messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
               temperature: 0,
             });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("AI generation timed out on the server.")), 600000));
+            const response = await Promise.race([generatePromise, timeoutPromise]) as any;
             const content = response.content[0].type === 'text' ? response.content[0].text : '';
             const usage = response.usage;
             const result = extractJson(content || '{}');

@@ -62,10 +62,11 @@ export async function getPdfPages(base64Data: string, range: string): Promise<st
     const newBytes = await newDoc.save();
     
     // 3. Convert back to base64 safely (avoid String.fromCharCode(...newBytes) stack error)
-    let binary = '';
     const len = newBytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(newBytes[i]);
+    const CHUNK_SIZE = 8192;
+    let binary = '';
+    for (let i = 0; i < len; i += CHUNK_SIZE) {
+      binary += String.fromCharCode.apply(null, Array.from(newBytes.subarray(i, i + CHUNK_SIZE)) as any);
     }
     return btoa(binary);
   } catch (e) {

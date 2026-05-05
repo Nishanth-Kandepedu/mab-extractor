@@ -246,7 +246,8 @@ export async function extractWithLLM(
   options: LLMOptions,
   pageContext?: string,
   sequenceListing?: { data: string; mimeType: string },
-  prioritySeqIds?: string
+  prioritySeqIds?: string,
+  signal?: AbortSignal
 ): Promise<ExtractionResult> {
   if (!input || (typeof input === 'string' && input.trim().length === 0)) {
     throw new Error("Input text is required for extraction.");
@@ -397,12 +398,14 @@ export async function extractWithLLM(
       responseSchema: responseSchema,
     });
 
-    console.log(`[Extraction] Initiating fetch. Payload size: ${payload.length} bytes`);
+    console.log(`[Extraction] Initiating fetch. Payload size: ${payload.length} bytes. Mode: ${options.isExtendedMode ? 'Extended' : 'Normal'}`);
     if (payload.length > 1000000) {
       console.warn("[Extraction] Payload size exceeds 1MB. This may be blocked by some proxies on custom domains.");
     }
 
-    const { patentId, patentTitle, antibodies, usageMetadata } = await executeLLMJob(payload);
+    // Increased timeout: 30 mins for extended mode, 15 mins for normal
+    const timeoutMs = options.isExtendedMode ? 1800000 : 900000;
+    const { patentId, patentTitle, antibodies, usageMetadata } = await executeLLMJob(payload, timeoutMs, signal);
   
   // Post-processing and Validation
   const result: ExtractionResult = {
@@ -659,18 +662,24 @@ export async function extractWithLLM(
 /**
  * Shared helper for executing an extraction job and polling for completion.
  */
-async function executeLLMJob(payload: string): Promise<any> {
+async function executeLLMJob(payload: string, timeoutMs: number = 600000, signal?: AbortSignal): Promise<any> {
     const baseUrl = window.location.origin;
+    const startTime = Date.now();
     let startResponse: Response | null = null;
     let postAttempts = 0;
-    const maxPostAttempts = 5; // Increased retries
+    const maxPostAttempts = 5;
 
     while (postAttempts < maxPostAttempts) {
+        if (signal?.aborted) throw new Error("Operation cancelled by user.");
+        if (Date.now() - startTime > timeoutMs) {
+            throw new Error("Timeout: Failed to initiate extraction within the allowed time window.");
+        }
         try {
             startResponse = await fetch('/api/extract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: payload,
+                signal
             });
             
             if (startResponse.status === 429 || startResponse.status === 503) {
@@ -680,9 +689,10 @@ async function executeLLMJob(payload: string): Promise<any> {
             }
             break;
         } catch (postError: any) {
+            if (postError.name === 'AbortError') throw postError;
             postAttempts++;
             if (postAttempts < maxPostAttempts) {
-                const backoff = Math.pow(2, postAttempts - 1) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
+                const backoff = Math.pow(2, postAttempts - 1) * 2000;
                 await new Promise(resolve => setTimeout(resolve, backoff));
             } else {
                 throw postError;
@@ -697,17 +707,22 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 60 mins (720 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
-    const maxAttempts = 720; 
+    const POLLING_INTERVAL = 5000;
+    const maxAttempts = Math.ceil(timeoutMs / POLLING_INTERVAL); 
 
     while (attempts < maxAttempts) {
+        if (signal?.aborted) throw new Error("Operation cancelled by user.");
+        if (Date.now() - startTime > timeoutMs) {
+            throw new Error(`Timeout: Extraction job ${jobId} exceeded the ${Math.round(timeoutMs/60000)} minute time limit.`);
+        }
         try {
           const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
-              cache: 'no-store'
+              cache: 'no-store',
+              signal
           });
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
             attempts++;
             continue;
           }
@@ -720,6 +735,7 @@ async function executeLLMJob(payload: string): Promise<any> {
             console.log(`[Job ${jobId}] Status: ${job.status}...`);
           }
         } catch (e: any) {
+          if (e.name === 'AbortError') throw e;
           if (e.message?.includes('failed') || e.message?.includes('check failed')) {
             // Keep going unless it's a hard failure
           } else {
@@ -727,10 +743,10 @@ async function executeLLMJob(payload: string): Promise<any> {
           }
         }
         
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
         attempts++;
     }
-    throw new Error("Job timed out while waiting for AI engine. This can happen during high traffic or for very large documents.");
+    throw new Error(`Job timed out while waiting for AI engine after ${Math.round(timeoutMs/60000)} minutes.`);
 }
 
 /**
