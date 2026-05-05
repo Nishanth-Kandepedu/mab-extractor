@@ -477,14 +477,17 @@ async function startServer() {
         const heavy = mAb.chains?.find((c: any) => c.type === 'Heavy');
         const light = mAb.chains?.find((c: any) => c.type === 'Light');
 
-        // Resolve Target Metadata
+        // Resolve Target Metadata with fallbacks
         const targetMeta = mAb.targetMetadata || heavy?.targetMetadata || light?.targetMetadata || {};
         const geneSymbols = Array.isArray(targetMeta.geneSymbols) ? targetMeta.geneSymbols.join(', ') : '';
         const synonyms = Array.isArray(targetMeta.synonyms) ? targetMeta.synonyms.join(', ') : '';
         
+        // Priority Target mapping: UniProt Standard Name > AI Target name > ''
+        const resolvedTarget = targetMeta.standardName || heavy?.target || light?.target || mAb.target || '';
+        
         // Evidence fields
-        const evidenceLocation = mAb.evidenceLocation || '';
-        const evidenceStatement = mAb.evidenceStatement || '';
+        const evidenceLocation = mAb.evidenceLocation || mAb.pageNumber || '';
+        const evidenceStatement = mAb.evidenceStatement || mAb.summary || '';
 
         const query = `
           INSERT INTO mab.MoleculeData (
@@ -504,9 +507,10 @@ async function startServer() {
 
         const request = new Request(query, (err) => {
           if (err) {
-            console.error('[SQL] Insert Error:', err);
+            console.error(`[SQL] Insert Error for ${mAb.mAbName}:`, err.message);
             results.push({ success: false, id: mAb.mAbName, error: err.message });
           } else {
+            console.log(`[SQL] Successfully synced: ${mAb.mAbName}`);
             results.push({ success: true, id: mAb.mAbName });
           }
           processed++;
@@ -515,19 +519,28 @@ async function startServer() {
 
         // Safe integer parsing for SeqIDs
         const parseId = (id: any) => {
+          if (!id) return 0;
           const val = parseInt(String(id).replace(/\D/g, ''), 10);
           return isNaN(val) ? 0 : val;
         };
 
         const getCDR = (chain: any, type: string) => {
-          if (!chain || !Array.isArray(chain.cdrs)) return '';
-          return chain.cdrs.find((c: any) => c.type === type)?.sequence || '';
+          if (!chain) return '';
+          // Handle Array of CDR objects (Standard)
+          if (Array.isArray(chain.cdrs)) {
+            return chain.cdrs.find((c: any) => c.type === type)?.sequence || '';
+          }
+          // Handle object-based CDRs (Fallback for non-standard AI results)
+          if (typeof chain.cdrs === 'object' && chain.cdrs !== null) {
+            return chain.cdrs[type] || '';
+          }
+          return '';
         };
 
         request.addParameter('mAbName', TYPES.NVarChar, mAb.mAbName || '');
         request.addParameter('patentId', TYPES.NVarChar, data.patentId || '');
         request.addParameter('patentTitle', TYPES.NVarChar, data.patentTitle || '');
-        request.addParameter('target', TYPES.NVarChar, heavy?.target || light?.target || '');
+        request.addParameter('target', TYPES.NVarChar, resolvedTarget);
         request.addParameter('targetStdName', TYPES.NVarChar, targetMeta.standardName || '');
         request.addParameter('uniprotId', TYPES.NVarChar, targetMeta.uniprotId || '');
         request.addParameter('geneSymbols', TYPES.NVarChar, geneSymbols);
@@ -536,13 +549,13 @@ async function startServer() {
         request.addParameter('origin', TYPES.NVarChar, mAb.antibodyOrigin || '');
         request.addParameter('epitope', TYPES.NVarChar, mAb.epitope || '');
         
-        request.addParameter('vhSeqId', TYPES.Int, parseId(heavy?.seqId));
+        request.addParameter('vhSeqId', TYPES.Int, parseId(heavy?.seqId || mAb.seqId));
         request.addParameter('vhFull', TYPES.NVarChar, heavy?.fullSequence || '');
         request.addParameter('vhCDR1', TYPES.NVarChar, getCDR(heavy, 'CDR1'));
         request.addParameter('vhCDR2', TYPES.NVarChar, getCDR(heavy, 'CDR2'));
         request.addParameter('vhCDR3', TYPES.NVarChar, getCDR(heavy, 'CDR3'));
 
-        request.addParameter('vlSeqId', TYPES.Int, parseId(light?.seqId));
+        request.addParameter('vlSeqId', TYPES.Int, parseId(light?.seqId || mAb.seqId));
         request.addParameter('vlFull', TYPES.NVarChar, light?.fullSequence || '');
         request.addParameter('vlCDR1', TYPES.NVarChar, getCDR(light, 'CDR1'));
         request.addParameter('vlCDR2', TYPES.NVarChar, getCDR(light, 'CDR2'));
@@ -551,8 +564,8 @@ async function startServer() {
         request.addParameter('confidence', TYPES.Int, Math.round(mAb.confidence || 0));
         request.addParameter('needsReview', TYPES.Bit, mAb.needsReview ? 1 : 0);
         request.addParameter('reviewRemarks', TYPES.NVarChar, mAb.reviewReason || '');
-        request.addParameter('evLoc', TYPES.NVarChar, evidenceLocation);
-        request.addParameter('evStat', TYPES.NVarChar, evidenceStatement);
+        request.addParameter('evLoc', TYPES.NVarChar, String(evidenceLocation));
+        request.addParameter('evStat', TYPES.NVarChar, String(evidenceStatement));
         request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
 
         connection.execSql(request);
