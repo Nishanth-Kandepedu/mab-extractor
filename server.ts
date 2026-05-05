@@ -207,14 +207,18 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
-    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, isExtendedMode } = req.body;
     
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
       return res.status(400).json({ error: "Input text is required." });
     }
 
     const jobId = Math.random().toString(36).substring(7);
-    await updateJob(jobId, { status: 'pending', startTime: Date.now() });
+    await updateJob(jobId, { status: 'pending', startTime: Date.now(), isExtendedMode });
+
+    if (isExtendedMode) {
+      console.log(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
+    }
 
     // Map custom or experimental models to valid Gemini API IDs
     const mapModel = (m: string) => {

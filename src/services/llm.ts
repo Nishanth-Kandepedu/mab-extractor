@@ -10,6 +10,10 @@ IMPORTANT EXTRACTION RULES:
    - Main antibodies: "2419", "3125", etc.
    - Variants: "2419-0105", "2419-1204", "4540-033", etc.
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
+13. SINGLE DOMAIN / VHH HANDLING: 
+   - Some patents use VHH or Single Domain antibodies (Nanobodies).
+   - These ONLY have a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
+   - If a table lists "VHH", treat it as a standalone Heavy chain.
 
 2. VL Chain Special Handling:
    - VL chains may appear in a DIFFERENT TABLE than VH chains.
@@ -64,7 +68,7 @@ IMPORTANT EXTRACTION RULES:
 15. Return the data in valid JSON format.
 16. CRITICAL: Ensure the JSON is valid and complete.
 
-16. BISPECIFIC & MULTISPECIFIC HANDLING:
+17. BISPECIFIC & MULTISPECIFIC HANDLING:
     - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
     - You MUST look for components of BOTH binding arms.
     - If the patent title mentions two targets (A x B), you are not finished until you have extracted sequences for both Target A and Target B components.
@@ -255,7 +259,7 @@ export async function extractWithLLM(
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTY-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
+    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
   } else {
     // For Gemini/Gemma infrastructure, we support multimodal inputs
     if (provider !== 'gemini' && provider !== 'gemma') {
@@ -353,7 +357,8 @@ export async function extractWithLLM(
               epitope: { type: "STRING" },
               targetSpecies: { type: "STRING" },
               antibodyOrigin: { type: "STRING" },
-              needsReview: { type: "BOOLEAN" },              reviewReason: { type: "STRING" },
+              needsReview: { type: "BOOLEAN" },
+              reviewReason: { type: "STRING" },
               experimentalData: useSarExtra ? {
                 type: "ARRAY",
                 items: {
@@ -382,7 +387,8 @@ export async function extractWithLLM(
       model,
       input: formattedInput,
       systemInstruction: activeInstruction,
-      thinkingLevel: (model?.includes('3.1') || isGemma4) ? "HIGH" : undefined,
+      isExtendedMode: options.isExtendedMode,
+      thinkingLevel: ((model?.includes('3.1') || isGemma4) && options.isExtendedMode) ? "HIGH" : "MINIMAL",
       responseSchema: responseSchema,
     });
 
@@ -639,7 +645,7 @@ export async function extractWithLLM(
     console.error("[Extraction] Fetch error details:", e);
     const msg = e.message?.toLowerCase() || "";
     if (msg.includes('fetch') || msg.includes('network') || msg.includes('aborted') || msg.includes('proxy mirror timeout')) {
-      throw new Error("Proxy Timeout: The extraction link was interrupted. This usually happens when patents have 'too many clones' or the output is extremely large. We've increased the session timeout. Try enabling 'Methodical Mode' or using a smaller page range if this persists.");
+      throw new Error("Proxy Timeout: The extraction link was interrupted. This usually happens when patents have 'too many clones' or the output is extremely large. We've increased the session timeout. Try enabling 'Extended Mode' or using a smaller page range if this persists.");
     }
     throw e;
   }
