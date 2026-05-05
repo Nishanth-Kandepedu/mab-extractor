@@ -491,13 +491,13 @@ async function startServer() {
             MoleculeTargetUniProtId, MoleculeTargetGeneSymbols, MoleculeTargetSynonyms, MoleculeTargetSpecies, mABSpecies, 
             Epitope, VH_SeqID, VH_FullSequence, VH_CDR1, VH_CDR2, VH_CDR3,
             VL_SeqID, VL_FullSequence, VL_CDR1, VL_CDR2, VL_CDR3,
-            Confidence, Summary, EvidenceLocation, EvidenceStatement, CreatedDate
+            Confidence, NeedsReview, ReviewRemarks, EvidenceLocation, EvidenceStatement, Summary, CreatedDate
           ) VALUES (
             @mAbName, @patentId, @patentTitle, @target, @targetStdName,
             @uniprotId, @geneSymbols, @synonyms, @targetSpecies, @origin, 
             @epitope, @vhSeqId, @vhFull, @vhCDR1, @vhCDR2, @vhCDR3,
             @vlSeqId, @vlFull, @vlCDR1, @vlCDR2, @vlCDR3,
-            @confidence, @summary, @evLoc, @evStat, GETDATE()
+            @confidence, @needsReview, @reviewRemarks, @evLoc, @evStat, @summary, GETDATE()
           )
         `;
 
@@ -543,9 +543,11 @@ async function startServer() {
         request.addParameter('vlCDR3', TYPES.NVarChar, light?.cdrs?.CDR3 || '');
 
         request.addParameter('confidence', TYPES.Int, Math.round(mAb.confidence || 0));
-        request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
+        request.addParameter('needsReview', TYPES.Bit, mAb.needsReview ? 1 : 0);
+        request.addParameter('reviewRemarks', TYPES.NVarChar, mAb.reviewRemarks || '');
         request.addParameter('evLoc', TYPES.NVarChar, evidenceLocation);
         request.addParameter('evStat', TYPES.NVarChar, evidenceStatement);
+        request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
 
         connection.execSql(request);
       };
