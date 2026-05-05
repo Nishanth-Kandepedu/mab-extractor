@@ -364,8 +364,8 @@ async function startServer() {
           
           const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
-          // Fail-Fast: Retry capacity errors, but only retry timeout once to avoid blocking the queue for 45m+
-          const maxRetriesForThisError = isTimeout ? 1 : MAX_RETRIES;
+          // Fail-Fast: Retry capacity errors, but DO NOT retry timeouts to avoid blocking the queue.
+          const maxRetriesForThisError = isTimeout ? 0 : MAX_RETRIES;
 
           if (retryCount < maxRetriesForThisError && (isCapacityError || isTimeout)) {
             retryCount++;

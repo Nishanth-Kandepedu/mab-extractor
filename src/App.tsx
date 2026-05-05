@@ -1132,7 +1132,7 @@ function AppContent() {
                                error.message?.toLowerCase().includes('overloaded') || 
                                isTimeout;
                                
-            if (isTransient && attempts < maxItemAttempts) {
+            if (!isTimeout && isTransient && attempts < maxItemAttempts) {
               const baseDelay = Math.pow(2, attempts - 1) * 3000;
               const jitter = Math.random() * 2000;
               const delay = baseDelay + jitter;
