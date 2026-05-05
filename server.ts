@@ -477,13 +477,14 @@ async function startServer() {
         const heavy = mAb.chains?.find((c: any) => c.type === 'Heavy');
         const light = mAb.chains?.find((c: any) => c.type === 'Light');
 
-        const targetInfo = data.targetInfo || {};
-        const geneSymbols = Array.isArray(targetInfo.geneSymbols) ? targetInfo.geneSymbols.join(', ') : '';
-        const synonyms = Array.isArray(targetInfo.synonyms) ? targetInfo.synonyms.join(', ') : '';
+        // Resolve Target Metadata
+        const targetMeta = mAb.targetMetadata || heavy?.targetMetadata || light?.targetMetadata || {};
+        const geneSymbols = Array.isArray(targetMeta.geneSymbols) ? targetMeta.geneSymbols.join(', ') : '';
+        const synonyms = Array.isArray(targetMeta.synonyms) ? targetMeta.synonyms.join(', ') : '';
         
-        // Evidence fields calculation
-        const evidenceLocation = mAb.evidence?.location || mAb.evidence?.page || '';
-        const evidenceStatement = mAb.evidence?.statement || mAb.evidence?.context || '';
+        // Evidence fields
+        const evidenceLocation = mAb.evidenceLocation || '';
+        const evidenceStatement = mAb.evidenceStatement || '';
 
         const query = `
           INSERT INTO mab.MoleculeData (
@@ -518,33 +519,38 @@ async function startServer() {
           return isNaN(val) ? 0 : val;
         };
 
+        const getCDR = (chain: any, type: string) => {
+          if (!chain || !Array.isArray(chain.cdrs)) return '';
+          return chain.cdrs.find((c: any) => c.type === type)?.sequence || '';
+        };
+
         request.addParameter('mAbName', TYPES.NVarChar, mAb.mAbName || '');
         request.addParameter('patentId', TYPES.NVarChar, data.patentId || '');
         request.addParameter('patentTitle', TYPES.NVarChar, data.patentTitle || '');
-        request.addParameter('target', TYPES.NVarChar, targetInfo.standardName || heavy?.target || light?.target || '');
-        request.addParameter('targetStdName', TYPES.NVarChar, targetInfo.standardName || '');
-        request.addParameter('uniprotId', TYPES.NVarChar, targetInfo.uniprotId || '');
+        request.addParameter('target', TYPES.NVarChar, heavy?.target || light?.target || '');
+        request.addParameter('targetStdName', TYPES.NVarChar, targetMeta.standardName || '');
+        request.addParameter('uniprotId', TYPES.NVarChar, targetMeta.uniprotId || '');
         request.addParameter('geneSymbols', TYPES.NVarChar, geneSymbols);
         request.addParameter('synonyms', TYPES.NVarChar, synonyms);
-        request.addParameter('targetSpecies', TYPES.NVarChar, mAb.targetSpecies || targetInfo.species || '');
+        request.addParameter('targetSpecies', TYPES.NVarChar, mAb.targetSpecies || '');
         request.addParameter('origin', TYPES.NVarChar, mAb.antibodyOrigin || '');
         request.addParameter('epitope', TYPES.NVarChar, mAb.epitope || '');
         
         request.addParameter('vhSeqId', TYPES.Int, parseId(heavy?.seqId));
         request.addParameter('vhFull', TYPES.NVarChar, heavy?.fullSequence || '');
-        request.addParameter('vhCDR1', TYPES.NVarChar, heavy?.cdrs?.CDR1 || '');
-        request.addParameter('vhCDR2', TYPES.NVarChar, heavy?.cdrs?.CDR2 || '');
-        request.addParameter('vhCDR3', TYPES.NVarChar, heavy?.cdrs?.CDR3 || '');
+        request.addParameter('vhCDR1', TYPES.NVarChar, getCDR(heavy, 'CDR1'));
+        request.addParameter('vhCDR2', TYPES.NVarChar, getCDR(heavy, 'CDR2'));
+        request.addParameter('vhCDR3', TYPES.NVarChar, getCDR(heavy, 'CDR3'));
 
         request.addParameter('vlSeqId', TYPES.Int, parseId(light?.seqId));
         request.addParameter('vlFull', TYPES.NVarChar, light?.fullSequence || '');
-        request.addParameter('vlCDR1', TYPES.NVarChar, light?.cdrs?.CDR1 || '');
-        request.addParameter('vlCDR2', TYPES.NVarChar, light?.cdrs?.CDR2 || '');
-        request.addParameter('vlCDR3', TYPES.NVarChar, light?.cdrs?.CDR3 || '');
+        request.addParameter('vlCDR1', TYPES.NVarChar, getCDR(light, 'CDR1'));
+        request.addParameter('vlCDR2', TYPES.NVarChar, getCDR(light, 'CDR2'));
+        request.addParameter('vlCDR3', TYPES.NVarChar, getCDR(light, 'CDR3'));
 
         request.addParameter('confidence', TYPES.Int, Math.round(mAb.confidence || 0));
         request.addParameter('needsReview', TYPES.Bit, mAb.needsReview ? 1 : 0);
-        request.addParameter('reviewRemarks', TYPES.NVarChar, mAb.reviewRemarks || '');
+        request.addParameter('reviewRemarks', TYPES.NVarChar, mAb.reviewReason || '');
         request.addParameter('evLoc', TYPES.NVarChar, evidenceLocation);
         request.addParameter('evStat', TYPES.NVarChar, evidenceStatement);
         request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
