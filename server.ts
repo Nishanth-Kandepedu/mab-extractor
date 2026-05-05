@@ -246,8 +246,8 @@ async function startServer() {
         try {
           console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
-          // Timeout mechanism for the extraction itself: 3m (standard) vs 15m (extended)
-          const TIMEOUT_MS = isExtendedMode ? 900000 : 180000; 
+          // Timeout mechanism for the extraction itself: 15m (standard) vs 45m (extended)
+          const TIMEOUT_MS = isExtendedMode ? 2700000 : 900000; 
           
           const extractionPromise = (async () => {
              if (provider === 'gemini' || provider === 'gemma') {

@@ -708,8 +708,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Reduced to 20 minutes (240 attempts * 5s) for more graceful failure detection
-    const maxAttempts = 240; 
+    // Increased to 60 minutes (720 attempts * 5s) to match the extended server-side window
+    const maxAttempts = 720; 
 
     while (attempts < maxAttempts) {
         try {
