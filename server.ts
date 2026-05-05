@@ -416,8 +416,15 @@ async function startServer() {
       return res.status(400).json({ error: "Invalid data format. Extraction result required." });
     }
 
+    // Clean up server name: handle 'tcp:' prefix and ',1433' port
+    let rawServer = process.env.AZURE_SQL_SERVER || 'gostarnext-umsrvr.database.windows.net';
+    const serverStripped = rawServer.replace(/^tcp:/, '');
+    const serverParts = serverStripped.split(',');
+    const host = serverParts[0];
+    const port = parseInt(serverParts[1] || '1433', 10);
+
     const config = {
-      server: process.env.AZURE_SQL_SERVER || 'gostarnext-umsrvr.database.windows.net',
+      server: host,
       authentication: {
         type: 'default' as const,
         options: {
@@ -426,19 +433,29 @@ async function startServer() {
         }
       },
       options: {
+        port: port,
         database: process.env.AZURE_SQL_DATABASE || 'mab_db',
         encrypt: true,
         trustServerCertificate: false,
-        connectTimeout: 30000
+        connectTimeout: 30000,
+        requestTimeout: 60000,
+        rowCollectionOnDone: true
       }
     };
 
+    console.log(`[SQL] Attempting connection to ${host}:${port}...`);
     const connection = new Connection(config);
     
     connection.on('connect', (err) => {
       if (err) {
-        console.error('[SQL] Connection Error:', err);
-        return res.status(500).json({ error: "Failed to connect to Azure SQL Database.", details: err.message });
+        console.error('[SQL] Connection Error Details:', err);
+        // Return a cleaner error message but include the code for debugging
+        const detail = err.message || 'Unknown error';
+        return res.status(500).json({ 
+          error: "Failed to connect to Azure SQL Database.", 
+          details: detail,
+          code: (err as any).code
+        });
       }
 
       console.log('[SQL] Connected successfully');

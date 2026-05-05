@@ -1280,11 +1280,9 @@ function AppContent() {
       });
       
       const resultData = await response.json();
-      
       if (response.ok) {
         setSyncSuccess(true);
         setTimeout(() => setSyncSuccess(false), 3000);
-        // Log activity
         if (user) {
           try {
             await addDoc(collection(db, 'activity_logs'), {
@@ -1299,14 +1297,22 @@ function AppContent() {
           }
         }
       } else {
-        throw new Error(resultData.error || 'Failed to sync with Azure SQL');
+        const errorMsg = resultData.details || resultData.error || 'Failed to sync with Azure SQL';
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
       console.error('SQL Sync Error:', err);
-      alert("Database Sync Failed: " + (err.message || String(err)));
+      const isFirewall = err.message?.includes('Client with IP address') && err.message?.includes('is not allowed to access the server');
+      if (isFirewall) {
+        alert("Firewall Error: Please allowlist the outbound IP in your Azure SQL settings. " + err.message);
+      } else {
+        alert("Database Sync Failed: " + (err.message || String(err)));
+      }
     } finally {
       setIsSyncing(false);
     }
+      
+
   }, [state.result, user]);
 
   const handleBatchExportSql = useCallback(async () => {
