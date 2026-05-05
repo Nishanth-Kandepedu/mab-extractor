@@ -477,17 +477,27 @@ async function startServer() {
         const heavy = mAb.chains?.find((c: any) => c.type === 'Heavy');
         const light = mAb.chains?.find((c: any) => c.type === 'Light');
 
-        // Note: Table columns are guessed based on UI. If Kiran matches them differently, we can update.
-        // We use GETDATE() for CreatedDate as requested.
+        const targetInfo = data.targetInfo || {};
+        const geneSymbols = Array.isArray(targetInfo.geneSymbols) ? targetInfo.geneSymbols.join(', ') : '';
+        const synonyms = Array.isArray(targetInfo.synonyms) ? targetInfo.synonyms.join(', ') : '';
+        
+        // Evidence fields calculation
+        const evidenceLocation = mAb.evidence?.location || mAb.evidence?.page || '';
+        const evidenceStatement = mAb.evidence?.statement || mAb.evidence?.context || '';
+
         const query = `
-          INSERT INTO MoleculeData (
-            PatentId, PatentTitle, mAbName, HeavyChainSequence, LightChainSequence, 
-            HeavySeqId, LightSeqId, Target, TargetSpecies, AntibodyOrigin, 
-            Epitope, Summary, Confidence, CreatedDate
+          INSERT INTO mab.MoleculeData (
+            MoleculeName, PatentID, PatentTitle, MoleculeTarget, MoleculeTargetStandardName,
+            MoleculeTargetUniProtId, MoleculeTargetGeneSymbols, MoleculeTargetSynonyms, MoleculeTargetSpecies, mABSpecies, 
+            Epitope, VH_SeqID, VH_FullSequence, VH_CDR1, VH_CDR2, VH_CDR3,
+            VL_SeqID, VL_FullSequence, VL_CDR1, VL_CDR2, VL_CDR3,
+            Confidence, Summary, EvidenceLocation, EvidenceStatement, CreatedDate
           ) VALUES (
-            @patentId, @patentTitle, @mAbName, @heavySeq, @lightSeq, 
-            @heavyId, @lightId, @target, @targetSpecies, @origin, 
-            @epitope, @summary, @confidence, GETDATE()
+            @mAbName, @patentId, @patentTitle, @target, @targetStdName,
+            @uniprotId, @geneSymbols, @synonyms, @targetSpecies, @origin, 
+            @epitope, @vhSeqId, @vhFull, @vhCDR1, @vhCDR2, @vhCDR3,
+            @vlSeqId, @vlFull, @vlCDR1, @vlCDR2, @vlCDR3,
+            @confidence, @summary, @evLoc, @evStat, GETDATE()
           )
         `;
 
@@ -502,19 +512,40 @@ async function startServer() {
           processNext();
         });
 
+        // Safe integer parsing for SeqIDs
+        const parseId = (id: any) => {
+          const val = parseInt(String(id).replace(/\D/g, ''), 10);
+          return isNaN(val) ? 0 : val;
+        };
+
+        request.addParameter('mAbName', TYPES.NVarChar, mAb.mAbName || '');
         request.addParameter('patentId', TYPES.NVarChar, data.patentId || '');
         request.addParameter('patentTitle', TYPES.NVarChar, data.patentTitle || '');
-        request.addParameter('mAbName', TYPES.NVarChar, mAb.mAbName || '');
-        request.addParameter('heavySeq', TYPES.NVarChar, heavy?.fullSequence || '');
-        request.addParameter('lightSeq', TYPES.NVarChar, light?.fullSequence || '');
-        request.addParameter('heavyId', TYPES.NVarChar, heavy?.seqId || '');
-        request.addParameter('lightId', TYPES.NVarChar, light?.seqId || '');
-        request.addParameter('target', TYPES.NVarChar, heavy?.target || light?.target || '');
-        request.addParameter('targetSpecies', TYPES.NVarChar, mAb.targetSpecies || '');
+        request.addParameter('target', TYPES.NVarChar, targetInfo.standardName || heavy?.target || light?.target || '');
+        request.addParameter('targetStdName', TYPES.NVarChar, targetInfo.standardName || '');
+        request.addParameter('uniprotId', TYPES.NVarChar, targetInfo.uniprotId || '');
+        request.addParameter('geneSymbols', TYPES.NVarChar, geneSymbols);
+        request.addParameter('synonyms', TYPES.NVarChar, synonyms);
+        request.addParameter('targetSpecies', TYPES.NVarChar, mAb.targetSpecies || targetInfo.species || '');
         request.addParameter('origin', TYPES.NVarChar, mAb.antibodyOrigin || '');
         request.addParameter('epitope', TYPES.NVarChar, mAb.epitope || '');
-        request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
+        
+        request.addParameter('vhSeqId', TYPES.Int, parseId(heavy?.seqId));
+        request.addParameter('vhFull', TYPES.NVarChar, heavy?.fullSequence || '');
+        request.addParameter('vhCDR1', TYPES.NVarChar, heavy?.cdrs?.CDR1 || '');
+        request.addParameter('vhCDR2', TYPES.NVarChar, heavy?.cdrs?.CDR2 || '');
+        request.addParameter('vhCDR3', TYPES.NVarChar, heavy?.cdrs?.CDR3 || '');
+
+        request.addParameter('vlSeqId', TYPES.Int, parseId(light?.seqId));
+        request.addParameter('vlFull', TYPES.NVarChar, light?.fullSequence || '');
+        request.addParameter('vlCDR1', TYPES.NVarChar, light?.cdrs?.CDR1 || '');
+        request.addParameter('vlCDR2', TYPES.NVarChar, light?.cdrs?.CDR2 || '');
+        request.addParameter('vlCDR3', TYPES.NVarChar, light?.cdrs?.CDR3 || '');
+
         request.addParameter('confidence', TYPES.Int, Math.round(mAb.confidence || 0));
+        request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
+        request.addParameter('evLoc', TYPES.NVarChar, evidenceLocation);
+        request.addParameter('evStat', TYPES.NVarChar, evidenceStatement);
 
         connection.execSql(request);
       };
