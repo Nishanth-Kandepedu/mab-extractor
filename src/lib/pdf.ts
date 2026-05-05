@@ -59,17 +59,15 @@ export async function getPdfPages(base64Data: string, range: string): Promise<st
     const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
     copiedPages.forEach(p => newDoc.addPage(p));
     
-    // 3. Convert back to base64 safely 
     const newBytes = await newDoc.save();
-    return await new Promise<string>((resolve) => {
-      const blob = new Blob([newBytes], { type: 'application/pdf' });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        resolve(base64String.split(',')[1]);
-      };
-      reader.readAsDataURL(blob);
-    });
+    
+    // 3. Convert back to base64 safely (avoid String.fromCharCode(...newBytes) stack error)
+    let binary = '';
+    const len = newBytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(newBytes[i]);
+    }
+    return btoa(binary);
   } catch (e) {
     console.error("[PDF] Optimization failed, falling back to original file:", e);
     return base64Data; // Fallback to original

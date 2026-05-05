@@ -7,7 +7,6 @@ import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
 import { fetchTargetMetadata } from './services/uniprot';
 import { SequenceDisplay } from './components/SequenceDisplay';
-import { PdfUploader } from './components/PdfUploader';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInAnonymously, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, setDoc, getDocFromServer, limit } from 'firebase/firestore';
@@ -919,7 +918,7 @@ function AppContent() {
     return result;
   };
 
-  const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions, extractedText?: string) => {
+  const runExtraction = useCallback(async (file: File, overrideOptions?: LLMOptions) => {
     if (!file) return;
     const activeOptions = overrideOptions || llmOptions;
     console.log('Running extraction:', file.name, 'with range:', pageRange, 'Model:', activeOptions.model);
@@ -957,7 +956,7 @@ function AppContent() {
       }, 60000);
 
       const result = await extractWithLLM(
-        { data: fileData, mimeType: file.type, extractedText } as any, 
+        { data: fileData, mimeType: file.type }, 
         activeOptions, 
         pageRange,
         listingData ? { data: listingData, mimeType: listingMimeType! } : undefined,
@@ -1284,6 +1283,18 @@ function AppContent() {
       setState(prev => ({ ...prev, error: 'Failed to generate batch SQL export.' }));
     }
   }, [state.batch]);
+
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+    let file: File | undefined;
+    
+    if ('target' in e && (e.target as any).files) {
+      file = (e.target as HTMLInputElement).files?.[0];
+    } else if ('dataTransfer' in e && (e as any).dataTransfer.files) {
+      file = (e as any).dataTransfer.files[0];
+    }
+
+    if (file) runExtraction(file);
+  }, [runExtraction]);
 
   const handleReset = () => {
     setState(prev => ({ ...prev, isExtracting: false, result: null, error: null }));
@@ -2268,11 +2279,45 @@ function AppContent() {
                     </div>
                   </div>
 
-                  <div className="mt-2">
-                    <PdfUploader 
-                      onFileReady={(file, extractedText) => runExtraction(file, undefined, extractedText)}
-                      isLoading={state.isExtracting}
+                  <div 
+                    className="relative group mt-2"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFileUpload(e as any);
+                    }}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.txt"
+                      onChange={handleFileUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      disabled={state.isExtracting}
                     />
+                    <div className={cn(
+                      "border-2 border-dashed border-zinc-100 rounded-2xl p-8 text-center transition-all group-hover:border-indigo-300 group-hover:bg-indigo-50/30",
+                      state.isExtracting && "opacity-50 pointer-events-none"
+                    )}>
+                      {state.isExtracting ? (
+                        <div className="flex flex-col items-center py-2">
+                          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
+                          <p className="text-sm font-bold text-indigo-600">Extracting...</p>
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          <div className="w-12 h-12 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-100 transition-colors">
+                            <Upload className="w-6 h-6 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                          </div>
+                          <p className="text-sm font-bold text-zinc-700">Drop Patent Document</p>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 uppercase font-bold tracking-widest">PDF or TXT</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : (
