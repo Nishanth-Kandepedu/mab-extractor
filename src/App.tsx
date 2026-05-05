@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // Types
 import { AppState, ExtractionResult, Antibody, UserProfile, ActivityLog, Account } from './types';
 import { extractWithLLM, LLMProvider, LLMOptions } from './services/llm';
+import { getPdfPages, getPdfPageCount } from './lib/pdf';
 import { fetchTargetMetadata } from './services/uniprot';
 import { SequenceDisplay } from './components/SequenceDisplay';
 import { auth, signIn, logout, db, handleFirestoreError, OperationType } from './firebase';
@@ -936,13 +937,29 @@ function AppContent() {
         });
       };
 
-      const fileData = await readFile(file);
+      let fileData = await readFile(file);
+      
+      // Local Crop for Single Mode
+      if (file.type === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
+        setState(prev => ({ ...prev, extractingStatus: "Optimizing PDF (Local Crop)..." }));
+        try {
+          fileData = await getPdfPages(fileData, pageRange);
+          console.log(`[Single] Local crop applied. Reduced payload.`);
+        } catch (cropErr) {
+          console.warn("[Single] Local crop failed.", cropErr);
+        }
+      }
+
       let listingData: string | undefined;
       let listingMimeType: string | undefined;
 
       if (sequenceListingFile) {
         listingData = await readFile(sequenceListingFile);
         listingMimeType = sequenceListingFile.type;
+        
+        if (listingMimeType === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
+           try { listingData = await getPdfPages(listingData, pageRange); } catch (e) {}
+        }
       }
       
       const startTime = Date.now();
@@ -1055,6 +1072,12 @@ function AppContent() {
 
         while (attempts < maxItemAttempts) {
           try {
+            // Check for explicit cancel or skip signals via signal or state
+            if (batchAbortController.current?.signal.aborted) {
+               console.log("[Batch] Abort signal caught in loop.");
+               break;
+            }
+
             setState(prev => ({
               ...prev,
               batch: { 
@@ -1064,7 +1087,8 @@ function AppContent() {
               }
             }));
 
-            setState(prev => ({ ...prev, extractingStatus: "Scanning for variable region patterns..." }));
+            setState(prev => ({ ...prev, extractingStatus: "Analyzing document structure..." }));
+            
             const readFileData = (f: File): Promise<string> => {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1074,13 +1098,33 @@ function AppContent() {
               });
             };
 
-            const fileData = await readFileData(item.file);
+            let fileData = await readFileData(item.file);
             
+            // Systemic Optimization: Client-side PDF cropping
+            // If pageRange is specified, crop the PDF locally before sending to server
+            // This massively reduces upload time and server memory strain for large docs
+            if (item.file.type === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
+              setState(prev => ({ ...prev, extractingStatus: "Preparing document sections..." }));
+              try {
+                fileData = await getPdfPages(fileData, pageRange);
+                console.log(`[Batch] Local crop applied for ${item.id}. Reduced to range: ${pageRange}`);
+              } catch (cropErr) {
+                console.warn("[Batch] Local crop failed, using original full PDF.", cropErr);
+              }
+            }
+
             let listingData: string | undefined;
             let listingMimeType: string | undefined;
             if (sequenceListingFile) {
               listingData = await readFileData(sequenceListingFile);
               listingMimeType = sequenceListingFile.type;
+
+              // Also crop sequence listing if applicable
+              if (listingMimeType === 'application/pdf' && pageRange && /[\d]+/.test(pageRange)) {
+                try {
+                  listingData = await getPdfPages(listingData, pageRange);
+                } catch (e) {}
+              }
             }
 
             const itemStartTime = Date.now();

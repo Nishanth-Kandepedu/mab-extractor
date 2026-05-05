@@ -39,7 +39,7 @@ IMPORTANT EXTRACTION RULES:
     - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
-    - FOR 100+ CLONES: Scale your throughput. Use very concise descriptions in the "summary" field (max 10 words) to save tokens for sequences. You MUST represent every row.
+    - HIGH-VOLUME CLONES: Scale your throughput. Use very concise descriptions in the "summary" field (max 10 words). Focus 100% on verbatim Amino Acid sequence accuracy for every row in the clones table.
 
 6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
