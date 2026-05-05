@@ -708,8 +708,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 60 minutes (720 attempts * 5s) to match the extended server-side window
-    const maxAttempts = 720; 
+    // Reduced to 45 minutes total wait (540 attempts * 5s) to align with server-side limits
+    const maxAttempts = 540; 
 
     while (attempts < maxAttempts) {
         try {
@@ -733,19 +733,21 @@ async function executeLLMJob(payload: string): Promise<any> {
             console.log(`[Job ${jobId}] Status: ${job.status}...`);
           }
         } catch (e: any) {
-          if (e.message?.includes('failed') || e.message?.includes('check failed')) {
-            // Keep going unless it's a hard failure
+          // If it's a network error or transient failure during status check, keep trying
+          const msg = e.message?.toLowerCase() || '';
+          if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('check failed')) {
+            console.warn(`[Extraction] Transient polling error: ${msg}`);
           } else {
             throw e;
           }
         }
         
-        // Jittered polling to avoid thundering herd on status endpoints
-        const pollInterval = 5000 + Math.random() * 2000;
+        // Jittered polling
+        const pollInterval = 5000 + Math.random() * 1000;
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
     }
-    throw new Error("AI Extraction Timeout: The document is taking longer than expected to process. This usually happens during high traffic or with extremely complex tables. Try using 'Extended Mode' or reducing the page range.");
+    throw new Error("Extraction Timeout: The document took too long. Try smaller page range or Extended Mode.");
 }
 
 /**

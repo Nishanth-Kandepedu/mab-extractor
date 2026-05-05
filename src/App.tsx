@@ -1133,22 +1133,23 @@ function AppContent() {
                                isTimeout;
                                
             if (isTransient && attempts < maxItemAttempts) {
-              const baseDelay = Math.pow(2, attempts - 1) * 5000;
-              const jitter = Math.random() * 5000;
+              const baseDelay = Math.pow(2, attempts - 1) * 3000;
+              const jitter = Math.random() * 2000;
               const delay = baseDelay + jitter;
               
               console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}/${maxItemAttempts}). Auto-retrying transient error in ${Math.round(delay/1000)}s...`, error);
-              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id} in ${Math.round(delay/1000)}s...` }));
+              setState(prev => ({ ...prev, extractingStatus: `Retrying ${item.id} (Attempt ${attempts+1})...` }));
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
 
-            // Batch Triage: If still failing or it was a timeout, mark specifically for Triage/Extended Mode
-            const failureReason = isTimeout 
+            // Batch Triage: Specific error for timeouts
+            const errorMessage = error.message || String(error);
+            const failureReason = errorMessage.toLowerCase().includes('timeout') 
               ? 'Timeout: Requires Extended Mode' 
-              : (error.message || String(error));
+              : errorMessage;
 
-            console.error(`[Batch] Item ${item.id} failed permanently after ${attempts} attempts:`, error);
+            console.error(`[Batch] Item ${item.id} failed after ${attempts} attempts:`, error);
             setState(prev => ({
               ...prev,
               batch: {

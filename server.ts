@@ -246,8 +246,8 @@ async function startServer() {
         try {
           console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
-          // Timeout mechanism for the extraction itself: 15m (standard) vs 45m (extended)
-          const TIMEOUT_MS = isExtendedMode ? 2700000 : 900000; 
+          // Timeout mechanism for the extraction itself: 8m (standard) vs 30m (extended)
+          const TIMEOUT_MS = isExtendedMode ? 1800000 : 480000; 
           
           const extractionPromise = (async () => {
              if (provider === 'gemini' || provider === 'gemma') {
@@ -357,17 +357,21 @@ async function startServer() {
           const errorMessage = error.message || String(error);
           const lowerError = errorMessage.toLowerCase();
           
-          const isRetryable = lowerError.includes('capacity') || 
-                             lowerError.includes('503') || 
-                             lowerError.includes('429') ||
-                             lowerError.includes('internal error') ||
-                             lowerError.includes('timeout');
+          const isCapacityError = lowerError.includes('capacity') || 
+                                  lowerError.includes('503') || 
+                                  lowerError.includes('429') ||
+                                  lowerError.includes('internal error');
+          
+          const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
-          if (isRetryable && retryCount < MAX_RETRIES) {
+          // Fail-Fast: Retry capacity errors, but only retry timeout once to avoid blocking the queue for 45m+
+          const maxRetriesForThisError = isTimeout ? 1 : MAX_RETRIES;
+
+          if (retryCount < maxRetriesForThisError && (isCapacityError || isTimeout)) {
             retryCount++;
             // Exponential backoff with jitter
             const baseDelay = Math.pow(2, retryCount) * 2000;
-            const jitter = Math.random() * 1000;
+            const jitter = Math.random() * 2000;
             const delay = baseDelay + jitter;
             
             console.warn(`[Job ${jobId}] Retryable error (${errorMessage}). Retrying in ${Math.round(delay / 1000)}s...`);
@@ -378,9 +382,9 @@ async function startServer() {
           console.error(`[Job ${jobId}] Permanent Failure:`, errorMessage);
           await updateJob(jobId, { 
             status: 'failed', 
-            error: isRetryable 
-              ? 'The AI engine is currently over capacity or experienced a transient error. Please wait a moment and try again.' 
-              : errorMessage 
+            error: isTimeout 
+              ? 'AI Engine Timeout: This document is complex and may require Extended Mode.' 
+              : (isCapacityError ? 'AI engine at capacity. Retrying later is recommended.' : errorMessage)
           });
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
