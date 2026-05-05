@@ -708,15 +708,13 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 3 hours (2160 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
-    const maxAttempts = 2160; 
+    // Reduced to 20 minutes (240 attempts * 5s) for more graceful failure detection
+    const maxAttempts = 240; 
 
     while (attempts < maxAttempts) {
         try {
           const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
               cache: 'no-store',
-              // Add a signal or timeout to the fetch specifically if needed, 
-              // but browser defaults are usually okay for status checks.
           });
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
@@ -728,8 +726,6 @@ async function executeLLMJob(payload: string): Promise<any> {
           const job = await statusResponse.json();
           if (job.status === 'completed') return job.result;
           if (job.status === 'failed') {
-             // If it failed with a transient error, we might want to try one last re-submission 
-             // but that's complex. For now, just throw the error with more context.
              throw new Error(job.error || 'Job failed');
           }
           
@@ -749,7 +745,7 @@ async function executeLLMJob(payload: string): Promise<any> {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
     }
-    throw new Error("Job timed out while waiting for AI engine. This can happen during high traffic or for very large documents.");
+    throw new Error("AI Extraction Timeout: The document is taking longer than expected to process. This usually happens during high traffic or with extremely complex tables. Try using 'Extended Mode' or reducing the page range.");
 }
 
 /**
