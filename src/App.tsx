@@ -188,6 +188,7 @@ function AppContent() {
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [autoSync, setAutoSync] = useState(true);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
@@ -1008,10 +1009,19 @@ function AppContent() {
         });
 
         const docRef = await addDoc(collection(db, 'extractions'), docData);
+        const finalResult = { ...result, id: docRef.id };
         setState(prev => ({ 
           ...prev, 
-          result: { ...result, id: docRef.id } 
+          result: finalResult 
         }));
+
+        // Auto-Sync to SQL
+        if (autoSync) {
+          handleAzureSqlSync(finalResult);
+        }
+      } else if (autoSync) {
+        // Guests might not save to firestore but still want auto-sync
+        handleAzureSqlSync(result);
       }
     } catch (err: any) {
       console.error('Final extraction error:', err);
@@ -1109,6 +1119,11 @@ function AppContent() {
                 items: prev.batch!.items.map((it, idx) => idx === i ? { ...it, status: 'completed', result, extractionTime: itemExtractionTime } : it)
               }
             }));
+
+            // Auto-Sync to SQL for Batch Item
+            if (autoSync) {
+              handleAzureSqlSync(result);
+            }
 
             if (user && user.role !== 'guest') {
                const { id: _id, ...resultData } = result as any;
@@ -1266,8 +1281,9 @@ function AppContent() {
     }
   }, [state.batch]);
 
-  const handleAzureSqlSync = useCallback(async () => {
-    if (!state.result) return;
+  const handleAzureSqlSync = useCallback(async (resultOverride?: ExtractionResult) => {
+    const targetResult = resultOverride || state.result;
+    if (!targetResult) return;
     
     setIsSyncing(true);
     setSyncSuccess(false);
@@ -1276,7 +1292,7 @@ function AppContent() {
       const response = await fetch('/api/sync-sql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: state.result }),
+        body: JSON.stringify({ data: targetResult }),
       });
       
       const resultData = await response.json();
@@ -1289,7 +1305,7 @@ function AppContent() {
               userId: user.uid,
               userName: user.displayName,
               action: 'Azure SQL Sync',
-              details: `Synced ${state.result.antibodies.length} molecules for ${state.result.patentId}`,
+              details: `Synced ${targetResult.antibodies.length} molecules for ${targetResult.patentId}${resultOverride ? ' (Auto)' : ''}`,
               timestamp: Timestamp.now()
             });
           } catch (e) {
@@ -2246,6 +2262,31 @@ function AppContent() {
                     className={cn(
                       "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-in-out",
                       llmOptions.isExtendedMode ? "translate-x-5" : "translate-x-0"
+                    )}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-50">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-indigo-600">Auto-Sync SQL</span>
+                    <span className="px-1 bg-indigo-50 text-indigo-600 text-[8px] font-bold uppercase rounded border border-indigo-100 leading-none py-0.5">Recommended</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-semibold leading-tight mt-0.5">Automatically sync results to database</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoSync(prev => !prev)}
+                  className={cn(
+                    "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none",
+                    autoSync ? "bg-indigo-600 shadow-sm shadow-indigo-100" : "bg-zinc-200"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-in-out",
+                      autoSync ? "translate-x-5" : "translate-x-0"
                     )}
                   />
                 </button>
