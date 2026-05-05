@@ -1266,6 +1266,49 @@ function AppContent() {
     }
   }, [state.batch]);
 
+  const handleAzureSqlSync = useCallback(async () => {
+    if (!state.result) return;
+    
+    setIsSyncing(true);
+    setSyncSuccess(false);
+    
+    try {
+      const response = await fetch('/api/sync-sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: state.result }),
+      });
+      
+      const resultData = await response.json();
+      
+      if (response.ok) {
+        setSyncSuccess(true);
+        setTimeout(() => setSyncSuccess(false), 3000);
+        // Log activity
+        if (user) {
+          try {
+            await addDoc(collection(db, 'activity_logs'), {
+              userId: user.uid,
+              userName: user.displayName,
+              action: 'Azure SQL Sync',
+              details: `Synced ${state.result.antibodies.length} molecules for ${state.result.patentId}`,
+              timestamp: Timestamp.now()
+            });
+          } catch (e) {
+            console.warn('Silent failure logging activity:', e);
+          }
+        }
+      } else {
+        throw new Error(resultData.error || 'Failed to sync with Azure SQL');
+      }
+    } catch (err: any) {
+      console.error('SQL Sync Error:', err);
+      alert("Database Sync Failed: " + (err.message || String(err)));
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [state.result, user]);
+
   const handleBatchExportSql = useCallback(async () => {
     if (!state.batch) return;
     
@@ -3394,6 +3437,24 @@ function AppContent() {
                             <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
                             <Database className="w-4 h-4 text-white" />
+                          )}
+                        </button>
+                        <button 
+                          onClick={handleAzureSqlSync}
+                          disabled={isSyncing || !state.result}
+                          className={cn(
+                            "p-2 rounded-lg border transition-all relative group",
+                            syncSuccess ? "bg-emerald-600/20 border-emerald-600/30" : 
+                            "bg-white/10 hover:bg-white/20 border-white/10"
+                          )}
+                          title="Sync extracted molecules to Azure SQL Database (MoleculeData table)"
+                        >
+                          {isSyncing ? (
+                            <Loader2 className="w-4 h-4 text-white animate-spin" />
+                          ) : syncSuccess ? (
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Database className="w-4 h-4 text-emerald-400" />
                           )}
                         </button>
                         <button 

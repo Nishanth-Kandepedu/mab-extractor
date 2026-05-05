@@ -11,6 +11,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
 import fs from 'fs';
+import { Connection, Request, TYPES } from 'tedious';
 
 dotenv.config();
 
@@ -405,6 +406,106 @@ async function startServer() {
     const job = await getJob(jobId);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     res.json(job);
+  });
+
+  // Azure SQL Sync Endpoint
+  app.post('/api/sync-sql', async (req, res) => {
+    const { data } = req.body;
+    
+    if (!data || !data.antibodies || !Array.isArray(data.antibodies)) {
+      return res.status(400).json({ error: "Invalid data format. Extraction result required." });
+    }
+
+    const config = {
+      server: process.env.AZURE_SQL_SERVER || 'gostarnext-umsrvr.database.windows.net',
+      authentication: {
+        type: 'default' as const,
+        options: {
+          userName: process.env.AZURE_SQL_USER || 'mabuser',
+          password: process.env.AZURE_SQL_PASSWORD || 'Access#2026!',
+        }
+      },
+      options: {
+        database: process.env.AZURE_SQL_DATABASE || 'mab_db',
+        encrypt: true,
+        trustServerCertificate: false,
+        connectTimeout: 30000
+      }
+    };
+
+    const connection = new Connection(config);
+    
+    connection.on('connect', (err) => {
+      if (err) {
+        console.error('[SQL] Connection Error:', err);
+        return res.status(500).json({ error: "Failed to connect to Azure SQL Database.", details: err.message });
+      }
+
+      console.log('[SQL] Connected successfully');
+      
+      const results: { success: boolean; id: string; error?: string }[] = [];
+      let processed = 0;
+      const total = data.antibodies.length;
+
+      const processNext = () => {
+        if (processed >= total) {
+          connection.close();
+          return res.json({ 
+            message: `Sync completed: ${results.filter(r => r.success).length}/${total} succeeded.`,
+            results 
+          });
+        }
+
+        const mAb = data.antibodies[processed];
+        const heavy = mAb.chains?.find((c: any) => c.type === 'Heavy');
+        const light = mAb.chains?.find((c: any) => c.type === 'Light');
+
+        // Note: Table columns are guessed based on UI. If Kiran matches them differently, we can update.
+        // We use GETDATE() for CreatedDate as requested.
+        const query = `
+          INSERT INTO MoleculeData (
+            PatentId, PatentTitle, mAbName, HeavyChainSequence, LightChainSequence, 
+            HeavySeqId, LightSeqId, Target, TargetSpecies, AntibodyOrigin, 
+            Epitope, Summary, Confidence, CreatedDate
+          ) VALUES (
+            @patentId, @patentTitle, @mAbName, @heavySeq, @lightSeq, 
+            @heavyId, @lightId, @target, @targetSpecies, @origin, 
+            @epitope, @summary, @confidence, GETDATE()
+          )
+        `;
+
+        const request = new Request(query, (err) => {
+          if (err) {
+            console.error('[SQL] Insert Error:', err);
+            results.push({ success: false, id: mAb.mAbName, error: err.message });
+          } else {
+            results.push({ success: true, id: mAb.mAbName });
+          }
+          processed++;
+          processNext();
+        });
+
+        request.addParameter('patentId', TYPES.NVarChar, data.patentId || '');
+        request.addParameter('patentTitle', TYPES.NVarChar, data.patentTitle || '');
+        request.addParameter('mAbName', TYPES.NVarChar, mAb.mAbName || '');
+        request.addParameter('heavySeq', TYPES.NVarChar, heavy?.fullSequence || '');
+        request.addParameter('lightSeq', TYPES.NVarChar, light?.fullSequence || '');
+        request.addParameter('heavyId', TYPES.NVarChar, heavy?.seqId || '');
+        request.addParameter('lightId', TYPES.NVarChar, light?.seqId || '');
+        request.addParameter('target', TYPES.NVarChar, heavy?.target || light?.target || '');
+        request.addParameter('targetSpecies', TYPES.NVarChar, mAb.targetSpecies || '');
+        request.addParameter('origin', TYPES.NVarChar, mAb.antibodyOrigin || '');
+        request.addParameter('epitope', TYPES.NVarChar, mAb.epitope || '');
+        request.addParameter('summary', TYPES.NVarChar, mAb.summary || '');
+        request.addParameter('confidence', TYPES.Int, Math.round(mAb.confidence || 0));
+
+        connection.execSql(request);
+      };
+
+      processNext();
+    });
+
+    connection.connect();
   });
 
   app.get('/api/health', (req, res) => {
