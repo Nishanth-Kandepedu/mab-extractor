@@ -40,7 +40,7 @@ try {
 }
 
 // Concurrency control: Limit heavy LLM extractions to 2 at a time
-const limit = pLimit(4);
+const limit = pLimit(2);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -207,18 +207,14 @@ async function startServer() {
 
   // API Routes
   app.post('/api/extract', async (req, res) => {
-    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, isExtendedMode } = req.body;
+    const { provider, model, input, systemInstruction, responseSchema, thinkingLevel } = req.body;
     
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
       return res.status(400).json({ error: "Input text is required." });
     }
 
     const jobId = Math.random().toString(36).substring(7);
-    await updateJob(jobId, { status: 'pending', startTime: Date.now(), isExtendedMode });
-
-    if (isExtendedMode) {
-      console.log(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
-    }
+    await updateJob(jobId, { status: 'pending', startTime: Date.now() });
 
     // Map custom or experimental models to valid Gemini API IDs
     const mapModel = (m: string) => {
@@ -280,8 +276,6 @@ async function startServer() {
             if (!text) throw new Error("Empty response from AI engine");
             
             const result = extractJson(text);
-            const count = result.antibodies?.length || 0;
-            console.log(`[Job ${jobId}] Extracted ${count} antibodies successfully`);
             
             if (!result.antibodies || result.antibodies.length === 0) {
               console.warn(`[Job ${jobId}] Model returned 0 antibodies. Raw text snippet: ${text.substring(0, 500)}`);
