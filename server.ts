@@ -39,8 +39,8 @@ try {
   console.error('[Firebase] Failed to initialize Admin SDK:', error);
 }
 
-// Concurrency control: Limit heavy LLM extractions to 2 at a time
-const limit = pLimit(4);
+// Concurrency control: Limit heavy LLM extractions to 3 at a time (conservative for reliability)
+const limit = pLimit(3);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -240,7 +240,7 @@ async function startServer() {
     limit(async () => {
       const jobStartTime = Date.now();
       let retryCount = 0;
-      const MAX_RETRIES = 2;
+      const MAX_RETRIES = 3;
 
       const runExtraction = async (): Promise<void> => {
         try {
@@ -356,8 +356,12 @@ async function startServer() {
 
           if (isRetryable && retryCount < MAX_RETRIES) {
             retryCount++;
-            const delay = Math.pow(2, retryCount) * 1000;
-            console.warn(`[Job ${jobId}] Retryable error (${errorMessage}). Retrying in ${delay / 1000}s...`);
+            // Exponential backoff with jitter
+            const baseDelay = Math.pow(2, retryCount) * 2000;
+            const jitter = Math.random() * 1000;
+            const delay = baseDelay + jitter;
+            
+            console.warn(`[Job ${jobId}] Retryable error (${errorMessage}). Retrying in ${Math.round(delay / 1000)}s...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return runExtraction();
           }

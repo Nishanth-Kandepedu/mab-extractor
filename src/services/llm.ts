@@ -670,7 +670,7 @@ async function executeLLMJob(payload: string): Promise<any> {
     const baseUrl = window.location.origin;
     let startResponse: Response | null = null;
     let postAttempts = 0;
-    const maxPostAttempts = 5; // Increased retries
+    const maxPostAttempts = 8; // Increased retries for initial submission
 
     while (postAttempts < maxPostAttempts) {
         try {
@@ -681,7 +681,9 @@ async function executeLLMJob(payload: string): Promise<any> {
             });
             
             if (startResponse.status === 429 || startResponse.status === 503) {
-                const delay = Math.pow(2, postAttempts) * 1000 + Math.random() * 1000;
+                const baseDelay = Math.pow(2, postAttempts) * 1500;
+                const jitter = Math.random() * 1500;
+                const delay = baseDelay + jitter;
                 console.warn(`[Extraction] Engine at capacity (${startResponse.status}). Retrying in ${Math.round(delay)}ms...`);
                 throw new Error(`Transient status: ${startResponse.status}`);
             }
@@ -689,7 +691,9 @@ async function executeLLMJob(payload: string): Promise<any> {
         } catch (postError: any) {
             postAttempts++;
             if (postAttempts < maxPostAttempts) {
-                const backoff = Math.pow(2, postAttempts - 1) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
+                const baseBackoff = Math.pow(2, postAttempts - 1) * 2000;
+                const jitter = Math.random() * 2000;
+                const backoff = baseBackoff + jitter;
                 await new Promise(resolve => setTimeout(resolve, backoff));
             } else {
                 throw postError;
@@ -710,7 +714,9 @@ async function executeLLMJob(payload: string): Promise<any> {
     while (attempts < maxAttempts) {
         try {
           const statusResponse = await fetch(`${baseUrl}/api/extract/status/${jobId}?t=${Date.now()}`, {
-              cache: 'no-store'
+              cache: 'no-store',
+              // Add a signal or timeout to the fetch specifically if needed, 
+              // but browser defaults are usually okay for status checks.
           });
           if (!statusResponse.ok) {
             console.warn(`[Extraction] Status check failed (${statusResponse.status}). Retrying...`);
@@ -721,7 +727,11 @@ async function executeLLMJob(payload: string): Promise<any> {
 
           const job = await statusResponse.json();
           if (job.status === 'completed') return job.result;
-          if (job.status === 'failed') throw new Error(job.error || 'Job failed');
+          if (job.status === 'failed') {
+             // If it failed with a transient error, we might want to try one last re-submission 
+             // but that's complex. For now, just throw the error with more context.
+             throw new Error(job.error || 'Job failed');
+          }
           
           if (attempts % 6 === 0) { // Log every 30 seconds
             console.log(`[Job ${jobId}] Status: ${job.status}...`);
@@ -734,7 +744,9 @@ async function executeLLMJob(payload: string): Promise<any> {
           }
         }
         
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Jittered polling to avoid thundering herd on status endpoints
+        const pollInterval = 5000 + Math.random() * 2000;
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
     }
     throw new Error("Job timed out while waiting for AI engine. This can happen during high traffic or for very large documents.");

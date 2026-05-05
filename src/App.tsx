@@ -1042,7 +1042,7 @@ function AppContent() {
 
         let result;
         let attempts = 0;
-        const maxItemAttempts = 2; // Auto-retry once for transient failures
+        const maxItemAttempts = 3; // Auto-retry for transient failures
 
         while (attempts < maxItemAttempts) {
           try {
@@ -1132,9 +1132,13 @@ function AppContent() {
                                error.message?.toLowerCase().includes('timeout');
                                
             if (isTransient && attempts < maxItemAttempts) {
-              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}). Auto-retrying transient error in 5s...`, error);
-              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id}...` }));
-              await new Promise(resolve => setTimeout(resolve, 5000));
+              const baseDelay = Math.pow(2, attempts - 1) * 5000;
+              const jitter = Math.random() * 5000;
+              const delay = baseDelay + jitter;
+              
+              console.warn(`[Batch] Item ${item.id} failed (Attempt ${attempts}/${maxItemAttempts}). Auto-retrying transient error in ${Math.round(delay/1000)}s...`, error);
+              setState(prev => ({ ...prev, extractingStatus: `Transient error. Retrying ${item.id} in ${Math.round(delay/1000)}s...` }));
+              await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
 
@@ -1150,9 +1154,13 @@ function AppContent() {
           }
         }
 
-       // Cooldown period between patents
+       // Cooldown period between patents with jitter
        if (i < state.batch!.items.length - 1) {
-         const COOLDOWN_SECONDS = 30;
+         // Dynamic cooldown based on success/failure? For now keep it stable but jittered.
+         const baseCooldown = 30;
+         const jitter = Math.floor(Math.random() * 10);
+         const COOLDOWN_SECONDS = baseCooldown + jitter;
+         
          for (let seconds = COOLDOWN_SECONDS; seconds > 0; seconds--) {
            setState(prev => ({
              ...prev,
