@@ -10,17 +10,19 @@ IMPORTANT EXTRACTION RULES:
    - Main antibodies: "2419", "3125", etc.
    - Variants: "2419-0105", "2419-1204", "4540-033", etc.
    - Treat variants as SEPARATE antibodies with their own VH/VL chains.
-13. SINGLE DOMAIN / VHH HANDLING: 
-   - Some patents use VHH or Single Domain antibodies (Nanobodies).
-   - These ONLY have a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
-   - If a table lists "VHH", treat it as a standalone Heavy chain.
 
-2. VL Chain Special Handling:
+2. SINGLE DOMAIN / VHH HANDLING (Nanobodies): 
+   - Some patents describe VHH or Single Domain antibodies (Nanobodies).
+   - These consist ONLY of a Heavy (VH) chain. DO NOT attempt to find a Light (VL) chain for these.
+   - TABLE HINT: If a table lists "VHH", treat it as a standalone Heavy chain.
+   - VALIDATION: A VHH antibody object MUST contain exactly ONE "Heavy" chain in the chains array. NEVER create a placeholder Light chain for VHH.
+
+3. VL Chain Special Handling:
    - VL chains may appear in a DIFFERENT TABLE than VH chains.
    - VL sequences are typically 110-120 amino acids long.
    - If VL appears incomplete, check the next page or table.
 
-3. Validation & Domain Boundary:
+4. Validation & Domain Boundary:
    - VH sequences: typically 115-125 amino acids. Ends with conserved "WGXG" motif (Framework 4).
    - VL sequences: typically 110-120 amino acids. Ends with conserved "FGXG" motif (Framework 4).
    - VARIABLE DOMAIN ONLY (Fv): You MUST only extract the Variable Domain. Do NOT include the Constant Region (CH1, CH2, CH3, CL, or Hinges).
@@ -31,44 +33,48 @@ IMPORTANT EXTRACTION RULES:
    - If the source contains the full chain, you MUST truncate it to the variable domain (max ~130 AA). Anything beyond the J-motif (VTVSS/VEIK) is a constant region and MUST be deleted from the extracted sequence. Extract ONLY the Fv.
    - LENGTH LIMIT: High-quality variable domains are NEVER longer than 135 AA. If you find a sequence that looks longer, you are likely failing to identify the J-motif/Constant Region boundary. Re-examine and truncate.
 
-4. Table Structure & Coverage:
+5. Table Structure & Coverage:
     - TABLE-FIRST PROTOCOL: You MUST perform an exhaustive scan of every Table (e.g., Table 1, Table 3, Table 6) before processing summarizing text. Tables are the source of truth for the complete list of clones.
     - Some antibodies may have their sequences split across multiple rows or pages.
     - For antibodies like "2419-1204", ensure you capture the COMPLETE Variable Domain sequence.
     - Check for table headers like "SEQ ID NO", "VH", "VL" to identify columns.
     - MANDATORY: Extract every single clone/antibody listed in a table. Do not stop after the first few. If a table spans multiple pages, continue extraction until the end of the table.
+    - FOR 30+ CLONES: To prevent 8k token overflows and 1-hour session timeouts, you MUST use "COMPACT JSON" style. Use keyword-only entries for "summary", "epitope", and "antibodyOrigin". Do not write full sentences. Prioritize valid sequence data above all else. 
+    - DATA DENSITY: Capture every clone but reduce experimental descriptions to key-value pairs (e.g., "IC50: 10nM").
 
-5. Mandatory SEQ ID & Evidence:
+6. Mandatory SEQ ID & Evidence:
     - You MUST extract the "SEQ ID NO" for every sequence found.
     - Capture the exact page number and table ID (if applicable) for every sequence.
     - The "evidenceStatement" should include the SEQ ID, page, and table coordinates.
 
-6. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
+7. Target Identification: Every antibody sequence has a primary binding target (antigen) (e.g., HER2, PD-L1, CD20, IFN-gamma). 
     - CRITICAL: Distinguish between the DIRECT BINDING TARGET (antigen) and any downstream signaling molecules, receptors, or ligands.
     - RECEPTOR VS LIGAND: Be extremely careful not to swap the receptor and ligand. If the antibody binds to "CD3", its target is "CD3" (or "CD3E/P07766"), NOT the other arm's target (like MICA) or the cell it's on.
     - Example: In a bispecific "Anti-CD3 x Anti-MICA", the CD3-binding arm has target "CD3", and the MICA-binding arm has target "MICA". DO NOT assign "MICA" to both.
     - Example: If an antibody blocks "IFN-gamma signaling" and the patent measures "STAT1 phosphorylation", the target is "IFN-gamma", NOT "STAT1".
     - You must extract the antigen that the antibody is designed to bind to. 
     - Include this target in every chain object.
-7. ID-Mapping & Cross-Referencing Strategy: 
+
+8. ID-Mapping & Cross-Referencing Strategy: 
     - First, identify every unique mAb ID (e.g., "mAb 1", "2419") from the tables. You MUST extract sequences for every ID found.
     - CROSS-REFERENCE: Many antibodies have multiple names (e.g., "mAb 1" is "REGN7075"). You MUST map these names together in the "mAbName" field (e.g., "mAb 1 (REGN7075)") or ensure both are mentioned in the summary.
     - ANTI-LAZINESS: Do NOT rely on candidate summaries in the text which often omit the "parental" clones listed in the tables. If a clone exists in a table, it MUST be in your output.
-8. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
-9. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
-10. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
-11. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
-12. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
-13. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
-14. Amino Acid Format:
+
+9. Chain-by-Chain Verification: Treat every Heavy (VH) and Light (VL) chain as a standalone high-quality mining task. After extracting a sequence, internally re-read the source text to verify every single amino acid.
+10. Length-Check Validation: For every sequence extracted, verify that the character count matches the source Variable Domain exactly. Do not truncate or "summarize" variable sequences, but do exclude constant regions.
+11. VL Chain Priority: Given the higher historical error rate in VL chains, dedicate extra reasoning cycles to the Light chain variable regions.
+12. Source Priority: Always use "Sequence Listings" as the primary source of truth for character accuracy over table text.
+13. CDR Identification: Identify CDR1, CDR2, and CDR3 based on standard numbering (IMGT/Kabat).
+14. Non-Standard Amino Acids: If you encounter letters other than the standard 20 (ACDEFGHIKLMNPQRSTVWY), extract them exactly as they appear. The system will flag them later.
+15. Amino Acid Format:
     - Use ONLY single-letter amino acid codes (e.g., A, C, D, E...).
     - DO NOT USE three-letter codes (e.g., Ala, Cys, Asp, Glu, GLY). If the document uses three-letter codes, you MUST convert them to single-letter codes in your output.
     - If a sequence contains spaces or other punctuation, CLEAN IT.
     - VERBATIM ACCURACY: You must never summarize or approximate a sequence. Every character must match the source exactly.
-15. Return the data in valid JSON format.
-16. CRITICAL: Ensure the JSON is valid and complete.
+16. Return the data in valid JSON format.
+17. CRITICAL: Ensure the JSON is valid and complete.
 
-17. BISPECIFIC & MULTISPECIFIC HANDLING:
+18. BISPECIFIC & MULTISPECIFIC HANDLING:
     - Many patents describe bispecific antibodies (e.g., EGFR x CD28). 
     - You MUST look for components of BOTH binding arms.
     - If the patent title mentions two targets (A x B), you are not finished until you have extracted sequences for both Target A and Target B components.
@@ -76,17 +82,17 @@ IMPORTANT EXTRACTION RULES:
     - LABELING: In the "summary" or "mAbName", clearly indicate if a sequence belongs to "Arm 1", "Arm 2", "Target A", or "Target B". 
     - COMMON LIGHT CHAIN: If a bispecific uses a common light chain, Ensure that light chain is associated with both Heavy chain components in the final JSON.
 
-17. TABLE SCANNING HIERARCHY:
+19. TABLE SCANNING HIERARCHY:
     - STEP 1: Scan Table 1 & Table 3 for "Parental" antibodies (e.g., mAb12999P2, mAb14226). These MUST be extracted as separate entries.
     - STEP 2: Scan Table 6 (or equivalent) for "Bispecific/Multi-specific" assemblies (e.g., bsAb7075, REGN7075).
     - STEP 3: Ensure every ID mentioned in these tables is cross-referenced with the Sequence Listing for verbatim accuracy.
     - STEP 4: If a clone name like "mAb12999P2" appears in any table, it MUST be extracted. Do NOT skip parental clones just because they are part of a larger multispecific assembly. Every clone ID in Table 1 and Table 3 is a mandatory mining target.
 
-18. PARENTAL VS COMPONENT CLONES:
+20. PARENTAL VS COMPONENT CLONES:
     - When a Bispecific antibody (bsAb) is made of two parental antibodies (mAbs), you MUST extract the parental mAbs individually AND the bispecific assembly. 
     - Total coverage means if Table 1 has 10 mAbs and Table 6 has 5 bsAbs, your output should contain at least 15 antibody objects.
 
-19. EPITOPE, TARGET SPECIES & ANTIBODY ORIGIN:
+21. EPITOPE, TARGET SPECIES & ANTIBODY ORIGIN:
     - For every antibody, attempt to identify the specific epitope residues it binds to on the target (e.g., "K43, Q48, and K86 of human IFN-gamma").
     - Identify the TARGET SPECIES (the biological source of the antigen/target protein).
     - MANDATORY STANDARDIZATION for Target Species:
@@ -98,6 +104,12 @@ IMPORTANT EXTRACTION RULES:
       * "Rabbit" -> "Oryctolagus cuniculus"
     - Identify the ANTIBODY ORIGIN (the species or method used to generate the antibody). Examples: "Humanized", "Chimeric", "Fully Human", "Mouse", "Phage Display", "Transgenic Mouse".
     - If any are not explicitly found, leave as an empty string.
+
+22. MULTI-LANGUAGE HANDLING (e.g., Chinese):
+    - Many patents are in Chinese (CN), Japanese (JP), or Korean (KR).
+    - You MUST translate the mAb names, targets, and experimental metadata to English in the JSON output.
+    - Translate: "单克隆抗体" -> "mAb", "重链" -> "Heavy chain", "轻链" -> "Light chain", "抗体" -> "Antibody", "靶点" -> "Target", "序列" -> "Sequence", "实施例" -> "Example".
+    - Sequences (A, C, D, E...) are universal; do not translate them.
 `;
 
 export const GEMMA_4_EXTRA_INSTRUCTION = `
@@ -259,7 +271,7 @@ export async function extractWithLLM(
   let formattedInput: any;
 
   if (typeof input === "string") {
-    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You MUST identify every mAb ID mentioned in early tables. Do not omit monoclonal parental clones.\n\n${input}`;
+    formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You must identify and extract every unique mAb/clone ID mentioned in the document. Do not omit any parental clones. Maintain 100% verbatim accuracy for sequences.\n\n${input}`;
   } else {
     // For Gemini/Gemma infrastructure, we support multimodal inputs
     if (provider !== 'gemini' && provider !== 'gemma') {
@@ -299,9 +311,9 @@ export async function extractWithLLM(
       } else {
         parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
       }
-      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt} Identify Parental clones in Tables 1/3 and Bispecifics in Table 6. Extract all separately. Verbatim accuracy is mandatory.` });
+      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
     } else {
-      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt} Ensure every mAb ID in Tables 1/3 and every bsAb in Table 6 is captured separately.` });
+      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
     }
 
     formattedInput = parts;
@@ -388,7 +400,7 @@ export async function extractWithLLM(
       input: formattedInput,
       systemInstruction: activeInstruction,
       isExtendedMode: options.isExtendedMode,
-      thinkingLevel: ((model?.includes('3.1') || isGemma4) && options.isExtendedMode) ? "HIGH" : "MINIMAL",
+      thinkingLevel: (options.isExtendedMode && (model?.includes('3.1') || isGemma4)) ? "HIGH" : undefined,
       responseSchema: responseSchema,
     });
 
@@ -692,8 +704,8 @@ async function executeLLMJob(payload: string): Promise<any> {
 
     const { jobId } = await startResponse.json();
     let attempts = 0;
-    // Increased to 60 mins (720 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
-    const maxAttempts = 720; 
+    // Increased to 3 hours (2160 attempts * 5s) to allow for extreme server-side queuing and high-volume clones
+    const maxAttempts = 2160; 
 
     while (attempts < maxAttempts) {
         try {

@@ -40,7 +40,7 @@ try {
 }
 
 // Concurrency control: Limit heavy LLM extractions to 2 at a time
-const limit = pLimit(2);
+const limit = pLimit(4);
 
 // In-memory job store (Fallback/Cache)
 const jobsCache = new Map<string, any>();
@@ -263,10 +263,8 @@ async function startServer() {
               config: {
                 systemInstruction,
                 temperature: 0,
-                thinkingConfig: thinkingLevel ? { 
-                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : 
-                                 thinkingLevel === 'LOW' ? ThinkingLevel.LOW : 
-                                 ThinkingLevel.MINIMAL 
+                thinkingConfig: (thinkingLevel === 'HIGH' || thinkingLevel === 'LOW') ? { 
+                  thinkingLevel: thinkingLevel === 'HIGH' ? ThinkingLevel.HIGH : ThinkingLevel.LOW
                 } : undefined,
                 maxOutputTokens: 65536,
                 responseMimeType: "application/json",
@@ -280,6 +278,8 @@ async function startServer() {
             if (!text) throw new Error("Empty response from AI engine");
             
             const result = extractJson(text);
+            const count = result.antibodies?.length || 0;
+            console.log(`[Job ${jobId}] Extracted ${count} antibodies successfully`);
             
             if (!result.antibodies || result.antibodies.length === 0) {
               console.warn(`[Job ${jobId}] Model returned 0 antibodies. Raw text snippet: ${text.substring(0, 500)}`);
