@@ -72,6 +72,14 @@
         "status": { "type": "string", "enum": ["new", "processed"] }
       },
       "required": ["name", "email", "message", "timestamp", "status"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "Global application configuration",
+      "type": "object",
+      "properties": {
+        "hideModelForGuests": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
@@ -94,6 +102,10 @@
     "/access_requests/{requestId}": {
       "schema": "AccessRequest",
       "description": "Beta access requests from new users"
+    },
+    "/settings/{settingId}": {
+      "schema": "GlobalSettings",
+      "description": "Global application settings"
     }
   }
 }

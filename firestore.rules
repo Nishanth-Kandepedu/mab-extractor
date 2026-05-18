@@ -2,6 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // ===============================================================
     // Assumed Data Model
     // ===============================================================
@@ -109,6 +114,10 @@ service cloud.firestore {
              data.status == 'new';
     }
 
+    function isValidSetting(data) {
+      return (!('hideModelForGuests' in data) || data.hideModelForGuests is bool);
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
@@ -153,6 +162,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if true; // Allow anyone to request access
       allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidSetting(request.resource.data);
     }
 
     match /test/{docId} {

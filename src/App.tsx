@@ -189,6 +189,7 @@ function AppContent() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
+  const [hideModelForGuests, setHideModelForGuests] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
@@ -247,8 +248,12 @@ function AppContent() {
         return parsed.error.message;
       }
     } catch(e) {}
-    if (error.includes('token count exceeds') || error.includes('262144')) 
+    if (error.includes('token count exceeds') || error.includes('262144')) {
+      if (user?.role === 'guest' && hideModelForGuests) {
+        return "The document exceeds current processing limits. Please try a smaller subset or page range.";
+      }
       return "Document too large for Gemma 4 (256k limit). Please switch to Gemini 3.1 Pro (1M+ limit) or use a text-only subset.";
+    }
     if (error.includes('503')) return "The extraction service is temporarily unavailable. Please try again shortly.";
     if (error.includes('429')) return "Too many requests. Please wait a moment before trying again.";
     if (error.includes('timeout') || error.includes('proxy mirror timeout')) {
@@ -289,6 +294,45 @@ function AppContent() {
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    const fetchGlobalSettings = async () => {
+      const path = 'settings/global';
+      try {
+        const settingsSnap = await getDocFromServer(doc(db, 'settings', 'global'));
+        if (settingsSnap.exists()) {
+          const data = settingsSnap.data();
+          if (data.hideModelForGuests !== undefined) {
+            setHideModelForGuests(data.hideModelForGuests);
+          }
+        }
+      } catch (err: any) {
+        if (err.code === 'permission-denied') {
+          handleFirestoreError(err, OperationType.GET, path);
+        }
+        console.error('Failed to fetch settings:', err);
+      }
+    };
+    fetchGlobalSettings();
+  }, []);
+
+  const updateGlobalSetting = async (key: string, value: any) => {
+    if (user?.role !== 'admin') return;
+    try {
+      await setDoc(doc(db, 'settings', 'global'), { [key]: value }, { merge: true });
+      if (key === 'hideModelForGuests') setHideModelForGuests(value);
+      
+      // Log activity
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: user.uid,
+        userDisplayName: user.displayName,
+        action: `Update Setting: ${key} to ${value}`,
+        timestamp: Timestamp.now()
+      });
+    } catch (err) {
+      console.error('Failed to update setting:', err);
+    }
+  };
 
   const checkHealth = async () => {
     try {
@@ -2136,6 +2180,7 @@ function AppContent() {
           </div>
 
           {/* Model Selection */}
+          {(!(user?.role === 'guest' && hideModelForGuests)) && (
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -2291,8 +2336,36 @@ function AppContent() {
                   />
                 </button>
               </div>
+
+              {user?.role === 'admin' && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-50">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-indigo-600">Privacy Mode</span>
+                      <span className="px-1 bg-zinc-100 text-zinc-600 text-[8px] font-bold uppercase rounded border border-zinc-200 leading-none py-0.5">Admin</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 font-semibold leading-tight mt-0.5">Hide extraction model details from guest users</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateGlobalSetting('hideModelForGuests', !hideModelForGuests)}
+                    className={cn(
+                      "relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none",
+                      hideModelForGuests ? "bg-indigo-600 shadow-sm shadow-indigo-100" : "bg-zinc-200"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-300 ease-in-out",
+                        hideModelForGuests ? "translate-x-5" : "translate-x-0"
+                      )}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
+          )}
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm sticky top-24">
             <div className="flex items-center justify-between mb-6">
@@ -2978,7 +3051,9 @@ function AppContent() {
                             <p className="font-bold truncate max-w-[200px] text-zinc-900">{item.patentTitle}</p>
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[10px] text-zinc-500 font-mono">{item.patentId}</p>
-                              {item.modelUsed && <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1 rounded font-mono">{item.modelUsed}</span>}
+                              {item.modelUsed && (!(user?.role === 'guest' && hideModelForGuests)) && (
+                                <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1 rounded font-mono">{item.modelUsed}</span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -3367,7 +3442,7 @@ function AppContent() {
                               )}
                             </div>
                           )}
-                          {state.result.modelUsed && (
+                          {state.result.modelUsed && (!(user?.role === 'guest' && hideModelForGuests)) && (
                             <span className={cn(
                               "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
                               state.result.modelUsed.includes('flash') ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-indigo-50 text-indigo-600 border border-indigo-100"
