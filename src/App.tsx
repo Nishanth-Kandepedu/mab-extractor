@@ -2180,7 +2180,6 @@ function AppContent() {
           </div>
 
           {/* Model Selection */}
-          {(!(user?.role === 'guest' && hideModelForGuests)) && (
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -2191,72 +2190,86 @@ function AppContent() {
               </div>
               {(user as any)?.role === 'guest' && (
                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-tight">
-                  Guest Mode
+                  {hideModelForGuests ? 'Enterprise Core' : 'Guest Mode'}
                 </span>
               )}
             </div>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-2">
-                {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
-                  const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                  const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => setLlmOptions(prev => ({ 
-                        ...prev, 
-                        provider: p, 
-                        model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
-                      }))}
-                      className={cn(
-                        "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
-                        llmOptions.provider === p
-                          ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
-                          : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
-                        isDisabled && "opacity-40 grayscale cursor-not-allowed"
-                      )}
-                    >
-                      {displayLabel}
-                    </button>
-                  );
-                })}
-              </div>
-              <select
-                value={llmOptions.model}
-                onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
-                className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-bold outline-none ring-0 shadow-none focus:border-indigo-400 transition-all cursor-pointer"
-                disabled={state.isExtracting}
-              >
-                {llmOptions.provider === 'gemini' && (
-                  <>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                    <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
-                  </>
-                )}
-                {llmOptions.provider === 'gemma' && (
-                  <>
-                    <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
-                  </>
-                )}
-                {llmOptions.provider === 'openai' && (
-                  <>
-                    <option value="gpt-4o">GPT-4o (Omni)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="o1-preview">o1 Preview (Reasoning)</option>
-                  </>
-                )}
-                {llmOptions.provider === 'anthropic' && (
-                  <>
-                    <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                    <option value="claude-3-opus-latest">Claude 3 Opus</option>
-                  </>
-                )}
-              </select>
+              {(!(user?.role === 'guest' && hideModelForGuests)) ? (
+                <>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
+                      const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
+                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          disabled={isDisabled}
+                          onClick={() => setLlmOptions(prev => ({ 
+                            ...prev, 
+                            provider: p, 
+                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                          }))}
+                          className={cn(
+                            "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                            llmOptions.provider === p
+                              ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
+                              : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
+                            isDisabled && "opacity-40 grayscale cursor-not-allowed"
+                          )}
+                        >
+                          {displayLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <select
+                    value={llmOptions.model}
+                    onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
+                    className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-bold outline-none ring-0 shadow-none focus:border-indigo-400 transition-all cursor-pointer"
+                    disabled={state.isExtracting}
+                  >
+                    {llmOptions.provider === 'gemini' && (
+                      <>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                        <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                      </>
+                    )}
+                    {llmOptions.provider === 'gemma' && (
+                      <>
+                        <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                      </>
+                    )}
+                    {llmOptions.provider === 'openai' && (
+                      <>
+                        <option value="gpt-4o">GPT-4o (Omni)</option>
+                        <option value="gpt-4o-mini">GPT-4o Mini</option>
+                        <option value="o1-preview">o1 Preview (Reasoning)</option>
+                      </>
+                    )}
+                    {llmOptions.provider === 'anthropic' && (
+                      <>
+                        <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                        <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+                        <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                      </>
+                    )}
+                  </select>
+                </>
+              ) : (
+                <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm border border-zinc-100">
+                    <div className="w-4 h-4 rounded-full bg-indigo-500 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Optimized Extraction</p>
+                    <p className="text-[10px] text-zinc-400">High-performance multi-layer model</p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between mt-2 pt-4 border-t border-zinc-50">
                 <div className="flex flex-col">
@@ -2365,7 +2378,6 @@ function AppContent() {
               )}
             </div>
           </div>
-          )}
 
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm sticky top-24">
             <div className="flex items-center justify-between mb-6">
@@ -3065,7 +3077,9 @@ function AppContent() {
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="text-zinc-600 font-mono">{(item.usageMetadata?.totalTokenCount || 0).toLocaleString()}</span>
-                               <span className="text-[10px] text-zinc-400">{getEstCost(item.usageMetadata, item.modelUsed || '')}</span>
+                               {item.usageMetadata && (!(user?.role === 'guest' && hideModelForGuests)) && (
+                                 <span className="text-[10px] text-zinc-400">{getEstCost(item.usageMetadata, item.modelUsed || '')}</span>
+                               )}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -3648,15 +3662,17 @@ function AppContent() {
                         )}
                       </div>
 
-                      <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Coins className="w-3 h-3 text-indigo-400" />
-                          <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
+                      {(!(user?.role === 'guest' && hideModelForGuests)) && (
+                        <div className="flex flex-col bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Coins className="w-3 h-3 text-indigo-400" />
+                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider">Est. Cost (USD)</span>
+                          </div>
+                          <span className="text-lg font-bold text-indigo-100">
+                            {getEstCost(state.result.usageMetadata, state.result.modelUsed || llmOptions.model)}
+                          </span>
                         </div>
-                        <span className="text-lg font-bold text-indigo-100">
-                          {getEstCost(state.result.usageMetadata, state.result.modelUsed || llmOptions.model)}
-                        </span>
-                      </div>
+                      )}
                     </div>
                   </div>
 
