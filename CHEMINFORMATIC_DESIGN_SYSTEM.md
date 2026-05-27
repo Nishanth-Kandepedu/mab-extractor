@@ -1,230 +1,182 @@
-# Cheminformatic Labs Design System
-A design system and template blueprint for **Cheminformatic Labs** products (e.g., *AbMiner*, *SARMiner*, *LeadMiner*, or *PolyMiner*). It defines the exact typography pairing, color choices, boarder treatments, interactive layout frames, and micro-interactions that make the platform feel polished, scientific, and highly executive.
+# Cheminformatic Labs — Reusable UI Design System & Wireframe Spec
+This document outlines the visual standards, responsive grids, border properties, interactive highlights, and pure wireframe templates for Cheminformatic Labs products. It is structured abstractly so you can swap out parameters (like `[BRAND_NAME]` / `[APP_NAME]`) to build matches like *SARMiner*, *PatentMiner*, or *LeadMiner* without messing up application state engines.
 
 ---
 
-## 1. Aesthetic Identity & Mood
-The design philosophy of Cheminformatic Labs balances **pristine scientific precision** with **high-contrast executive utility**. It avoids flat tech-defaults (e.g. standard blue/purple gradients) and focuses heavily on negative space, micro-borders, and high-density technical layouts.
+## 1. Visual Theme, Palette, & Mood
+The design system of Cheminformatic Labs matches **clinical scientific precision** with **high-density executive utility**. It avoids flat tech-defaults and focuses heavily on negative space, micro-borders, and high-density technical layouts.
 
-| Dimension | Rule | Visual Translation |
-| :--- | :--- | :--- |
-| **Typography** | Swiss technical contrast | Display Sans-Serif + Monospace alignments |
-| **Borders** | Micro-thin separations | `border-zinc-200` (Light) or `border-white/10` (Dark) |
-| **Plates** | Slate hybrid panels | Soft off-white backgrounds + pitch-charcoal headers |
-| **Interactions** | Snappy, tactile response | Discrete transitions, subtle borders, and smooth scaling |
+### A. The Core Neutral Palette (85% of Visual Framework)
+The system leverages high-quality light workspace layouts paired with dark side-drawers or heavy header modules to anchor the visual weight.
 
----
+*   **Dark Neutral Plate** (`bg-zinc-950` / `bg-zinc-900`): Dark charcoal used for main top headers, system landing sections, or action drawers.
+*   **Aesthetic Off-White Workspace** (`bg-zinc-50` / `bg-white`): Standard content canvas, table containers, search modules, and output grids.
+*   **Micro-Borders & Grids** (`border-zinc-200`): Every tile or list card is separated by a thin neutral border to preserve data clarity.
+    *   *Light Theme:* `border-zinc-200/80` or `border-zinc-100` (for secondary tiers).
+    *   *Dark Theme:* `border-white/10` or `border-zinc-800/60`.
 
-## 2. Shared Color Palette
-
-### A. Core Neutral Slate (85% of visual framework)
-The core app rests on high-quality light workspace layouts paired with deep slate-dark navigation blocks:
-*   **Deep Space Gray** (`bg-zinc-950` / `bg-zinc-900`): Used for side panels, header banners, and heavy system cards to draw high contrast.
-*   **Aesthetic Off-White** (`bg-zinc-50` / `bg-white`): Used for the main interactive pages, canvas tools, and spreadsheets.
-*   **Micro-borders** (`neutral border`):
-    *   Light theme: `border-zinc-200/80`
-    *   Dark theme: `border-white/10`
-
-### B. High-Curation Highlights
-Primary indicators use high-intensity, clinical accents:
-*   **Primary Accent** (`text-indigo-600` / `bg-indigo-50`): For brand anchors, indicators, actions, and primary badges.
-*   **Success Indicator** (`text-emerald-600` / `bg-emerald-50`): For fully verified sequences and complete states.
-*   **Warning / Review Indicator** (`text-amber-800` / `bg-amber-50` / `border-amber-200`): For sequences containing non-standard amino acids, potential length-anomalies, constant regions, or low-confidence readings.
+### B. Functional Action Colors
+Functional indicators use controlled, high-intensity color accents:
+*   **Brand / Action Primary** (`text-indigo-600` / `bg-indigo-50` / `hover:bg-indigo-100`): Brand accents and primary actions.
+*   **Approved / Verified State** (`text-emerald-600` / `bg-emerald-50` / `border-emerald-200`): Cleared, finished, or safe matches.
+*   **Warning / Needs Review State** (`text-amber-800` / `bg-amber-50` / `border-amber-200`): Sequences containing warnings, anomalies, or draft indicators.
 
 ---
 
-## 3. Typography & Google Fonts Spec
-Include the following import rules at the top of the global CSS entry-point:
+## 2. Typography Pairings & Hierarchy
+Configure these font pairings inside your layout files to create high scannability:
 
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import "tailwindcss";
-
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-}
+/* Import Rule for Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 ```
 
-### Typographic Hierarchy Rules
-*   **Hero Headings / Main Brand Names**: Use display font, with medium/bold tracking tight:
-    `<h1 className="font-display font-bold tracking-tight text-white text-3xl">SubAppName</h1>`
-*   **General UI labels & buttons**: Use standard sans font, high weight, tracking wide, and uppercase for indicators:
-    `<span className="font-sans font-bold text-[10px] uppercase tracking-widest text-zinc-500">Label</span>`
-*   **Sequence Data & Mathematical Values**: Use monospace alignment to avoid spatial distortion:
-    `<span className="font-mono text-xs text-zinc-700 tracking-normal font-medium">EVQLVESGGGLVQPG</span>`
+| Type Role | Font Family | Tailwinds Class | Usage |
+| :--- | :--- | :--- | :--- |
+| **Display Header** | Space Grotesk | `font-display font-medium` | Brands, section title lines, hero greetings |
+| **General UI Copy** | Inter (Sans-serif) | `font-sans antialiased` | Data descriptors, menu options, form controls |
+| **Structured Output**| JetBrains Mono | `font-mono tracking-tight` | Alignment values, code codes, exact values, counts |
+
+### Sizing and Letter Spacings
+*   **Main Branding Title:** `text-lg font-bold tracking-tight text-white` (Clean, non-shouting Display).
+*   **Technical Sub-Bands:** `text-[9px] uppercase font-bold tracking-widest text-indigo-400` (Always positioned directly beneath the main brand name).
+*   **Form Action Labels:** `text-[10px] font-sans font-bold uppercase tracking-widest text-zinc-500` (Dense, clear uppercase labels).
 
 ---
 
-## 4. Reusable Component Code Patterns
-
-### A. The Neural Loader Template (Tactile & Purposeful)
-This loading design avoids traditional boring spinners. It uses an active, jitter-controlled looping timer with progressive task list sequences to create anticipation:
+## 3. Pure Wireframe HTML/JSX Structure
+Use this nested layout pattern to maintain structural unity across arbitrary full-screen views.
 
 ```tsx
-import React, { useState, useEffect } from 'react';
-import { Database } from 'lucide-react';
-import { motion } from 'motion/react';
-
-export const ScientificLoader = ({ statusText }: { statusText?: string }) => {
-  const steps = [
-    "Initializing Neural Engine",
-    "Identifying Variable Patterns",
-    "Processing Multimodal Signals",
-    "Validating Verbatim Integrity",
-    "Synchronizing Domain Coordinates",
-  ];
-  
-  const [timer, setTimer] = useState(0);
-  
-  useEffect(() => {
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
+export default function UniversalLayout() {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-white p-8 border border-zinc-100 rounded-3xl min-h-[400px]">
-      <div className="relative mb-8">
-        <div className="w-24 h-24 rounded-full border-4 border-indigo-50 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 border-r-indigo-600 animate-spin" />
-          <Database className="w-8 h-8 text-indigo-600" />
-        </div>
-      </div>
+    <div className="min-h-screen bg-zinc-50 font-sans flex flex-col antialiased">
       
-      <h2 className="text-xl font-bold text-zinc-900 mb-2 tracking-tight">Processing Scientific Text</h2>
-      
-      <div className="mb-6">
-        <span className="px-4 py-1.5 bg-zinc-900 text-white rounded-full text-sm font-bold font-mono">
-          {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-        </span>
-      </div>
-      
-      <div className="text-center font-sans">
-        {statusText ? (
-          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">{statusText}</p>
-        ) : (
-          steps.map((step, i) => (
-            <p 
-              key={i} 
-              className={`text-xs tracking-wide transition-all duration-300 mb-1 ${
-                i === Math.floor((timer / 6) % steps.length) ? "text-indigo-600 font-bold" : "text-zinc-300"
-              }`}
-            >
-              {step}
-            </p>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-```
-
----
-
-### B. Mapped Sequence Display Template (High-Density Visualization)
-Use this CSS & JSX implementation to highlight sequence alignments (such as CDRs, conserved sequences, mutations, or key markers) directly in place with elegant hover popovers:
-
-```tsx
-import React from 'react';
-
-interface Segment {
-  sequence: string;
-  start: number;
-  end: number;
-  type: string;
-}
-
-export const SequenceViewer = ({ fullSequence, segments }: { fullSequence: string; segments: Segment[] }) => {
-  // Split sequence into highlighted chunks
-  const renderSequence = () => {
-    const elements: React.ReactNode[] = [];
-    let lastIndex = 0;
-
-    // Sort segments by starting position
-    const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
-
-    sortedSegments.forEach((segment, idx) => {
-      // Append normal preceding sequence
-      if (segment.start > lastIndex) {
-        elements.push(
-          <span key={`normal-${idx}`} className="text-zinc-500">
-            {fullSequence.substring(lastIndex, segment.start)}
-          </span>
-        );
-      }
-
-      // Determine segment-specific colors
-      let badgeColor = "bg-indigo-500/10 text-indigo-700 border-indigo-200";
-      if (segment.type === 'CDR3') badgeColor = "bg-rose-500/10 text-rose-700 border-rose-200";
-      else if (segment.type === 'CDR2') badgeColor = "bg-amber-500/10 text-amber-700 border-amber-200";
-
-      // Append Highlighted Segment
-      elements.push(
-        <span 
-          key={`segment-${idx}`} 
-          className={`px-1 py-0.5 border rounded-md font-bold transition-all hover:scale-[1.02] cursor-help relative group inline-block ${badgeColor}`}
-        >
-          {segment.sequence}
+      {/* 1. Header Band (Dark Theme) */}
+      <header className="bg-zinc-950 border-b border-white/10 px-8 py-4 text-white">
+        <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between">
           
-          {/* Subtle Hover Coordinate Bubble */}
-          <span className="opacity-0 group-hover:opacity-100 absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 bg-zinc-900 text-white text-[9px] font-mono rounded px-1.5 py-0.5 pointer-events-none transition-all z-10 whitespace-nowrap">
-            {segment.type}: {segment.start}-{segment.end}
-          </span>
-        </span>
-      );
+          {/* Logo & Sub-Brand Block */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold">L</div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-display font-bold tracking-tight text-white">[APP_NAME]</h1>
+                <span className="text-[9px] font-bold text-zinc-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
+                  [COMPANY_NAME]
+                </span>
+              </div>
+              <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">[APP_TAGLINE]</p>
+            </div>
+          </div>
 
-      lastIndex = segment.end;
-    });
+          {/* User Profile / Access Tier Badge */}
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-zinc-400 font-medium">Guest User</span>
+            <span className="text-[9px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
+              Level 1 Access
+            </span>
+          </div>
 
-    // Append remaining normal trailing sequence
-    if (lastIndex < fullSequence.length) {
-      elements.push(
-        <span key="normal-end" className="text-zinc-500">
-          {fullSequence.substring(lastIndex)}
-        </span>
-      );
-    }
+        </div>
+      </header>
 
-    return elements;
-  };
+      {/* 2. Main Workspace Layout */}
+      <main className="max-w-[1600px] w-full mx-auto px-8 py-8 flex-1 flex flex-col gap-8">
+        
+        {/* Metric Cards Ribbon (Flexible Metric Columns) */}
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm">
+            <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">[METRIC_1_LABEL]</span>
+            <div className="text-2xl font-display font-bold text-zinc-900 mt-1">[METRIC_1_VALUE]</div>
+          </div>
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm">
+            <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">[METRIC_2_LABEL]</span>
+            <div className="text-2xl font-display font-bold text-zinc-900 mt-1">[METRIC_2_VALUE]</div>
+          </div>
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm border-emerald-200 bg-emerald-50/10">
+            <span className="text-[9px] text-emerald-600 uppercase font-bold tracking-widest">[METRIC_3_LABEL]</span>
+            <div className="text-2xl font-display font-bold text-emerald-800 mt-1">[METRIC_3_VALUE]</div>
+          </div>
+          <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm">
+            <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">[METRIC_4_LABEL]</span>
+            <div className="text-2xl font-display font-bold text-zinc-900 mt-1">[METRIC_4_VALUE]</div>
+          </div>
+        </section>
 
-  return (
-    <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 font-mono text-xs leading-relaxed tracking-wider break-all shadow-sm">
-      <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100">
-        <span className="text-[10px] font-sans font-bold text-zinc-400 uppercase tracking-widest">Sequence Coverage Map</span>
-        <span className="text-[10px] font-mono text-zinc-400">{fullSequence.length} Residues</span>
-      </div>
-      <div>{renderSequence()}</div>
+        {/* Workspace Panels split (60 / 40 or 70 / 30 layout) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          
+          {/* Main Control Panel and Lists */}
+          <div className="lg:col-span-2 bg-white border border-zinc-200/80 rounded-3xl p-6 shadow-sm flex flex-col gap-6">
+            <h2 className="text-lg font-display font-bold tracking-tight text-zinc-900">[WORKSPACE_SECTION_TITLE]</h2>
+            <div className="h-[300px] border border-dashed border-zinc-200 rounded-2xl flex items-center justify-center text-zinc-400 hover:border-zinc-300 transition-colors">
+              [PLACE_YOUR_PRIMARY_LISTS_OR_FORMS_HERE]
+            </div>
+          </div>
+
+          {/* Side Drawer Info Cards */}
+          <div className="bg-white border border-zinc-200/80 rounded-3xl p-6 shadow-sm flex flex-col gap-6">
+            <h2 className="text-lg font-display font-bold tracking-tight text-zinc-900">[INSPECTOR_PANEL_TITLE]</h2>
+            <div className="h-[300px] border border-dashed border-zinc-200 rounded-2xl flex items-center justify-center text-zinc-400">
+              [PLACE_YOUR_DETAIL_INSPECTORS_HERE]
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+
+      {/* 3. Global Footer Band (Light Theme) */}
+      <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6 text-[11px] text-zinc-500">
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono font-bold uppercase tracking-wider text-zinc-400">[SUBDOMAIN_OR_URL_PLACEHOLDER]</span>
+          <p className="text-zinc-400 font-medium">A Product of [COMPANY_NAME] LLP © 2026. All Rights Reserved.</p>
+        </div>
+        <div className="flex gap-8">
+          <div className="flex flex-col">
+            <span className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
+            <span className="font-medium text-zinc-700">[PROCESSING_STATUS_TEXT]</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Session Protocol</span>
+            <span className="font-medium text-zinc-700">Encrypted Admin Session</span>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
-};
+}
 ```
 
 ---
 
-### C. Elegant Metric Card Template
-A template card optimized to display extraction statistics, computing parameters, or numeric scientific ranges (e.g. molecular weights, sequence variants, or accuracy ratings) without adding artificial clutter:
+## 4. Reusable Visual Box Layout Styles
 
+### A. High Density Grid Cells
+Use this style block to align key-value listings or technical summaries side-by-side with monospaced accents. This avoids table stretch while presenting dense textual readings:
 ```tsx
-import React from 'react';
-import { Activity } from 'lucide-react';
+<div className="grid grid-cols-2 gap-4 border border-zinc-100 rounded-2xl p-4 bg-zinc-50/50">
+  <div>
+    <span className="text-[9px] text-zinc-400 font-bold uppercase">[PARAMETER]</span>
+    <p className="text-xs text-zinc-800 font-semibold">[VALUE]</p>
+  </div>
+  <div>
+    <span className="text-[9px] text-zinc-400 font-bold uppercase">[UNIT]</span>
+    <p className="text-xs text-zinc-500 font-mono">[VALUE_MONOSPACED]</p>
+  </div>
+</div>
+```
 
-export const DashboardCard = ({ title, value, detail }: { title: string; value: string | number; detail: string }) => {
-  return (
-    <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm transition-all hover:border-zinc-300">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest">{title}</span>
-        <div className="w-5 h-5 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-          <Activity className="w-3 h-3 text-indigo-500" />
-        </div>
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold font-display tracking-tight text-zinc-900">{value}</span>
-        <span className="text-[10px] text-zinc-400 font-medium font-sans">{detail}</span>
-      </div>
-    </div>
-  );
-};
+### B. Inline Warning Banner
+Ideal for displaying notices or low-confidence indicators without covering content:
+```tsx
+<div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl text-xs flex gap-3 items-start">
+  <div className="w-5 h-5 rounded-md bg-amber-100/80 border border-amber-200 flex items-center justify-center font-bold text-[10px] text-amber-800">i</div>
+  <div>
+    <p className="font-bold">[A_WARNING_OCCURRED]</p>
+    <p className="text-amber-700 mt-0.5 leading-relaxed">[REASONING_AND_RECOMMENDED_CORRECTIVE_ACTIONS]</p>
+  </div>
+</div>
 ```
