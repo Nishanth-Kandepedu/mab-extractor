@@ -1,5 +1,5 @@
 import { ExtractionResult, Antibody } from "../types";
-import { getPdfPages, getPdfPageCount } from "../lib/pdf";
+import { getPdfPages, getPdfPageCount, extractTextFromPdfClient } from "../lib/pdf";
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -277,46 +277,74 @@ export async function extractWithLLM(
     if (provider !== 'gemini' && provider !== 'gemma' && provider !== 'nvidia-gemma' && provider !== 'nvidia-glm') {
       throw new Error(`File upload is currently only supported for Gemini/Gemma/NVIDIA. Please switch provider or paste the text directly.`);
     }
-    
-    const parts: any[] = [];
-    
-    // Handle main input (PDF or Text)
-    if (input.mimeType === 'application/pdf') {
-      let finalData = input.data;
-      
-      // Physically crop PDF if the context contains numbers (likely a page selection)
-      if (pageContext && /[\d]+/.test(pageContext)) {
-        finalData = await getPdfPages(input.data, pageContext);
-      }
 
-      parts.push({
-        inlineData: {
-          data: finalData,
-          mimeType: input.mimeType,
-        },
-      });
-    } else {
-      // It's a text file readout
-      parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
+    let isExtractionSuccessful = false;
+
+    if (input.mimeType === 'application/pdf') {
+      try {
+        console.log("[Extraction] PDF file detected. Initiating client-side PDF text extraction using PDF.js via CDN...");
+        const extractedText = await extractTextFromPdfClient(input.data, pageContext);
+        console.log(`[Extraction] Client-side extraction successful! Retrieved ${extractedText.length} characters of plain text.`);
+        
+        let listingText = "";
+        if (sequenceListing) {
+          if (sequenceListing.mimeType === 'application/pdf') {
+            console.log("[Extraction] PDF Sequence Listing detected. Extracting sequence listing text on the client...");
+            listingText = await extractTextFromPdfClient(sequenceListing.data);
+          } else {
+            listingText = sequenceListing.data;
+          }
+        }
+
+        if (listingText) {
+          formattedInput = `PRIMARY DOCUMENT CONTENT:\n${extractedText}\n\nSEQUENCE LISTING CONTENT:\n${listingText}\n\nExtract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.`;
+        } else {
+          formattedInput = `PRIMARY DOCUMENT CONTENT:\n${extractedText}\n\nExtract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.`;
+        }
+
+        isExtractionSuccessful = true;
+      } catch (clientParseErr) {
+        console.warn("[Extraction] Client-side text extraction failed, falling back to original base64 PDF upload:", clientParseErr);
+      }
     }
 
-    if (sequenceListing) {
-      if (sequenceListing.mimeType === 'application/pdf') {
+    if (!isExtractionSuccessful) {
+      // Fallback: parts-based base64 PDF formatting
+      const parts: any[] = [];
+      
+      if (input.mimeType === 'application/pdf') {
+        let finalData = input.data;
+        if (pageContext && /[\d]+/.test(pageContext)) {
+          finalData = await getPdfPages(input.data, pageContext);
+        }
         parts.push({
           inlineData: {
-            data: sequenceListing.data,
-            mimeType: sequenceListing.mimeType,
+            data: finalData,
+            mimeType: input.mimeType,
           },
         });
       } else {
-        parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
+        parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
       }
-      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
-    } else {
-      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
-    }
 
-    formattedInput = parts;
+      if (sequenceListing) {
+        if (sequenceListing.mimeType === 'application/pdf') {
+          parts.push({
+            inlineData: {
+              data: sequenceListing.data,
+              mimeType: sequenceListing.mimeType,
+            },
+          });
+        } else {
+          parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
+        }
+        parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
+      } else {
+        parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
+      }
+
+      formattedInput = parts;
+    }
   }
 
     const isGemma4 = model === 'gemma-4';
