@@ -35,7 +35,7 @@ export function logToFile(msg: string) {
 // Initialize Firebase Admin with extra safety
 let db: any = null;
 try {
-  const configPath = path.join(__dirname, 'firebase-applet-config.json');
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     
@@ -664,7 +664,7 @@ async function startServer() {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
