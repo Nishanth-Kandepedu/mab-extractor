@@ -141,6 +141,113 @@ export interface LLMOptions {
   isExtendedMode?: boolean; // New option for high-volume session stability
 }
 
+/**
+ * Robustly extracts and repairs JSON from a string that might be truncated or malformed.
+ */
+function extractJson(text: string): any {
+  if (!text || typeof text !== 'string') {
+    throw new Error("Empty or invalid response received from AI");
+  }
+
+  const cleanText = text.trim();
+
+  // 1. Try direct parsing
+  try {
+    return JSON.parse(cleanText);
+  } catch (e) {
+    // Continue to more aggressive methods
+  }
+
+  // 2. Try to find JSON block in markdown
+  const markdownMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/) || cleanText.match(/```\s*([\s\S]*?)\s*```/);
+  if (markdownMatch && markdownMatch[1]) {
+    const inner = markdownMatch[1].trim();
+    try {
+      return JSON.parse(inner);
+    } catch (e) {
+      // Try to repair the inner content
+      try {
+        return repairAndParseJson(inner);
+      } catch (e2) {}
+    }
+  }
+
+  // 3. Find the first '{' and try to parse/repair from there
+  const firstBrace = cleanText.indexOf('{');
+  if (firstBrace !== -1) {
+    const lastBrace = cleanText.lastIndexOf('}');
+    let candidate = "";
+    
+    if (lastBrace !== -1 && lastBrace > firstBrace) {
+      candidate = cleanText.substring(firstBrace, lastBrace + 1);
+    } else {
+      // No closing brace found, take everything from the first brace
+      candidate = cleanText.substring(firstBrace);
+    }
+
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
+      // Final attempt: Repair and parse
+      try {
+        return repairAndParseJson(candidate);
+      } catch (e2) {
+        console.error("JSON Repair failed. Original text snippet:", cleanText.substring(0, 200));
+        throw new Error("Could not parse or repair JSON response. The response may be severely truncated or malformed.");
+      }
+    }
+  }
+
+  throw new Error("No JSON structure found in the AI response.");
+}
+
+/**
+ * Attempts to repair truncated JSON by closing open brackets and braces.
+ */
+function repairAndParseJson(jsonStr: string): any {
+  let repaired = jsonStr.trim();
+  
+  // Remove trailing commas which are common in truncated JSON
+  repaired = repaired.replace(/,\s*$/, "");
+  repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+
+  const stack: string[] = [];
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (char === '{' || char === '[') {
+      stack.push(char);
+    } else if (char === '}' || char === ']') {
+      const last = stack.pop();
+      if ((char === '}' && last !== '{') || (char === ']' && last !== '[')) {
+        // Mismatched - this is a simple repairer, so we might just fail here
+        // but let's try to keep going
+      }
+    }
+  }
+
+  // Close remaining open structures in reverse order
+  while (stack.length > 0) {
+    const last = stack.pop();
+    if (last === '{') repaired += '}';
+    else if (last === '[') repaired += ']';
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch (e) {
+    // If it still fails, try one more aggressive trim to the last valid closing character
+    const lastClosing = Math.max(repaired.lastIndexOf('}'), repaired.lastIndexOf(']'));
+    if (lastClosing !== -1) {
+      try {
+        return JSON.parse(repaired.substring(0, lastClosing + 1));
+      } catch (e2) {
+        throw e; // Give up
+      }
+    }
+    throw e;
+  }
+}
+
 export async function extractWithLLM(
   input: string | { data: string; mimeType: string },
   options: LLMOptions,
