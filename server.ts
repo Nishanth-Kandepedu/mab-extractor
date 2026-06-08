@@ -358,20 +358,10 @@ async function startServer() {
           const errorMessage = error.message || String(error);
           const lowerError = errorMessage.toLowerCase();
           
-          const isNotFound = lowerError.includes('not_found') || lowerError.includes('not found') || lowerError.includes('404');
-          const isInvalidArgument = lowerError.includes('invalid') || lowerError.includes('400') || lowerError.includes('bad request') || lowerError.includes('unsupported');
-          
-          const isCapacityError = !isNotFound && !isInvalidArgument && (
-                                  lowerError.includes('capacity') || 
+          const isCapacityError = lowerError.includes('capacity') || 
                                   lowerError.includes('503') || 
                                   lowerError.includes('429') ||
-                                  lowerError.includes('limit') ||
-                                  lowerError.includes('exhausted') ||
-                                  lowerError.includes('quota') ||
-                                  lowerError.includes('overloaded') ||
-                                  lowerError.includes('rate_limit') ||
-                                  lowerError.includes('throttled') ||
-                                  lowerError.includes('internal error'));
+                                  lowerError.includes('internal error');
           
           const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
@@ -395,7 +385,7 @@ async function startServer() {
             status: 'failed', 
             error: isTimeout 
               ? 'AI Engine Timeout: This document is complex and may require Extended Mode.' 
-              : (isCapacityError ? `AI engine at capacity. Details: ${errorMessage}` : errorMessage)
+              : (isCapacityError ? 'AI engine at capacity. Retrying later is recommended.' : errorMessage)
           });
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
