@@ -1797,9 +1797,8 @@ function AppContent() {
           </div>
 
           {/* Footer Info */}
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between w-full text-[10px] font-mono text-zinc-600 uppercase tracking-widest gap-3 border-t border-white/5 pt-6">
-            <span>abminer.cheminformaticlabs.com</span>
-            <span className="text-zinc-500/80">A Product of Cheminformatic Labs LLP</span>
+          <div className="relative z-10 flex items-center gap-6 text-xs font-mono text-zinc-600 uppercase tracking-widest">
+            <span>abminer.bio</span>
           </div>
         </div>
 
@@ -1911,12 +1910,7 @@ function AppContent() {
             <AntibodyIcon className="text-zinc-900 w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-tight text-white animate-fade-in">AbMiner</h1>
-              <span className="text-[9px] font-bold text-zinc-400 bg-white/5 border border-white/15 px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
-                Cheminformatic Labs
-              </span>
-            </div>
+            <h1 className="text-lg font-bold tracking-tight text-white">AbMiner</h1>
             <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest">The Patent Antibody Mining Engine</p>
           </div>
         </div>
@@ -2932,7 +2926,7 @@ function AppContent() {
                             <Coins className="w-4 h-4" />
                             Use Mirror (Gemini Pro - 2M Window)
                           </button>
-                        ) : (window.location.hostname.includes('.bio') || window.location.hostname.includes('cheminformaticlabs.com')) && (
+                        ) : window.location.hostname.includes('.bio') && (
                           <button
                             onClick={() => window.location.href = 'https://abminer.up.railway.app'}
                             className="bg-zinc-100 text-zinc-700 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
@@ -2949,7 +2943,7 @@ function AppContent() {
                             }}
                             className={cn(
                               "bg-amber-100 text-amber-800 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-amber-200 transition-all flex items-center justify-center gap-2",
-                              !(window.location.hostname.includes('.bio') || window.location.hostname.includes('cheminformaticlabs.com')) && "col-span-2"
+                              !window.location.hostname.includes('.bio') && "col-span-2"
                             )}
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
@@ -3922,22 +3916,19 @@ function AppContent() {
       </main>
 
     {/* Footer */}
-    <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6 text-[11px] text-zinc-500">
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 text-zinc-400">
-          <Database className="w-3.5 h-3.5" />
-          <span className="font-mono font-bold uppercase tracking-wider">abminer.cheminformaticlabs.com</span>
-        </div>
-        <p className="text-zinc-400 font-medium">A Product of Cheminformatic Labs LLP © 2026. All Rights Reserved.</p>
+    <footer className="max-w-[1600px] w-full mx-auto px-8 py-8 border-t border-zinc-200 mt-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="flex items-center gap-2 text-zinc-400">
+        <Database className="w-4 h-4" />
+        <span className="text-xs font-mono">SECURE BIOTECH EXTRACTION ENGINE</span>
       </div>
       <div className="flex gap-8">
         <div className="flex flex-col">
-          <span className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
-          <span className="font-medium text-zinc-700">Neural Sequence Analysis</span>
+          <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Processing Mode</span>
+          <span className="text-xs font-medium">Neural Sequence Analysis</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
-          <span className="font-medium text-zinc-700">Encrypted Admin Session</span>
+          <span className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Data Privacy</span>
+          <span className="text-xs font-medium">Encrypted Session</span>
         </div>
       </div>
     </footer>

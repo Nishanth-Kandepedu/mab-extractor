@@ -358,14 +358,10 @@ async function startServer() {
           const errorMessage = error.message || String(error);
           const lowerError = errorMessage.toLowerCase();
           
-          const isNotFound = lowerError.includes('not_found') || lowerError.includes('not found') || lowerError.includes('404');
-          const isInvalidArgument = lowerError.includes('invalid') || lowerError.includes('400') || lowerError.includes('bad request') || lowerError.includes('limit');
-          
-          const isCapacityError = !isNotFound && !isInvalidArgument && (
-                                  lowerError.includes('capacity') || 
+          const isCapacityError = lowerError.includes('capacity') || 
                                   lowerError.includes('503') || 
                                   lowerError.includes('429') ||
-                                  lowerError.includes('internal error'));
+                                  lowerError.includes('internal error');
           
           const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
