@@ -12,8 +12,6 @@ import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
 import fs from 'fs';
 import { Connection, Request, TYPES } from 'tedious';
-// @ts-ignore
-import pdf from 'pdf-parse';
 
 dotenv.config();
 
@@ -183,79 +181,6 @@ function repairAndParseJson(jsonStr: string): any {
   }
 }
 
-async function convertMultimodalPartsToText(inputParts: any[], geminiApiKey: string): Promise<string> {
-  if (typeof inputParts === 'string') {
-    return inputParts;
-  }
-  
-  if (!Array.isArray(inputParts)) {
-    return 'Extract from the provided document.';
-  }
-
-  const textResults: string[] = [];
-
-  for (const part of inputParts) {
-    if (part.text) {
-      textResults.push(part.text);
-    } else if (part.inlineData) {
-      // Prioritize highly efficient local CPU extraction if PDF to avoid Gemini quota consumption/credit failure entirely!
-      if (part.inlineData.mimeType === 'application/pdf') {
-        try {
-          console.log(`[Text Conversion] Attempting highly efficient local PDF text extraction via pdf-parse...`);
-          const pdfBuffer = Buffer.from(part.inlineData.data, 'base64');
-          const pdfData = await pdf(pdfBuffer);
-          if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
-            console.log(`[Text Conversion] Local PDF parsing succeeded! Extracted ${pdfData.text.length} characters.`);
-            textResults.push(pdfData.text);
-            continue; // Skip calling Gemini OCR for this part
-          }
-          console.warn('[Text Conversion] Local PDF extraction returned empty text. Falling back to Gemini...');
-        } catch (localErr: any) {
-          console.warn(`[Text Conversion] Local PDF parsing failed (${localErr.message}). Falling back to Gemini...`);
-        }
-      }
-
-      // Detect missing or placeholder development keys for fallback Gemini OCR
-      if (!geminiApiKey || geminiApiKey.trim() === '' || geminiApiKey === 'undefined') {
-        throw new Error('PDF/File text extraction for this model failed on local parsing, and falling back to Gemini OCR is disabled because GEMINI_API_KEY is depleted or not configured in platform settings. Please copy-paste the patent text directly into the text field instead.');
-      }
-
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-      try {
-        console.log(`[Text Conversion] Converting PDF/Image part to text using Gemini 2.5 Flash...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  inlineData: {
-                    data: part.inlineData.data,
-                    mimeType: part.inlineData.mimeType,
-                  },
-                },
-                {
-                  text: "You are an accurate OCR and text extractor. Transcribe all text, headings, tables, labels, and sequences verbatim from this document. Maintain the exact original sequence characters (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y) and table arrangements. Do not summarize, truncate, or omit any details. Output only the plain transcribed text or markdown."
-                }
-              ],
-            },
-          ],
-        });
-        
-        if (response.text) {
-          textResults.push(response.text);
-        }
-      } catch (err: any) {
-        console.error('[Text Conversion] Failed to convert PDF/Image to text:', err);
-        throw new Error(`Failed to extract text from PDF: ${err.message}`);
-      }
-    }
-  }
-
-  return textResults.join('\n\n---\n\n');
-}
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -373,14 +298,14 @@ async function startServer() {
                
                return { status: 'completed', result };
              } else if (provider === 'openai') {
-               const apiKey = findKey('GROQ_API_KEY') || findKey('OPENAI_API_KEY');
-               if (!apiKey) throw new Error('Missing Groq or OpenAI API Key (please provide GROQ_API_KEY).');
-               const openai = new OpenAI({ apiKey, baseURL: 'https://api.groq.com/openai/v1' });
+               const apiKey = findKey('OPENAI_API_KEY');
+               if (!apiKey) throw new Error('Missing OpenAI API Key.');
+               const openai = new OpenAI({ apiKey });
                const response = await openai.chat.completions.create({
-                 model: model || 'qwen-2.5-coder-32b',
+                 model: model || 'gpt-4o',
                  messages: [
                    { role: 'system', content: systemInstruction },
-                   { role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }
+                   { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
                  ],
                  response_format: { type: 'json_object' },
                  temperature: 0,
@@ -404,7 +329,7 @@ async function startServer() {
                  model: model || 'claude-3-5-sonnet-latest',
                  max_tokens: 4096,
                  system: systemInstruction,
-                 messages: [{ role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }],
+                 messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
                  temperature: 0,
                });
                const content = response.content[0].type === 'text' ? response.content[0].text : '';
@@ -415,30 +340,6 @@ async function startServer() {
                    promptTokenCount: usage.input_tokens,
                    candidatesTokenCount: usage.output_tokens,
                    totalTokenCount: usage.input_tokens + usage.output_tokens
-                 };
-               }
-               return { status: 'completed', result };
-             } else if (provider === 'nvidia') {
-               const apiKey = findKey('NVIDIA_API_KEY');
-               if (!apiKey) throw new Error('Missing NVIDIA API Key (please configure NVIDIA_API_KEY in the platform settings).');
-               const openai = new OpenAI({ apiKey, baseURL: 'https://integrate.api.nvidia.com/v1' });
-               const response = await openai.chat.completions.create({
-                 model: model || 'google/gemma-4-31b-it',
-                 messages: [
-                   { role: 'system', content: systemInstruction },
-                   { role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }
-                 ],
-                 response_format: { type: 'json_object' },
-                 temperature: 0,
-               });
-               const content = response.choices[0].message.content || '{}';
-               const usage = response.usage;
-               const result = extractJson(content);
-               if (usage) {
-                 result.usageMetadata = {
-                   promptTokenCount: usage.prompt_tokens,
-                   candidatesTokenCount: usage.completion_tokens,
-                   totalTokenCount: usage.total_tokens
                  };
                }
                return { status: 'completed', result };
@@ -455,18 +356,12 @@ async function startServer() {
 
         } catch (error: any) {
           const errorMessage = error.message || String(error);
-          const errorStack = error.stack || errorMessage;
           const lowerError = errorMessage.toLowerCase();
-          
-          try {
-            fs.appendFileSync('server_errors.log', `[${new Date().toISOString()}] Job ${jobId} Failed (attempt ${retryCount + 1}):\n${errorStack}\n\n`);
-          } catch (logErr) {
-            console.error('Failed to write to server_errors.log:', logErr);
-          }
           
           const isCapacityError = lowerError.includes('capacity') || 
                                   lowerError.includes('503') || 
-                                  lowerError.includes('429');
+                                  lowerError.includes('429') ||
+                                  lowerError.includes('internal error');
           
           const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
@@ -490,7 +385,7 @@ async function startServer() {
             status: 'failed', 
             error: isTimeout 
               ? 'AI Engine Timeout: This document is complex and may require Extended Mode.' 
-              : (isCapacityError ? `AI engine at capacity. Retrying later is recommended. Details: ${errorMessage}` : errorMessage)
+              : (isCapacityError ? 'AI engine at capacity. Retrying later is recommended.' : errorMessage)
           });
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
