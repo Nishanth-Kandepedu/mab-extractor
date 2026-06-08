@@ -181,6 +181,57 @@ function repairAndParseJson(jsonStr: string): any {
   }
 }
 
+async function convertMultimodalPartsToText(inputParts: any[], geminiApiKey: string): Promise<string> {
+  if (typeof inputParts === 'string') {
+    return inputParts;
+  }
+  
+  if (!Array.isArray(inputParts)) {
+    return 'Extract from the provided document.';
+  }
+
+  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+  const textResults: string[] = [];
+
+  for (const part of inputParts) {
+    if (part.text) {
+      textResults.push(part.text);
+    } else if (part.inlineData) {
+      try {
+        console.log(`[Text Conversion] Converting PDF/Image part to text using Gemini 2.5 Flash...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    data: part.inlineData.data,
+                    mimeType: part.inlineData.mimeType,
+                  },
+                },
+                {
+                  text: "You are an accurate OCR and text extractor. Transcribe all text, headings, tables, labels, and sequences verbatim from this document. Maintain the exact original sequence characters (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y) and table arrangements. Do not summarize, truncate, or omit any details. Output only the plain transcribed text or markdown."
+                }
+              ],
+            },
+          ],
+        });
+        
+        if (response.text) {
+          textResults.push(response.text);
+        }
+      } catch (err: any) {
+        console.error('[Text Conversion] Failed to convert PDF/Image to text:', err);
+        throw new Error(`Failed to extract text from PDF: ${err.message}`);
+      }
+    }
+  }
+
+  return textResults.join('\n\n---\n\n');
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -305,7 +356,7 @@ async function startServer() {
                  model: model || 'llama-3.3-70b-versatile',
                  messages: [
                    { role: 'system', content: systemInstruction },
-                   { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+                   { role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }
                  ],
                  response_format: { type: 'json_object' },
                  temperature: 0,
@@ -329,7 +380,7 @@ async function startServer() {
                  model: model || 'claude-3-5-sonnet-latest',
                  max_tokens: 4096,
                  system: systemInstruction,
-                 messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
+                 messages: [{ role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }],
                  temperature: 0,
                });
                const content = response.content[0].type === 'text' ? response.content[0].text : '';

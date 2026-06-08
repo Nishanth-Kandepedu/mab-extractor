@@ -273,10 +273,7 @@ export async function extractWithLLM(
   if (typeof input === "string") {
     formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You must identify and extract every unique mAb/clone ID mentioned in the document. Do not omit any parental clones. Maintain 100% verbatim accuracy for sequences.\n\n${input}`;
   } else {
-    // For Gemini/Gemma infrastructure, we support multimodal inputs
-    if (provider !== 'gemini' && provider !== 'gemma') {
-      throw new Error(`File upload is currently only supported for Gemini/Gemma. Please switch provider or paste the text directly.`);
-    }
+    // We now support multimodal/file inputs for all engines by transcribing them on the backend
     
     const parts: any[] = [];
     
