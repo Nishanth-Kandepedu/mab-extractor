@@ -181,6 +181,85 @@ function repairAndParseJson(jsonStr: string): any {
   }
 }
 
+async function getPlainTextInput(input: any, geminiApiKey?: string): Promise<string> {
+  if (typeof input === 'string') {
+    return input;
+  }
+  
+  if (Array.isArray(input)) {
+    let fullTextComponents: string[] = [];
+    for (const part of input) {
+      if (part.text) {
+        let textVal = part.text;
+        const base64Prefixes = [
+          "PRIMARY DOCUMENT CONTENT:\n",
+          "SEQUENCE LISTING CONTENT:\n"
+        ];
+        let decoded = false;
+        for (const prefix of base64Prefixes) {
+          if (textVal.startsWith(prefix)) {
+            const encodedData = textVal.slice(prefix.length).trim();
+            try {
+              if (/^[A-Za-z0-9+/=\s\r\n]+$/.test(encodedData)) {
+                const decodedData = Buffer.from(encodedData, 'base64').toString('utf-8');
+                fullTextComponents.push(prefix + "\n" + decodedData);
+                decoded = true;
+                break;
+              }
+            } catch (err) {
+              console.error("Failed to decode base64 text part:", err);
+            }
+          }
+        }
+        if (!decoded) {
+          fullTextComponents.push(textVal);
+        }
+      } else if (part.inlineData) {
+        const { data, mimeType } = part.inlineData;
+        if (mimeType === 'application/pdf') {
+          if (geminiApiKey && geminiApiKey !== 'undefined') {
+            console.log("[server] Using Gemini to extract plain text from PDF for non-Gemini provider...");
+            try {
+              const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+              const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [{
+                  role: 'user',
+                  parts: [{
+                    inlineData: { data, mimeType }
+                  }, {
+                    text: "Output the complete, raw extracted text from this PDF document verbatim. Do not omit any tables or sequence listings if present. No summary, just the direct text."
+                  }]
+                }]
+              });
+              if (response.text) {
+                fullTextComponents.push(`[PDF DOCUMENT EXTRACTED TEXT]:\n${response.text}`);
+              } else {
+                fullTextComponents.push("[PDF extraction returned empty text]");
+              }
+            } catch (err: any) {
+              console.error("[server] Failed to extract PDF text via Gemini fallback:", err);
+              fullTextComponents.push(`[Error extracting PDF text: ${err.message}]`);
+            }
+          } else {
+            fullTextComponents.push("[PDF upload detected, but GEMINI_API_KEY is not configured to perform PDF-to-Text translation for Nvidia model.]");
+          }
+        } else {
+          try {
+            const decodedData = Buffer.from(data, 'base64').toString('utf-8');
+            fullTextComponents.push(`[File Content]:\n${decodedData}`);
+          } catch (err) {
+            fullTextComponents.push(`[Binary file: ${mimeType}]`);
+          }
+        }
+      }
+    }
+    return fullTextComponents.join("\n\n");
+  }
+  
+  return String(input);
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -308,7 +387,7 @@ async function startServer() {
                  model: model || (provider === 'nvidia-gemma' || provider === 'openai' ? 'google/gemma-4-31b' : 'glm-5.1'),
                  messages: [
                    { role: 'system', content: systemInstruction },
-                   { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
+                   { role: 'user', content: await getPlainTextInput(input, findKey('GEMINI_API_KEY')) }
                  ],
                  response_format: { type: 'json_object' },
                  temperature: 0,
