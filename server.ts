@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
+const { PDFParse: pdf } = require('pdf-parse');
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
@@ -20,6 +20,17 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Persistent, lightweight server-side log for tracking processing states & issues
+export function logToFile(msg: string) {
+  try {
+    const logPath = path.join(process.cwd(), 'src', 'server-error.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+    console.log(`[FILE_LOG] ${msg}`);
+  } catch (e) {
+    console.error("Failed to write to server log file:", e);
+  }
+}
 
 // Initialize Firebase Admin with extra safety
 let db: any = null;
@@ -220,16 +231,19 @@ async function getPlainTextInput(input: any, geminiApiKey?: string): Promise<str
       } else if (part.inlineData) {
         const { data, mimeType } = part.inlineData;
         if (mimeType === 'application/pdf') {
-          console.log("[server] Locally extracting text from PDF using pdf-parse library...");
+          logToFile(`[PDF_PARSE] Locally extracting text from PDF (base64 length: ${data.length})...`);
           try {
             const pdfBuffer = Buffer.from(data, 'base64');
             const pdfData = await pdf(pdfBuffer);
             if (pdfData && pdfData.text) {
+              logToFile(`[PDF_PARSE] Extraction successful, characters: ${pdfData.text.length}`);
               fullTextComponents.push(`[PDF DOCUMENT EXTRACTED TEXT]:\n${pdfData.text}`);
             } else {
+              logToFile(`[PDF_PARSE] Extraction returned empty text`);
               fullTextComponents.push("[PDF parser returned empty text]");
             }
           } catch (err: any) {
+            logToFile(`[PDF_PARSE] Failed to extract PDF text locally: ${err.message || err}`);
             console.error("[server] Failed to extract PDF text locally:", err);
             fullTextComponents.push(`[Error extracting PDF text locally: ${err.message}]`);
           }
@@ -278,15 +292,20 @@ async function startServer() {
   app.post('/api/extract', async (req, res) => {
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, isExtendedMode } = req.body;
     
+    const size = JSON.stringify(req.body).length;
+    logToFile(`[API_EXTRACT] Initiated. Provider: ${provider}, Model: ${model}, Payload size: ${size} bytes`);
+
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
+      logToFile(`[API_EXTRACT] Rejected: Input is empty.`);
       return res.status(400).json({ error: "Input text is required." });
     }
 
     const jobId = Math.random().toString(36).substring(7);
+    logToFile(`[API_EXTRACT] Job Scheduled: ${jobId}`);
     await updateJob(jobId, { status: 'pending', startTime: Date.now(), isExtendedMode });
 
     if (isExtendedMode) {
-      console.log(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
+      logToFile(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
     }
 
     // Map custom or experimental models to valid Gemini API IDs
@@ -313,7 +332,7 @@ async function startServer() {
 
       const runExtraction = async (): Promise<void> => {
         try {
-          console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
+          logToFile(`[Job ${jobId}] Executing attempt ${retryCount + 1} for ${provider}/${model}`);
 
           // Timeout mechanism for the extraction itself: 8m (standard) vs 30m (extended)
           const TIMEOUT_MS = isExtendedMode ? 1800000 : 480000; 
@@ -429,6 +448,7 @@ async function startServer() {
             return runExtraction();
           }
 
+          logToFile(`[Job ${jobId}] Permanent Failure: ${errorMessage}`);
           console.error(`[Job ${jobId}] Permanent Failure:`, errorMessage);
           await updateJob(jobId, { 
             status: 'failed', 
@@ -439,6 +459,7 @@ async function startServer() {
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
             const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
+            logToFile(`[Job ${jobId}] Finished in ${duration}s. Retries: ${retryCount}`);
             console.log(`[Job ${jobId}] Completed/Failed in ${duration}s`);
           }
         }

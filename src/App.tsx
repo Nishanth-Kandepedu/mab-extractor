@@ -2248,29 +2248,18 @@ function AppContent() {
                     className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-bold outline-none ring-0 shadow-none focus:border-indigo-400 transition-all cursor-pointer"
                     disabled={state.isExtracting}
                   >
-                    {(llmOptions.provider === 'gemini' || llmOptions.provider === 'gemma') ? (
-                      <>
-                        <optgroup label="Gemini Models">
-                          <option value="gemini:gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
-                          <option value="gemini:gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                          <option value="gemini:gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
-                        </optgroup>
-                        <optgroup label="Gemma Open Models">
-                          <option value="gemma:gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
-                        </optgroup>
-                      </>
-                    ) : (
-                      <>
-                        <optgroup label="Gemma Models (hosted by NVIDIA)">
-                          <option value="nvidia-gemma:google/gemma-4-31b">Gemma 4 31B (NVIDIA NIM)</option>
-                          <option value="nvidia-gemma:google/gemma-2-27b-it">Gemma 2 27B IT (NVIDIA NIM)</option>
-                        </optgroup>
-                        <optgroup label="GLM Models (hosted by NVIDIA)">
-                          <option value="nvidia-glm:glm-5.1">GLM 5.1 (NVIDIA NIM)</option>
-                          <option value="nvidia-glm:glm-4-9b-chat">GLM 4 9B Chat (NVIDIA NIM)</option>
-                        </optgroup>
-                      </>
-                    )}
+                    <optgroup label="Google Platform Models">
+                      <option value="gemini:gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
+                      <option value="gemini:gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                      <option value="gemini:gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                      <option value="gemma:gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                    </optgroup>
+                    <optgroup label="NVIDIA Platform Models">
+                      <option value="nvidia-gemma:google/gemma-4-31b">Gemma 4 31B (NVIDIA NIM)</option>
+                      <option value="nvidia-gemma:google/gemma-2-27b-it">Gemma 2 27B IT (NVIDIA NIM)</option>
+                      <option value="nvidia-glm:glm-5.1">GLM 5.1 (NVIDIA NIM)</option>
+                      <option value="nvidia-glm:glm-4-9b-chat">GLM 4 9B Chat (NVIDIA NIM)</option>
+                    </optgroup>
                   </select>
                 </>
               ) : (
