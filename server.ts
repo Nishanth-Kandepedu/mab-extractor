@@ -7,6 +7,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
@@ -217,32 +220,18 @@ async function getPlainTextInput(input: any, geminiApiKey?: string): Promise<str
       } else if (part.inlineData) {
         const { data, mimeType } = part.inlineData;
         if (mimeType === 'application/pdf') {
-          if (geminiApiKey && geminiApiKey !== 'undefined') {
-            console.log("[server] Using Gemini to extract plain text from PDF for non-Gemini provider...");
-            try {
-              const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-              const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: [{
-                  role: 'user',
-                  parts: [{
-                    inlineData: { data, mimeType }
-                  }, {
-                    text: "Output the complete, raw extracted text from this PDF document verbatim. Do not omit any tables or sequence listings if present. No summary, just the direct text."
-                  }]
-                }]
-              });
-              if (response.text) {
-                fullTextComponents.push(`[PDF DOCUMENT EXTRACTED TEXT]:\n${response.text}`);
-              } else {
-                fullTextComponents.push("[PDF extraction returned empty text]");
-              }
-            } catch (err: any) {
-              console.error("[server] Failed to extract PDF text via Gemini fallback:", err);
-              fullTextComponents.push(`[Error extracting PDF text: ${err.message}]`);
+          console.log("[server] Locally extracting text from PDF using pdf-parse library...");
+          try {
+            const pdfBuffer = Buffer.from(data, 'base64');
+            const pdfData = await pdf(pdfBuffer);
+            if (pdfData && pdfData.text) {
+              fullTextComponents.push(`[PDF DOCUMENT EXTRACTED TEXT]:\n${pdfData.text}`);
+            } else {
+              fullTextComponents.push("[PDF parser returned empty text]");
             }
-          } else {
-            fullTextComponents.push("[PDF upload detected, but GEMINI_API_KEY is not configured to perform PDF-to-Text translation for Nvidia model.]");
+          } catch (err: any) {
+            console.error("[server] Failed to extract PDF text locally:", err);
+            fullTextComponents.push(`[Error extracting PDF text locally: ${err.message}]`);
           }
         } else {
           try {
