@@ -7,9 +7,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { PDFParse: pdf } = require('pdf-parse');
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
@@ -21,21 +18,10 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Persistent, lightweight server-side log for tracking processing states & issues
-export function logToFile(msg: string) {
-  try {
-    const logPath = path.join(process.cwd(), 'src', 'server-error.log');
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
-    console.log(`[FILE_LOG] ${msg}`);
-  } catch (e) {
-    console.error("Failed to write to server log file:", e);
-  }
-}
-
 // Initialize Firebase Admin with extra safety
 let db: any = null;
 try {
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  const configPath = path.join(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     
@@ -195,74 +181,6 @@ function repairAndParseJson(jsonStr: string): any {
   }
 }
 
-async function getPlainTextInput(input: any, geminiApiKey?: string): Promise<string> {
-  if (typeof input === 'string') {
-    return input;
-  }
-  
-  if (Array.isArray(input)) {
-    let fullTextComponents: string[] = [];
-    for (const part of input) {
-      if (part.text) {
-        let textVal = part.text;
-        const base64Prefixes = [
-          "PRIMARY DOCUMENT CONTENT:\n",
-          "SEQUENCE LISTING CONTENT:\n"
-        ];
-        let decoded = false;
-        for (const prefix of base64Prefixes) {
-          if (textVal.startsWith(prefix)) {
-            const encodedData = textVal.slice(prefix.length).trim();
-            try {
-              if (/^[A-Za-z0-9+/=\s\r\n]+$/.test(encodedData)) {
-                const decodedData = Buffer.from(encodedData, 'base64').toString('utf-8');
-                fullTextComponents.push(prefix + "\n" + decodedData);
-                decoded = true;
-                break;
-              }
-            } catch (err) {
-              console.error("Failed to decode base64 text part:", err);
-            }
-          }
-        }
-        if (!decoded) {
-          fullTextComponents.push(textVal);
-        }
-      } else if (part.inlineData) {
-        const { data, mimeType } = part.inlineData;
-        if (mimeType === 'application/pdf') {
-          logToFile(`[PDF_PARSE] Locally extracting text from PDF (base64 length: ${data.length})...`);
-          try {
-            const pdfBuffer = Buffer.from(data, 'base64');
-            const pdfData = await pdf(pdfBuffer);
-            if (pdfData && pdfData.text) {
-              logToFile(`[PDF_PARSE] Extraction successful, characters: ${pdfData.text.length}`);
-              fullTextComponents.push(`[PDF DOCUMENT EXTRACTED TEXT]:\n${pdfData.text}`);
-            } else {
-              logToFile(`[PDF_PARSE] Extraction returned empty text`);
-              fullTextComponents.push("[PDF parser returned empty text]");
-            }
-          } catch (err: any) {
-            logToFile(`[PDF_PARSE] Failed to extract PDF text locally: ${err.message || err}`);
-            console.error("[server] Failed to extract PDF text locally:", err);
-            fullTextComponents.push(`[Error extracting PDF text locally: ${err.message}]`);
-          }
-        } else {
-          try {
-            const decodedData = Buffer.from(data, 'base64').toString('utf-8');
-            fullTextComponents.push(`[File Content]:\n${decodedData}`);
-          } catch (err) {
-            fullTextComponents.push(`[Binary file: ${mimeType}]`);
-          }
-        }
-      }
-    }
-    return fullTextComponents.join("\n\n");
-  }
-  
-  return String(input);
-}
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -292,20 +210,15 @@ async function startServer() {
   app.post('/api/extract', async (req, res) => {
     const { provider, model, input, systemInstruction, responseSchema, thinkingLevel, isExtendedMode } = req.body;
     
-    const size = JSON.stringify(req.body).length;
-    logToFile(`[API_EXTRACT] Initiated. Provider: ${provider}, Model: ${model}, Payload size: ${size} bytes`);
-
     if (!input || (typeof input === 'string' && input.trim().length === 0)) {
-      logToFile(`[API_EXTRACT] Rejected: Input is empty.`);
       return res.status(400).json({ error: "Input text is required." });
     }
 
     const jobId = Math.random().toString(36).substring(7);
-    logToFile(`[API_EXTRACT] Job Scheduled: ${jobId}`);
     await updateJob(jobId, { status: 'pending', startTime: Date.now(), isExtendedMode });
 
     if (isExtendedMode) {
-      logToFile(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
+      console.log(`[Job ${jobId}] Running in EXTENDED MODE (Increased session stability enabled)`);
     }
 
     // Map custom or experimental models to valid Gemini API IDs
@@ -332,7 +245,7 @@ async function startServer() {
 
       const runExtraction = async (): Promise<void> => {
         try {
-          logToFile(`[Job ${jobId}] Executing attempt ${retryCount + 1} for ${provider}/${model}`);
+          console.log(`[Job ${jobId}] Attempt ${retryCount + 1} for ${provider}/${model}`);
 
           // Timeout mechanism for the extraction itself: 8m (standard) vs 30m (extended)
           const TIMEOUT_MS = isExtendedMode ? 1800000 : 480000; 
@@ -384,18 +297,15 @@ async function startServer() {
                }
                
                return { status: 'completed', result };
-             } else if (provider === 'nvidia-gemma' || provider === 'nvidia-glm' || provider === 'openai' || provider === 'anthropic') {
-               const apiKey = findKey('NVIDIA_API_KEY') || findKey('OPENAI_API_KEY');
-               if (!apiKey) throw new Error('Missing NVIDIA API Key. Please configure NVIDIA_API_KEY.');
-               const openai = new OpenAI({ 
-                 apiKey,
-                 baseURL: 'https://integrate.api.nvidia.com/v1'
-               });
+             } else if (provider === 'openai') {
+               const apiKey = findKey('OPENAI_API_KEY');
+               if (!apiKey) throw new Error('Missing OpenAI API Key.');
+               const openai = new OpenAI({ apiKey });
                const response = await openai.chat.completions.create({
-                 model: model || (provider === 'nvidia-gemma' || provider === 'openai' ? 'google/gemma-4-31b' : 'glm-5.1'),
+                 model: model || 'gpt-4o',
                  messages: [
                    { role: 'system', content: systemInstruction },
-                   { role: 'user', content: await getPlainTextInput(input, findKey('GEMINI_API_KEY')) }
+                   { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
                  ],
                  response_format: { type: 'json_object' },
                  temperature: 0,
@@ -408,6 +318,28 @@ async function startServer() {
                    promptTokenCount: usage.prompt_tokens,
                    candidatesTokenCount: usage.completion_tokens,
                    totalTokenCount: usage.total_tokens
+                 };
+               }
+               return { status: 'completed', result };
+             } else if (provider === 'anthropic') {
+               const apiKey = findKey('ANTHROPIC_API_KEY');
+               if (!apiKey) throw new Error('Missing Anthropic API Key.');
+               const anthropic = new Anthropic({ apiKey });
+               const response = await anthropic.messages.create({
+                 model: model || 'claude-3-5-sonnet-latest',
+                 max_tokens: 4096,
+                 system: systemInstruction,
+                 messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
+                 temperature: 0,
+               });
+               const content = response.content[0].type === 'text' ? response.content[0].text : '';
+               const usage = response.usage;
+               const result = extractJson(content || '{}');
+               if (usage) {
+                 result.usageMetadata = {
+                   promptTokenCount: usage.input_tokens,
+                   candidatesTokenCount: usage.output_tokens,
+                   totalTokenCount: usage.input_tokens + usage.output_tokens
                  };
                }
                return { status: 'completed', result };
@@ -448,7 +380,6 @@ async function startServer() {
             return runExtraction();
           }
 
-          logToFile(`[Job ${jobId}] Permanent Failure: ${errorMessage}`);
           console.error(`[Job ${jobId}] Permanent Failure:`, errorMessage);
           await updateJob(jobId, { 
             status: 'failed', 
@@ -459,7 +390,6 @@ async function startServer() {
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
             const duration = ((Date.now() - jobStartTime) / 1000).toFixed(1);
-            logToFile(`[Job ${jobId}] Finished in ${duration}s. Retries: ${retryCount}`);
             console.log(`[Job ${jobId}] Completed/Failed in ${duration}s`);
           }
         }
@@ -664,7 +594,7 @@ async function startServer() {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }

@@ -1,6 +1,5 @@
 {
   "name": "AbMiner",
   "description": "High-quality AI mining of antibody sequences and evidence from patent documents.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": []
 }

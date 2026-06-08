@@ -1,5 +1,5 @@
 import { ExtractionResult, Antibody } from "../types";
-import { getPdfPages, getPdfPageCount, extractTextFromPdfClient } from "../lib/pdf";
+import { getPdfPages, getPdfPageCount } from "../lib/pdf";
 
 export const SYSTEM_INSTRUCTION = `You are an expert in high-quality antibody sequence mining from patent documents. 
 Your goal is 100% Verbatim Accuracy and 100% Coverage.
@@ -132,120 +132,13 @@ export const GEMMA_4_EXTRA_INSTRUCTION = `
     - evidence: The page or table number where this value was found.
 `;
 
-export type LLMProvider = 'gemini' | 'nvidia-gemma' | 'nvidia-glm' | 'gemma';
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
 
 export interface LLMOptions {
   provider: LLMProvider;
   model?: string;
   isSarMode?: boolean;
   isExtendedMode?: boolean; // New option for high-volume session stability
-}
-
-/**
- * Robustly extracts and repairs JSON from a string that might be truncated or malformed.
- */
-function extractJson(text: string): any {
-  if (!text || typeof text !== 'string') {
-    throw new Error("Empty or invalid response received from AI");
-  }
-
-  const cleanText = text.trim();
-
-  // 1. Try direct parsing
-  try {
-    return JSON.parse(cleanText);
-  } catch (e) {
-    // Continue to more aggressive methods
-  }
-
-  // 2. Try to find JSON block in markdown
-  const markdownMatch = cleanText.match(/```json\s*([\s\S]*?)\s*```/) || cleanText.match(/```\s*([\s\S]*?)\s*```/);
-  if (markdownMatch && markdownMatch[1]) {
-    const inner = markdownMatch[1].trim();
-    try {
-      return JSON.parse(inner);
-    } catch (e) {
-      // Try to repair the inner content
-      try {
-        return repairAndParseJson(inner);
-      } catch (e2) {}
-    }
-  }
-
-  // 3. Find the first '{' and try to parse/repair from there
-  const firstBrace = cleanText.indexOf('{');
-  if (firstBrace !== -1) {
-    const lastBrace = cleanText.lastIndexOf('}');
-    let candidate = "";
-    
-    if (lastBrace !== -1 && lastBrace > firstBrace) {
-      candidate = cleanText.substring(firstBrace, lastBrace + 1);
-    } else {
-      // No closing brace found, take everything from the first brace
-      candidate = cleanText.substring(firstBrace);
-    }
-
-    try {
-      return JSON.parse(candidate);
-    } catch (e) {
-      // Final attempt: Repair and parse
-      try {
-        return repairAndParseJson(candidate);
-      } catch (e2) {
-        console.error("JSON Repair failed. Original text snippet:", cleanText.substring(0, 200));
-        throw new Error("Could not parse or repair JSON response. The response may be severely truncated or malformed.");
-      }
-    }
-  }
-
-  throw new Error("No JSON structure found in the AI response.");
-}
-
-/**
- * Attempts to repair truncated JSON by closing open brackets and braces.
- */
-function repairAndParseJson(jsonStr: string): any {
-  let repaired = jsonStr.trim();
-  
-  // Remove trailing commas which are common in truncated JSON
-  repaired = repaired.replace(/,\s*$/, "");
-  repaired = repaired.replace(/,\s*([}\]])/g, "$1");
-
-  const stack: string[] = [];
-  for (let i = 0; i < repaired.length; i++) {
-    const char = repaired[i];
-    if (char === '{' || char === '[') {
-      stack.push(char);
-    } else if (char === '}' || char === ']') {
-      const last = stack.pop();
-      if ((char === '}' && last !== '{') || (char === ']' && last !== '[')) {
-        // Mismatched - this is a simple repairer, so we might just fail here
-        // but let's try to keep going
-      }
-    }
-  }
-
-  // Close remaining open structures in reverse order
-  while (stack.length > 0) {
-    const last = stack.pop();
-    if (last === '{') repaired += '}';
-    else if (last === '[') repaired += ']';
-  }
-
-  try {
-    return JSON.parse(repaired);
-  } catch (e) {
-    // If it still fails, try one more aggressive trim to the last valid closing character
-    const lastClosing = Math.max(repaired.lastIndexOf('}'), repaired.lastIndexOf(']'));
-    if (lastClosing !== -1) {
-      try {
-        return JSON.parse(repaired.substring(0, lastClosing + 1));
-      } catch (e2) {
-        throw e; // Give up
-      }
-    }
-    throw e;
-  }
 }
 
 export async function extractWithLLM(
@@ -273,78 +166,50 @@ export async function extractWithLLM(
   if (typeof input === "string") {
     formattedInput = `Extract ALL antibody sequences including Parental mAbs (Table 1/3) and Bispecifics (Table 6).${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: You must identify and extract every unique mAb/clone ID mentioned in the document. Do not omit any parental clones. Maintain 100% verbatim accuracy for sequences.\n\n${input}`;
   } else {
-    // For Gemini/Gemma/NVIDIA infrastructure, we support multimodal/multipart inputs
-    if (provider !== 'gemini' && provider !== 'gemma' && provider !== 'nvidia-gemma' && provider !== 'nvidia-glm') {
-      throw new Error(`File upload is currently only supported for Gemini/Gemma/NVIDIA. Please switch provider or paste the text directly.`);
+    // For Gemini/Gemma infrastructure, we support multimodal inputs
+    if (provider !== 'gemini' && provider !== 'gemma') {
+      throw new Error(`File upload is currently only supported for Gemini/Gemma. Please switch provider or paste the text directly.`);
     }
-
-    let isExtractionSuccessful = false;
-
+    
+    const parts: any[] = [];
+    
+    // Handle main input (PDF or Text)
     if (input.mimeType === 'application/pdf') {
-      try {
-        console.log("[Extraction] PDF file detected. Initiating client-side PDF text extraction using PDF.js via CDN...");
-        const extractedText = await extractTextFromPdfClient(input.data, pageContext);
-        console.log(`[Extraction] Client-side extraction successful! Retrieved ${extractedText.length} characters of plain text.`);
-        
-        let listingText = "";
-        if (sequenceListing) {
-          if (sequenceListing.mimeType === 'application/pdf') {
-            console.log("[Extraction] PDF Sequence Listing detected. Extracting sequence listing text on the client...");
-            listingText = await extractTextFromPdfClient(sequenceListing.data);
-          } else {
-            listingText = sequenceListing.data;
-          }
-        }
-
-        if (listingText) {
-          formattedInput = `PRIMARY DOCUMENT CONTENT:\n${extractedText}\n\nSEQUENCE LISTING CONTENT:\n${listingText}\n\nExtract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.`;
-        } else {
-          formattedInput = `PRIMARY DOCUMENT CONTENT:\n${extractedText}\n\nExtract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.`;
-        }
-
-        isExtractionSuccessful = true;
-      } catch (clientParseErr) {
-        console.warn("[Extraction] Client-side text extraction failed, falling back to original base64 PDF upload:", clientParseErr);
+      let finalData = input.data;
+      
+      // Physically crop PDF if the context contains numbers (likely a page selection)
+      if (pageContext && /[\d]+/.test(pageContext)) {
+        finalData = await getPdfPages(input.data, pageContext);
       }
+
+      parts.push({
+        inlineData: {
+          data: finalData,
+          mimeType: input.mimeType,
+        },
+      });
+    } else {
+      // It's a text file readout
+      parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
     }
 
-    if (!isExtractionSuccessful) {
-      // Fallback: parts-based base64 PDF formatting
-      const parts: any[] = [];
-      
-      if (input.mimeType === 'application/pdf') {
-        let finalData = input.data;
-        if (pageContext && /[\d]+/.test(pageContext)) {
-          finalData = await getPdfPages(input.data, pageContext);
-        }
+    if (sequenceListing) {
+      if (sequenceListing.mimeType === 'application/pdf') {
         parts.push({
           inlineData: {
-            data: finalData,
-            mimeType: input.mimeType,
+            data: sequenceListing.data,
+            mimeType: sequenceListing.mimeType,
           },
         });
       } else {
-        parts.push({ text: `PRIMARY DOCUMENT CONTENT:\n${input.data}` });
+        parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
       }
-
-      if (sequenceListing) {
-        if (sequenceListing.mimeType === 'application/pdf') {
-          parts.push({
-            inlineData: {
-              data: sequenceListing.data,
-              mimeType: sequenceListing.mimeType,
-            },
-          });
-        } else {
-          parts.push({ text: `SEQUENCE LISTING CONTENT:\n${sequenceListing.data}` });
-        }
-        parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
-      } else {
-        parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
-      }
-
-      formattedInput = parts;
+      parts.push({ text: `Extract all sequences from the patent and sequence listing.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Identify every Parental clone in Tables 1/3 and every Bispecific in Table 6. Extract all separately. Even if there are 100+ clones, you MUST represent every one of them in the output. Verbatim accuracy is mandatory.` });
+    } else {
+      parts.push({ text: `Extract all antibody sequences.${contextPrompt}${priorityPrompt}\n\nANTI-LAZINESS RULE: Form an exhaustive list of every unique mAb ID in Tables 1/3 and every bsAb in Table 6. Extract each one separately. Do not summarize or skip any clones. High-volume coverage is required.` });
     }
+
+    formattedInput = parts;
   }
 
     const isGemma4 = model === 'gemma-4';
