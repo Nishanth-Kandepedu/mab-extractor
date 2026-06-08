@@ -2204,61 +2204,71 @@ function AppContent() {
             <div className="space-y-4">
               {(!(user?.role === 'guest' && hideModelForGuests)) ? (
                 <>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(['gemini', 'nvidia-gemma', 'nvidia-glm', 'gemma'] as any[]).map(p => {
-                      const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'nvidia-gemma' ? 'NVIDIA Gemma 4' : 'NVIDIA GLM 5.1';
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { id: 'google', displayLabel: 'Google Platform', defaultProvider: 'gemini', defaultModel: 'gemini-3.1-pro-preview' },
+                      { id: 'nvidia', displayLabel: 'NVIDIA NIM Platform', defaultProvider: 'nvidia-gemma', defaultModel: 'google/gemma-4-31b' }
+                    ] as const).map(parent => {
+                      const isActive = (parent.id === 'google' && (llmOptions.provider === 'gemini' || llmOptions.provider === 'gemma')) ||
+                                       (parent.id === 'nvidia' && (llmOptions.provider === 'nvidia-gemma' || llmOptions.provider === 'nvidia-glm'));
+                      const isDisabled = user?.role === 'guest' && parent.id === 'nvidia';
                       return (
                         <button
-                          key={p}
+                          key={parent.id}
                           type="button"
                           disabled={isDisabled}
                           onClick={() => setLlmOptions(prev => ({ 
                             ...prev, 
-                            provider: p, 
-                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'nvidia-gemma' ? 'google/gemma-4-31b' : p === 'nvidia-glm' ? 'glm-5.1' : 'gemma-4' 
+                            provider: parent.defaultProvider as any, 
+                            model: parent.defaultModel 
                           }))}
                           className={cn(
                             "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
-                            llmOptions.provider === p
+                            isActive
                               ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
                               : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
                             isDisabled && "opacity-40 grayscale cursor-not-allowed"
                           )}
                         >
-                          {displayLabel}
+                          {parent.displayLabel}
                         </button>
                       );
                     })}
                   </div>
                   <select
-                    value={llmOptions.model}
-                    onChange={(e) => setLlmOptions({ ...llmOptions, model: e.target.value })}
+                    value={`${llmOptions.provider}:${llmOptions.model}`}
+                    onChange={(e) => {
+                      const [provider, ...modelParts] = e.target.value.split(':');
+                      setLlmOptions({ 
+                        ...llmOptions, 
+                        provider: provider as any, 
+                        model: modelParts.join(':') 
+                      });
+                    }}
                     className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs font-bold outline-none ring-0 shadow-none focus:border-indigo-400 transition-all cursor-pointer"
                     disabled={state.isExtracting}
                   >
-                    {llmOptions.provider === 'gemini' && (
+                    {(llmOptions.provider === 'gemini' || llmOptions.provider === 'gemma') ? (
                       <>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
-                        <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                        <option value="gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                        <optgroup label="Gemini Models">
+                          <option value="gemini:gemini-3.1-pro-preview">Gemini 3.1 Pro (Reasoning)</option>
+                          <option value="gemini:gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                          <option value="gemini:gemini-2.5-flash-preview" disabled={(user as any)?.role === 'guest'}>Gemini 2.5 Flash</option>
+                        </optgroup>
+                        <optgroup label="Gemma Open Models">
+                          <option value="gemma:gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                        </optgroup>
                       </>
-                    )}
-                    {llmOptions.provider === 'gemma' && (
+                    ) : (
                       <>
-                        <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
-                      </>
-                    )}
-                    {llmOptions.provider === 'nvidia-gemma' && (
-                      <>
-                        <option value="google/gemma-4-31b">Gemma 4 31B (NVIDIA NIM)</option>
-                        <option value="google/gemma-2-27b-it">Gemma 2 27B IT (NVIDIA NIM)</option>
-                      </>
-                    )}
-                    {llmOptions.provider === 'nvidia-glm' && (
-                      <>
-                        <option value="glm-5.1">GLM 5.1 (NVIDIA NIM)</option>
-                        <option value="glm-4-9b-chat">GLM 4 9B Chat (NVIDIA NIM)</option>
+                        <optgroup label="Gemma Models (hosted by NVIDIA)">
+                          <option value="nvidia-gemma:google/gemma-4-31b">Gemma 4 31B (NVIDIA NIM)</option>
+                          <option value="nvidia-gemma:google/gemma-2-27b-it">Gemma 2 27B IT (NVIDIA NIM)</option>
+                        </optgroup>
+                        <optgroup label="GLM Models (hosted by NVIDIA)">
+                          <option value="nvidia-glm:glm-5.1">GLM 5.1 (NVIDIA NIM)</option>
+                          <option value="nvidia-glm:glm-4-9b-chat">GLM 4 9B Chat (NVIDIA NIM)</option>
+                        </optgroup>
                       </>
                     )}
                   </select>
