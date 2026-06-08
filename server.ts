@@ -12,6 +12,8 @@ import { getFirestore } from 'firebase-admin/firestore';
 import pLimit from 'p-limit';
 import fs from 'fs';
 import { Connection, Request, TYPES } from 'tedious';
+// @ts-ignore
+import pdf from 'pdf-parse';
 
 dotenv.config();
 
@@ -190,18 +192,35 @@ async function convertMultimodalPartsToText(inputParts: any[], geminiApiKey: str
     return 'Extract from the provided document.';
   }
 
-  // Detect missing or placeholder development keys
-  if (!geminiApiKey || geminiApiKey.trim() === '' || geminiApiKey === 'undefined') {
-    throw new Error('PDF/File text extraction for this model requires a valid Gemini API Key (GEMINI_API_KEY) on the backend server. Please configure a valid GEMINI_API_KEY in your platform Settings menu, or copy-paste the patent text directly into the text field instead.');
-  }
-
-  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
   const textResults: string[] = [];
 
   for (const part of inputParts) {
     if (part.text) {
       textResults.push(part.text);
     } else if (part.inlineData) {
+      // Prioritize highly efficient local CPU extraction if PDF to avoid Gemini quota consumption/credit failure entirely!
+      if (part.inlineData.mimeType === 'application/pdf') {
+        try {
+          console.log(`[Text Conversion] Attempting highly efficient local PDF text extraction via pdf-parse...`);
+          const pdfBuffer = Buffer.from(part.inlineData.data, 'base64');
+          const pdfData = await pdf(pdfBuffer);
+          if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
+            console.log(`[Text Conversion] Local PDF parsing succeeded! Extracted ${pdfData.text.length} characters.`);
+            textResults.push(pdfData.text);
+            continue; // Skip calling Gemini OCR for this part
+          }
+          console.warn('[Text Conversion] Local PDF extraction returned empty text. Falling back to Gemini...');
+        } catch (localErr: any) {
+          console.warn(`[Text Conversion] Local PDF parsing failed (${localErr.message}). Falling back to Gemini...`);
+        }
+      }
+
+      // Detect missing or placeholder development keys for fallback Gemini OCR
+      if (!geminiApiKey || geminiApiKey.trim() === '' || geminiApiKey === 'undefined') {
+        throw new Error('PDF/File text extraction for this model failed on local parsing, and falling back to Gemini OCR is disabled because GEMINI_API_KEY is depleted or not configured in platform settings. Please copy-paste the patent text directly into the text field instead.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       try {
         console.log(`[Text Conversion] Converting PDF/Image part to text using Gemini 2.5 Flash...`);
         const response = await ai.models.generateContent({
@@ -396,6 +415,30 @@ async function startServer() {
                    promptTokenCount: usage.input_tokens,
                    candidatesTokenCount: usage.output_tokens,
                    totalTokenCount: usage.input_tokens + usage.output_tokens
+                 };
+               }
+               return { status: 'completed', result };
+             } else if (provider === 'nvidia') {
+               const apiKey = findKey('NVIDIA_API_KEY');
+               if (!apiKey) throw new Error('Missing NVIDIA API Key (please configure NVIDIA_API_KEY in the platform settings).');
+               const openai = new OpenAI({ apiKey, baseURL: 'https://integrate.api.nvidia.com/v1' });
+               const response = await openai.chat.completions.create({
+                 model: model || 'google/gemma-4-31b-it',
+                 messages: [
+                   { role: 'system', content: systemInstruction },
+                   { role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }
+                 ],
+                 response_format: { type: 'json_object' },
+                 temperature: 0,
+               });
+               const content = response.choices[0].message.content || '{}';
+               const usage = response.usage;
+               const result = extractJson(content);
+               if (usage) {
+                 result.usageMetadata = {
+                   promptTokenCount: usage.prompt_tokens,
+                   candidatesTokenCount: usage.completion_tokens,
+                   totalTokenCount: usage.total_tokens
                  };
                }
                return { status: 'completed', result };

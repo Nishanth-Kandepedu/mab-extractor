@@ -217,6 +217,10 @@ function AppContent() {
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
     'gemma-4': { input: 0, output: 0, free: true },
+    'google/gemma-4-31b-it': { input: 0, output: 0, free: true },
+    'moonshotai/kimi-k2.6': { input: 0, output: 0, free: true },
+    'gemma-2-27b-it': { input: 0, output: 0, free: true },
+    'gemma-2-9b-it': { input: 0, output: 0, free: true },
   };
 
   const getEstCost = (usage: any, modelUsed: string) => {
@@ -2202,10 +2206,10 @@ function AppContent() {
             <div className="space-y-4">
               {(!(user?.role === 'guest' && hideModelForGuests)) ? (
                 <>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
+                  <div className="grid grid-cols-5 gap-1">
+                    {(['gemini', 'openai', 'anthropic', 'nvidia', 'gemma'] as any[]).map(p => {
                       const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'Groq' : 'Anthropic';
+                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'Groq' : p === 'nvidia' ? 'NVIDIA' : 'Anthropic';
                       return (
                         <button
                           key={p}
@@ -2214,10 +2218,10 @@ function AppContent() {
                           onClick={() => setLlmOptions(prev => ({ 
                             ...prev, 
                             provider: p, 
-                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'qwen-2.5-coder-32b' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'qwen-2.5-coder-32b' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : p === 'nvidia' ? 'google/gemma-4-31b-it' : 'gemma-4' 
                           }))}
                           className={cn(
-                            "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                            "py-2 px-1 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all border",
                             llmOptions.provider === p
                               ? "bg-zinc-900 text-white border-zinc-900 shadow-md shadow-zinc-200/50" 
                               : "bg-white text-zinc-400 border-zinc-100 hover:border-zinc-300 hover:text-zinc-600",
@@ -2245,6 +2249,12 @@ function AppContent() {
                     {llmOptions.provider === 'gemma' && (
                       <>
                         <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
+                      </>
+                    )}
+                    {llmOptions.provider === 'nvidia' && (
+                      <>
+                        <option value="google/gemma-4-31b-it">Gemma 4 31B (NVIDIA NIM)</option>
+                        <option value="moonshotai/kimi-k2.6">Kimi K2.6 (NVIDIA NIM)</option>
                       </>
                     )}
                     {llmOptions.provider === 'openai' && (
