@@ -298,11 +298,11 @@ async function startServer() {
                
                return { status: 'completed', result };
              } else if (provider === 'openai') {
-               const apiKey = findKey('OPENAI_API_KEY');
-               if (!apiKey) throw new Error('Missing OpenAI API Key.');
-               const openai = new OpenAI({ apiKey });
+               const apiKey = findKey('GROQ_API_KEY') || findKey('OPENAI_API_KEY');
+               if (!apiKey) throw new Error('Missing Groq or OpenAI API Key (please provide GROQ_API_KEY).');
+               const openai = new OpenAI({ apiKey, baseURL: 'https://api.groq.com/openai/v1' });
                const response = await openai.chat.completions.create({
-                 model: model || 'gpt-4o',
+                 model: model || 'llama-3.3-70b-versatile',
                  messages: [
                    { role: 'system', content: systemInstruction },
                    { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }

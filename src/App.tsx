@@ -212,9 +212,7 @@ function AppContent() {
     'gemini-3.1-pro-preview': { input: 1.25, output: 5.0 }, // Estimates based on 1.5 Pro pricing
     'gemini-3-flash-preview': { input: 0.075, output: 0.30 },
     'gemini-2.5-flash-preview': { input: 0.075, output: 0.30 },
-    'gpt-4o': { input: 2.5, output: 10.0 },
-    'gpt-4o-mini': { input: 0.15, output: 0.60 },
-    'o1-preview': { input: 15.0, output: 60.0 },
+    'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
     'claude-3-5-sonnet-latest': { input: 3.0, output: 15.0 },
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
@@ -2207,7 +2205,7 @@ function AppContent() {
                   <div className="grid grid-cols-4 gap-2">
                     {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
                       const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
+                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'Groq' : 'Anthropic';
                       return (
                         <button
                           key={p}
@@ -2216,7 +2214,7 @@ function AppContent() {
                           onClick={() => setLlmOptions(prev => ({ 
                             ...prev, 
                             provider: p, 
-                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'llama-3.3-70b-versatile' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                           }))}
                           className={cn(
                             "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
@@ -2251,9 +2249,7 @@ function AppContent() {
                     )}
                     {llmOptions.provider === 'openai' && (
                       <>
-                        <option value="gpt-4o">GPT-4o (Omni)</option>
-                        <option value="gpt-4o-mini">GPT-4o Mini</option>
-                        <option value="o1-preview">o1 Preview (Reasoning)</option>
+                        <option value="llama-3.3-70b-versatile">Llama 3.3 70b (Reasoning & Speed)</option>
                       </>
                     )}
                     {llmOptions.provider === 'anthropic' && (
