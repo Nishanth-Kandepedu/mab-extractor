@@ -212,7 +212,7 @@ function AppContent() {
     'gemini-3.1-pro-preview': { input: 1.25, output: 5.0 }, // Estimates based on 1.5 Pro pricing
     'gemini-3-flash-preview': { input: 0.075, output: 0.30 },
     'gemini-2.5-flash-preview': { input: 0.075, output: 0.30 },
-    'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
+    'qwen-2.5-coder-32b': { input: 0.07, output: 0.16 },
     'claude-3-5-sonnet-latest': { input: 3.0, output: 15.0 },
     'claude-3-5-haiku-latest': { input: 0.25, output: 1.25 },
     'claude-3-opus-latest': { input: 15.0, output: 75.0 },
@@ -2214,7 +2214,7 @@ function AppContent() {
                           onClick={() => setLlmOptions(prev => ({ 
                             ...prev, 
                             provider: p, 
-                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'llama-3.3-70b-versatile' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'qwen-2.5-coder-32b' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
                           }))}
                           className={cn(
                             "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
@@ -2249,7 +2249,7 @@ function AppContent() {
                     )}
                     {llmOptions.provider === 'openai' && (
                       <>
-                        <option value="llama-3.3-70b-versatile">Llama 3.3 70b (Reasoning & Speed)</option>
+                        <option value="qwen-2.5-coder-32b">Qwen 2.5 Coder 32B (Speed & Accuracy)</option>
                       </>
                     )}
                     {llmOptions.provider === 'anthropic' && (

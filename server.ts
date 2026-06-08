@@ -190,6 +190,11 @@ async function convertMultimodalPartsToText(inputParts: any[], geminiApiKey: str
     return 'Extract from the provided document.';
   }
 
+  // Detect missing or placeholder development keys
+  if (!geminiApiKey || geminiApiKey.trim() === '' || geminiApiKey === 'undefined') {
+    throw new Error('PDF/File text extraction for this model requires a valid Gemini API Key (GEMINI_API_KEY) on the backend server. Please configure a valid GEMINI_API_KEY in your platform Settings menu, or copy-paste the patent text directly into the text field instead.');
+  }
+
   const ai = new GoogleGenAI({ apiKey: geminiApiKey });
   const textResults: string[] = [];
 
@@ -353,7 +358,7 @@ async function startServer() {
                if (!apiKey) throw new Error('Missing Groq or OpenAI API Key (please provide GROQ_API_KEY).');
                const openai = new OpenAI({ apiKey, baseURL: 'https://api.groq.com/openai/v1' });
                const response = await openai.chat.completions.create({
-                 model: model || 'llama-3.3-70b-versatile',
+                 model: model || 'qwen-2.5-coder-32b',
                  messages: [
                    { role: 'system', content: systemInstruction },
                    { role: 'user', content: typeof input === 'string' ? input : await convertMultimodalPartsToText(input as any[], findKey('GEMINI_API_KEY') || '') }
@@ -407,12 +412,18 @@ async function startServer() {
 
         } catch (error: any) {
           const errorMessage = error.message || String(error);
+          const errorStack = error.stack || errorMessage;
           const lowerError = errorMessage.toLowerCase();
+          
+          try {
+            fs.appendFileSync('server_errors.log', `[${new Date().toISOString()}] Job ${jobId} Failed (attempt ${retryCount + 1}):\n${errorStack}\n\n`);
+          } catch (logErr) {
+            console.error('Failed to write to server_errors.log:', logErr);
+          }
           
           const isCapacityError = lowerError.includes('capacity') || 
                                   lowerError.includes('503') || 
-                                  lowerError.includes('429') ||
-                                  lowerError.includes('internal error');
+                                  lowerError.includes('429');
           
           const isTimeout = lowerError.includes('timeout') || lowerError.includes('deadline');
 
@@ -436,7 +447,7 @@ async function startServer() {
             status: 'failed', 
             error: isTimeout 
               ? 'AI Engine Timeout: This document is complex and may require Extended Mode.' 
-              : (isCapacityError ? 'AI engine at capacity. Retrying later is recommended.' : errorMessage)
+              : (isCapacityError ? `AI engine at capacity. Retrying later is recommended. Details: ${errorMessage}` : errorMessage)
           });
         } finally {
           if (retryCount === 0 || retryCount === MAX_RETRIES) {
