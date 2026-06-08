@@ -163,8 +163,8 @@ function AppContent() {
   });
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [llmOptions, setLlmOptions] = useState<LLMOptions>({
-    provider: 'gemma',
-    model: 'gemma-4',
+    provider: 'nvidia-gemma',
+    model: 'google/gemma-4-31b',
     isSarMode: false,
     isExtendedMode: false
   });
@@ -451,7 +451,7 @@ function AppContent() {
             
             // Default guests to Scientific Discovery Engine (Gemma 4)
             if (profile.role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
+              setLlmOptions({ provider: 'nvidia-gemma', model: 'google/gemma-4-31b', isSarMode: false });
             }
           } else {
             // New user or anonymous session without doc
@@ -476,7 +476,7 @@ function AppContent() {
             setUser(newUser);
             
             if (role === 'guest') {
-              setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
+              setLlmOptions({ provider: 'nvidia-gemma', model: 'google/gemma-4-31b', isSarMode: false });
             }
           }
         } catch (error) {
@@ -628,7 +628,7 @@ function AppContent() {
         
         // Default to Scientific Discovery Engine for guests
         if (role === 'guest') {
-          setLlmOptions({ provider: 'gemma', model: 'gemma-4', isSarMode: false });
+          setLlmOptions({ provider: 'nvidia-gemma', model: 'google/gemma-4-31b', isSarMode: false });
         }
       } catch (err: any) {
         console.error('Login failed:', err);
@@ -2205,9 +2205,9 @@ function AppContent() {
               {(!(user?.role === 'guest' && hideModelForGuests)) ? (
                 <>
                   <div className="grid grid-cols-4 gap-2">
-                    {(['gemini', 'openai', 'anthropic', 'gemma'] as any[]).map(p => {
+                    {(['gemini', 'nvidia-gemma', 'nvidia-glm', 'gemma'] as any[]).map(p => {
                       const isDisabled = user?.role === 'guest' && p !== 'gemini' && p !== 'gemma';
-                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'openai' ? 'OpenAI' : 'Anthropic';
+                      const displayLabel = p === 'gemini' ? 'Gemini' : p === 'gemma' ? 'Gemma' : p === 'nvidia-gemma' ? 'NVIDIA Gemma 4' : 'NVIDIA GLM 5.1';
                       return (
                         <button
                           key={p}
@@ -2216,7 +2216,7 @@ function AppContent() {
                           onClick={() => setLlmOptions(prev => ({ 
                             ...prev, 
                             provider: p, 
-                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'openai' ? 'gpt-4o' : p === 'anthropic' ? 'claude-3-5-sonnet-latest' : 'gemma-4' 
+                            model: p === 'gemini' ? 'gemini-3.1-pro-preview' : p === 'nvidia-gemma' ? 'google/gemma-4-31b' : p === 'nvidia-glm' ? 'glm-5.1' : 'gemma-4' 
                           }))}
                           className={cn(
                             "py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
@@ -2249,18 +2249,16 @@ function AppContent() {
                         <option value="gemma-4">Gemma 4 (High Thinking / Open Weights)</option>
                       </>
                     )}
-                    {llmOptions.provider === 'openai' && (
+                    {llmOptions.provider === 'nvidia-gemma' && (
                       <>
-                        <option value="gpt-4o">GPT-4o (Omni)</option>
-                        <option value="gpt-4o-mini">GPT-4o Mini</option>
-                        <option value="o1-preview">o1 Preview (Reasoning)</option>
+                        <option value="google/gemma-4-31b">Gemma 4 31B (NVIDIA NIM)</option>
+                        <option value="google/gemma-2-27b-it">Gemma 2 27B IT (NVIDIA NIM)</option>
                       </>
                     )}
-                    {llmOptions.provider === 'anthropic' && (
+                    {llmOptions.provider === 'nvidia-glm' && (
                       <>
-                        <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-                        <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-                        <option value="claude-3-opus-latest">Claude 3 Opus</option>
+                        <option value="glm-5.1">GLM 5.1 (NVIDIA NIM)</option>
+                        <option value="glm-4-9b-chat">GLM 4 9B Chat (NVIDIA NIM)</option>
                       </>
                     )}
                   </select>

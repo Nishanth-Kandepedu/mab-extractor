@@ -132,7 +132,7 @@ export const GEMMA_4_EXTRA_INSTRUCTION = `
     - evidence: The page or table number where this value was found.
 `;
 
-export type LLMProvider = 'gemini' | 'openai' | 'anthropic' | 'gemma';
+export type LLMProvider = 'gemini' | 'nvidia-gemma' | 'nvidia-glm' | 'gemma';
 
 export interface LLMOptions {
   provider: LLMProvider;

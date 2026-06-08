@@ -297,12 +297,15 @@ async function startServer() {
                }
                
                return { status: 'completed', result };
-             } else if (provider === 'openai') {
-               const apiKey = findKey('OPENAI_API_KEY');
-               if (!apiKey) throw new Error('Missing OpenAI API Key.');
-               const openai = new OpenAI({ apiKey });
+             } else if (provider === 'nvidia-gemma' || provider === 'nvidia-glm' || provider === 'openai' || provider === 'anthropic') {
+               const apiKey = findKey('NVIDIA_API_KEY') || findKey('OPENAI_API_KEY');
+               if (!apiKey) throw new Error('Missing NVIDIA API Key. Please configure NVIDIA_API_KEY.');
+               const openai = new OpenAI({ 
+                 apiKey,
+                 baseURL: 'https://integrate.api.nvidia.com/v1'
+               });
                const response = await openai.chat.completions.create({
-                 model: model || 'gpt-4o',
+                 model: model || (provider === 'nvidia-gemma' || provider === 'openai' ? 'google/gemma-4-31b' : 'glm-5.1'),
                  messages: [
                    { role: 'system', content: systemInstruction },
                    { role: 'user', content: typeof input === 'string' ? input : 'Extract from the provided document.' }
@@ -318,28 +321,6 @@ async function startServer() {
                    promptTokenCount: usage.prompt_tokens,
                    candidatesTokenCount: usage.completion_tokens,
                    totalTokenCount: usage.total_tokens
-                 };
-               }
-               return { status: 'completed', result };
-             } else if (provider === 'anthropic') {
-               const apiKey = findKey('ANTHROPIC_API_KEY');
-               if (!apiKey) throw new Error('Missing Anthropic API Key.');
-               const anthropic = new Anthropic({ apiKey });
-               const response = await anthropic.messages.create({
-                 model: model || 'claude-3-5-sonnet-latest',
-                 max_tokens: 4096,
-                 system: systemInstruction,
-                 messages: [{ role: 'user', content: typeof input === 'string' ? input : 'Extract from it.' }],
-                 temperature: 0,
-               });
-               const content = response.content[0].type === 'text' ? response.content[0].text : '';
-               const usage = response.usage;
-               const result = extractJson(content || '{}');
-               if (usage) {
-                 result.usageMetadata = {
-                   promptTokenCount: usage.input_tokens,
-                   candidatesTokenCount: usage.output_tokens,
-                   totalTokenCount: usage.input_tokens + usage.output_tokens
                  };
                }
                return { status: 'completed', result };
